@@ -12,28 +12,16 @@ import order as order
 import math
 import os
 import csv
-from strat import arboptimizer as arbopt
 
 from base import *
-from dac import ATR,ATR1,STREND,STREND1,MA,MA1,MACD,MACD1,date2week
-import hreader
 
 from ctp.futures import ApiStruct, MdApi, TraderApi
-
-import config
-import strategy
 
 CANCEL_PROTECT_PERIOD = 20
 #数据定义中唯一一个enum
 THOST_TERT_RESTART  = ApiStruct.TERT_RESTART
 THOST_TERT_RESUME   = ApiStruct.TERT_RESUME
 THOST_TERT_QUICK    = ApiStruct.TERT_QUICK
-
-NFUNC = lambda data:None    #空函数桩
-
-#mylock = thread.allocate_lock()
-
-dir_py2ctp = lambda dir : '0' if dir == LONG else '1'
 
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
@@ -676,13 +664,14 @@ class Agent(AbsAgent):
         self.get_eod_positions()
         file_prefix = self.folder + self.name
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
-        keys = self.ref2order.keys().sort()
+        keys = self.ref2order.keys()
+        if len(keys) > 1:
+            keys.sort()
         for key in keys:
-            if len(self.ref2order[key].conditionals)>0:
-                cond = {}
-                for o_id in self.ref2order[key].conditionals:
-                    cond[self.ref2order[o_id]] = self.ref2order[key].cond[o_id]
-                self.ref2order[key].conditionals = cond
+            iorder =  self.ref2order[key]
+            if len(iorder.conditionals)>0:
+                self.ref2order[key].conditionals = dict([(self.ref2order[o_id], iorder.cond[o_id]) 
+                                                         for o_id in iorder.conditionals])
         self.etrades = order.load_trade_list(self.scur_day, file_prefix)
         for etrade in self.etrades:
             orderdict = etrade.order_dict
@@ -911,7 +900,7 @@ class Agent(AbsAgent):
             return 0
         
         self.trade_on_tick(ctick)   
-        self.process_trade_list()
+        #self.process_trade_list()
         return 1
                 
     def trade_on_tick(self, ctick):
@@ -920,13 +909,21 @@ class Agent(AbsAgent):
     def process_trade(self, exec_trade):
         all_orders = {}
         order_prices = []
-        for inst, v, tick in zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.slip_ticks):
-            if v>0:
-                order_prices.append(self.instruments[inst].ask_price1+self.instruments[inst].tick_base*tick)
+        if len(exec_trade.instIDs) == 1:
+            inst = exec_trade.instIDs[0]
+            order_prices.append(exec_trade.limit_price)
+            if exec_trade.volumes[0] > 0:
+                curr_price = self.instruments[inst].ask_price1
             else:
-                order_prices.append(self.instruments[inst].bid_price1-self.instruments[inst].tick_base*tick)
-
-        curr_price = sum([p*v for p, v in zip(order_prices, exec_trade.volumes)])
+                curr_price = self.instruments[inst].bid_price1
+        else:
+            for inst, v, tick in zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.slip_ticks):
+                if v>0:
+                    order_prices.append(self.instruments[inst].ask_price1+self.instruments[inst].tick_base*tick)
+                else:
+                    order_prices.append(self.instruments[inst].bid_price1-self.instruments[inst].tick_base*tick)
+    
+            curr_price = sum([p*v for p, v in zip(order_prices, exec_trade.volumes)])
         if curr_price <= exec_trade.limit_price: 
             orders = []
             for idx, (inst, v, otype) in enumerate(zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.order_types)):
@@ -1003,7 +1000,7 @@ class Agent(AbsAgent):
             if exec_trade.status == order.ETradeStatus.Done:
                 continue
             elif exec_trade.status == order.ETradeStatus.Pending:
-                self.process_trade()
+                self.process_trade(exec_trade)
                 continue
             else:
                 exec_trade.update()
@@ -1082,7 +1079,13 @@ class Agent(AbsAgent):
                 #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
             )
         r = self.trader.ReqOrderAction(req,self.inc_request_id())
-            
+    
+    def submit_trade(self, etrade):
+        self.etrades.append(etrade)
+    
+    def cancel_trade(self, etrade):
+        pass
+         
     ###回应
     def rtn_trade(self,strade):
         '''
@@ -1307,54 +1310,33 @@ def test_main(name='test_trade'):
     trader_cfg = prod_trader
     user_cfg = prod_user
     agent_name = name
-    my_agent = create_agent(agent_name, user_cfg, trader_cfg, insts)
+    myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
-        my_agent.resume()
+        myagent.resume()
+        valid_time = myagent.tick_id + 100
+        etrade =  order.ETrade( ['ag1412'], [1], [ApiStruct.OPT_LimitPrice], 4132.0, [1], valid_time, myagent.name, 'test')
+        myagent.submit_trade(etrade)
+        myagent.process_trade_list() 
+        #测试报单
+#         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=1)
+#         myagent.open_position(morder)
+#         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=20)
+#         
+#         #平仓
+#         corder = agent.BaseObject(instrument='IF1103',direction='1',order_ref=myagent.inc_order_ref(),price=3220,volume=1)
+#         myagent.close_position(corder)
+#         
+#         cref = myagent.inc_order_ref()
+#         morder = agent.BaseObject(instrument='IF1104',direction='0',order_ref=cref,price=3180,volume=1)
+#         myagent.open_position(morder)
+#         
+#         rorder = agent.BaseObject(instrument='IF1103',order_ref=cref)
+#         myagent.cancel_command(rorder)
+        
         while 1: time.sleep(1)
     except KeyboardInterrupt:
-        my_agent.mdapis = [] 
-        my_agent.trader = None    
-
-'''
-#测试
-import agent
-trader,myagent = agent.trade_test_main()
-
-myagent.spi.OnRspOrderInsert(agent.BaseObject(OrderRef='12',InstrumentID='IF1103'),agent.BaseObject(ErrorID=1,ErrorMsg='test'),1,1)
-myagent.spi.OnErrRtnOrderInsert(agent.BaseObject(OrderRef='12',InstrumentID='IF1103'),agent.BaseObject(ErrorID=1,ErrorMsg='test'))
-myagent.spi.OnRspOrderAction(agent.BaseObject(OrderRef='12',InstrumentID='IF1103'),agent.BaseObject(ErrorID=1,ErrorMsg='test'),1,1)
-myagent.spi.OnErrRtnOrderAction(agent.BaseObject(OrderRef='12',InstrumentID='IF1103'),agent.BaseObject(ErrorID=1,ErrorMsg='test'))
-
-#资金和持仓
-myagent.fetch_trading_account()
-myagent.fetch_investor_position(u'IF1104')
-myagent.fetch_instrument_marginrate(u'IF1104')
-myagent.fetch_instrument(u'IF1104')
-#myagent.fetch_investor_position_detail(u'IF1104')
-
-
-#测试报单
-morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=1)
-myagent.open_position(morder)
-morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=20)
-
-#平仓
-corder = agent.BaseObject(instrument='IF1103',direction='1',order_ref=myagent.inc_order_ref(),price=3220,volume=1)
-myagent.close_position(corder)
-
-#测试撤单
-import agent
-trader,myagent = agent.trade_test_main()
-
-cref = myagent.inc_order_ref()
-morder = agent.BaseObject(instrument='IF1104',direction='0',order_ref=cref,price=3180,volume=1)
-myagent.open_position(morder)
-
-rorder = agent.BaseObject(instrument='IF1103',order_ref=cref)
-myagent.cancel_command(rorder)
-
-
-'''
+        myagent.mdapis = [] 
+        myagent.trader = None    
 
 
 if __name__=="__main__":

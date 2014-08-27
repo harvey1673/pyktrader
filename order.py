@@ -97,7 +97,7 @@ def save_order_list(curr_date, order_dict, file_prefix):
 def load_order_list(curr_date, file_prefix, positions):
 	logfile = file_prefix + '_order_' + curr_date.strftime('%y%m%d')+'.csv'
 	if not os.path.isfile(logfile):
-		return []
+		return {}
 	ref2order = {}
 	with open(logfile, 'rb') as f:
 		reader = csv.reader(f)
