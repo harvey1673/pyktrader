@@ -670,7 +670,7 @@ class Agent(AbsAgent):
         for key in keys:
             iorder =  self.ref2order[key]
             if len(iorder.conditionals)>0:
-                self.ref2order[key].conditionals = dict([(self.ref2order[o_id], iorder.cond[o_id]) 
+                self.ref2order[key].conditionals = dict([(self.ref2order[o_id], iorder.conditionals[o_id]) 
                                                          for o_id in iorder.conditionals])
         self.etrades = order.load_trade_list(self.scur_day, file_prefix)
         for etrade in self.etrades:
@@ -913,20 +913,20 @@ class Agent(AbsAgent):
             inst = exec_trade.instIDs[0]
             order_prices.append(exec_trade.limit_price)
             if exec_trade.volumes[0] > 0:
-                curr_price = self.instruments[inst].ask_price1
-            else:
                 curr_price = self.instruments[inst].bid_price1
+            else:
+                curr_price = self.instruments[inst].ask_price1
         else:
             for inst, v, tick in zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.slip_ticks):
                 if v>0:
-                    order_prices.append(self.instruments[inst].ask_price1+self.instruments[inst].tick_base*tick)
+                    order_prices.append(self.instruments[inst].bid_price1+self.instruments[inst].tick_base*tick)
                 else:
-                    order_prices.append(self.instruments[inst].bid_price1-self.instruments[inst].tick_base*tick)
+                    order_prices.append(self.instruments[inst].ask_price1-self.instruments[inst].tick_base*tick)
     
             curr_price = sum([p*v for p, v in zip(order_prices, exec_trade.volumes)])
         if curr_price <= exec_trade.limit_price: 
-            orders = []
             for idx, (inst, v, otype) in enumerate(zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.order_types)):
+                orders = []
                 pos = self.positions[inst]
                 pos.re_calc()
                 if ((v>0) and (v > pos.can_close.long + pos.can_yclose.long + pos.can_open.long)) or \
@@ -986,6 +986,7 @@ class Agent(AbsAgent):
                 pos = self.positions[inst]
                 pos.add_orders(all_orders[inst])
                 for iorder in all_orders[inst]:
+                    self.ref2order[iorder.order_ref] = iorder
                     if iorder.status == order.OrderStatus.Ready:
                         self.send_order(iorder)
                         iorder.status = order.OrderStatus.Sent
@@ -1031,18 +1032,17 @@ class Agent(AbsAgent):
         ''' 
             发出下单指令
         '''
-        self.ref2order[iorder.order_ref] = iorder
         self.logger.info(u'A_CC:开仓平仓命令')
         req = ApiStruct.InputOrder(
-                InstrumentID = iorder.instrument,
+                InstrumentID = iorder.instrument.name,
                 Direction = iorder.direction,
                 OrderRef = str(iorder.order_ref),
                 LimitPrice = iorder.limit_price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
                 VolumeTotalOriginal = iorder.volume,
                 OrderPriceType = iorder.price_type,
                 
-                BrokerID = self.cuser.broker_id,
-                InvestorID = self.cuser.investor_id,
+                BrokerID = self.trader.broker_id,
+                InvestorID = self.trader.investor_id,
                 CombOffsetFlag = iorder.action_type,         #开仓 5位字符,但是只用到第0位
                 CombHedgeFlag = ApiStruct.HF_Speculation,   #投机 5位字符,但是只用到第0位
 
@@ -1052,7 +1052,7 @@ class Agent(AbsAgent):
                 IsAutoSuspend = 1,
                 UserForceClose = 0,
                 TimeCondition = ApiStruct.TC_GFD,
-            )
+                )
         self.logger.info(u'下单: instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % 
                          (iorder.instrument,
                           iorder.action_type,
@@ -1060,7 +1060,7 @@ class Agent(AbsAgent):
                           iorder.volume,
                           iorder.limit_price, 
                           iorder.price_type))
-        r = self.trader.ReqOrderInsert(req,self.inc_request_id())
+        #r = self.trader.ReqOrderInsert(req,self.inc_request_id())
 
     def cancel_order(self,iorder):
         '''
@@ -1306,15 +1306,16 @@ def test_main(name='test_trade'):
                                            "tcp://qqfz-front2.ctp.shcifco.com:32305",
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
-    insts = ['ag1412','au1412']
+    insts = ['ag1506','ag1412']
     trader_cfg = prod_trader
     user_cfg = prod_user
     agent_name = name
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
+        
         valid_time = myagent.tick_id + 100
-        etrade =  order.ETrade( ['ag1412'], [1], [ApiStruct.OPT_LimitPrice], 4132.0, [1], valid_time, myagent.name, 'test')
+        etrade =  order.ETrade( ['ag1506', 'ag1412'], [1, -1], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], -22.0, [1,1], valid_time, myagent.name, 'test')
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         #测试报单

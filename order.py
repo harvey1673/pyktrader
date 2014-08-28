@@ -29,7 +29,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
 			otypes = ' '.join([str(i) for i in trade.order_types])
 			slip_ticks = ' '.join([str(i) for i in trade.slip_ticks])
 			if len(trade.order_dict)>0:
-				order_dict = ' '.join([inst +':'+'|'.join([o.order_ref for o in trade.order_dict[inst]]) 
+				order_dict = ' '.join([inst +':'+'|'.join([str(o.order_ref) for o in trade.order_dict[inst]]) 
 									for inst in trade.order_dict])
 			else:
 				order_dict = ''
@@ -57,7 +57,7 @@ def load_trade_list(curr_date, file_prefix):
 				if ':' in row[6]:
 					order_dict =  dict([tuple(s.split(':')) for s in row[6].split(' ')])
 					for inst in order_dict:
-						if '|' in order_dict[inst]:
+						if len(order_dict[inst])>0:
 							order_dict[inst] = [int(o_id) for o_id in order_dict[inst].split('|')]
 						else:
 							order_dict[inst] = []
@@ -76,20 +76,22 @@ def load_trade_list(curr_date, file_prefix):
 	return trade_list
 
 def save_order_list(curr_date, order_dict, file_prefix):
-	orders = order_dict.keys().sort()
+	orders = order_dict.keys()
+	if len(order_dict)>1:
+		orders.sort()
 	order_list = [order_dict[key] for key in orders]
 	filename = file_prefix + '_order_' + curr_date.strftime('%y%m%d')+'.csv'
 	with open(filename,'wb') as log_file:
 		file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
 		
-		file_writer.writerow(['order_ref', 'inst', 'volume', 'filledvol', 'action_type', 'direction',
+		file_writer.writerow(['order_ref', 'inst', 'volume', 'filledvolume', 'action_type', 'direction',
 							  'price_type','limitprice','order_time', 'status', 'conditionals'])
 
 		for order in order_list:
 			inst = order.position.instrument.name
 			cond = [ str(o.order_ref)+':'+str(order.conditionals[o]) for o in order.conditionals]
 			cond_str = ' '.join(cond)
-			file_writer.writerow([order.order_ref, inst, order.volume, order.filled_vol, 
+			file_writer.writerow([order.order_ref, inst, order.volume, order.filled_volume, 
 								  order.action_type, order.direction, order.price_type,
 								  order.limit_price, order.start_tick, order.status, cond_str])  
 	pass
@@ -115,7 +117,7 @@ def load_order_list(curr_date, file_prefix, positions):
 				iorder.order_ref = int(row[0])
 				iorder.status = int(row[9])
 				ref2order[iorder.order_ref] = iorder
-				positions.add_order(iorder)				
+				pos.add_order(iorder)				
 	return ref2order
 	
 class ETrade(object):
@@ -145,16 +147,16 @@ class ETrade(object):
 	def update(self):
 		Done_status = True
 		PFill_status = False
-		for inst in self.instIDs:
+		for idx, inst in enumerate(self.instIDs):
 			for iorder in self.order_dict[inst]:
 				cond_status = [o.status == iorder.conditionals[o] for o in iorder.conditionals.keys()]
 				if False not in cond_status:
 					logging.info('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
 					iorder.status = OrderStatus.Ready
-			self.filled_vol[inst] = sum([iorder.filled_volume for iorder in self.order_dict[inst]])					
-			if self.filled_vol[inst] < abs(self.volume[inst]):
+			self.filled_vol[idx] = sum([iorder.filled_volume for iorder in self.order_dict[inst]])					
+			if self.filled_vol[idx] < abs(self.volumes[idx]):
 				Done_status = False
-			if self.filled_vol[inst] > 0:
+			if self.filled_vol[idx] > 0:
 				PFill_status = True
 							
 		if Done_status:
