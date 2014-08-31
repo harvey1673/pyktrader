@@ -29,7 +29,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
 			otypes = ' '.join([str(i) for i in trade.order_types])
 			slip_ticks = ' '.join([str(i) for i in trade.slip_ticks])
 			if len(trade.order_dict)>0:
-				order_dict = ' '.join([inst +':'+'|'.join([str(o.order_ref) for o in trade.order_dict[inst]]) 
+				order_dict = ' '.join([inst +':'+'_'.join([str(o.order_ref) for o in trade.order_dict[inst]]) 
 									for inst in trade.order_dict])
 			else:
 				order_dict = ''
@@ -58,7 +58,7 @@ def load_trade_list(curr_date, file_prefix):
 					order_dict =  dict([tuple(s.split(':')) for s in row[6].split(' ')])
 					for inst in order_dict:
 						if len(order_dict[inst])>0:
-							order_dict[inst] = [int(o_id) for o_id in order_dict[inst].split('|')]
+							order_dict[inst] = [int(o_id) for o_id in order_dict[inst].split('_')]
 						else:
 							order_dict[inst] = []
 				else:
@@ -147,26 +147,35 @@ class ETrade(object):
 	def update(self):
 		Done_status = True
 		PFill_status = False
+		Zero_Volume = True
+		volumes = [0] * len(self.instIDs)
 		for idx, inst in enumerate(self.instIDs):
 			for iorder in self.order_dict[inst]:
-				cond_status = [o.status == iorder.conditionals[o] for o in iorder.conditionals.keys()]
-				if False not in cond_status:
-					logging.info('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
-					iorder.status = OrderStatus.Ready
-			self.filled_vol[idx] = sum([iorder.filled_volume for iorder in self.order_dict[inst]])					
-			if self.filled_vol[idx] < abs(self.volumes[idx]):
+				if len(iorder.conditionals)> 0:
+					cond_status = [o.status == iorder.conditionals[o] for o in iorder.conditionals.keys()]
+					if False not in cond_status:
+						logging.info('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
+						iorder.status = OrderStatus.Ready
+						iorder.conditionals = {}
+			self.filled_vol[idx] = sum([iorder.filled_volume for iorder in self.order_dict[inst]])
+			volumes[idx] = sum([iorder.volume for iorder in self.order_dict[inst]])					
+			if volumes[idx] > 0:
+				Zero_Volume = False
+			if self.filled_vol[idx] < volumes[idx]:
 				Done_status = False
 			if self.filled_vol[idx] > 0:
 				PFill_status = True
 							
-		if Done_status:
+		if Zero_Volume:
+			self.status = ETradeStatus.Cancelled
+		elif Done_status:
 			self.status = ETradeStatus.Done
 		elif PFill_status:
 			self.status = ETradeStatus.PFilled
 	
 ####下单
 class Order(object):
-	id_generator = itertools.count(int(datetime.datetime.strftime(datetime.datetime.now(),'%m%d%H%M%S')))
+	id_generator = itertools.count(int(datetime.datetime.strftime(datetime.datetime.now(),'%d%H%M%S')))
 	def __init__(self,position,limit_price,vol,order_time,action_type,direction, price_type, conditionals={}):
 		self.position = position
 		self.limit_price = limit_price		#开仓基准价
@@ -181,6 +190,7 @@ class Order(object):
 		##
 		self.volume = vol #目标成交手数,锁定总数
 		self.filled_volume = 0  #实际成交手数
+		self.filled_orders = []
 		self.conditionals = conditionals
 		if len(self.conditionals) == 0:
 			self.status = OrderStatus.Ready
@@ -191,26 +201,33 @@ class Order(object):
 	def on_trade(self,price,volume,order_time):
 		''' 返回是否完全成交
 		'''
-		logging.info(u'成交纪录:price=%s,volume=%s,trade_time=%s' % (price,volume,order_time))
-		self.filled_volume += volume
-		if self.volume < self.filled_volume:	#因为cancel和成交的时间差导致的
-			self.volume = self.filled_volume
-		logging.info(u'price=%s,volume=%s,self.opened_volume=%s,is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
-		self.position.re_calc()
+		if order_time not in [o.otime for o in self.filled_orders]:
+			self.filled_orders.append(BaseObject(price = price, volume = volume, otime = order_time))
+			logging.info(u'成交纪录:price=%s,volume=%s,trade_time=%s' % (price,volume,order_time))
+			self.filled_volume = sum([o.volume for o in self.filled_orders])
+			logging.info(u'price=%s,volume=%s,self.opened_volume=%s,is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
+			if self.filled_volume > self.volume:
+				self.filled_volume = self.volume
+				logging.warning(u'a new trade confirm exceeds the order volume price=%s,volume=%s, order_time=%s, filled_vol=%s, order_vol =%s' % \
+								(price, volume, order_time, self.filled_volume, self.volume))
+			elif (self.filled_volume == self.volume) and (self.volume>0):
+				 self.status = OrderStatus.Done
+			#self.position.re_calc()
 		return self.filled_volume == self.volume
 		
-	def on_close(self,price,volume,order_time):
-		self.filled_volume += volume
-		if self.volume < self.filled_volume:	#因为cancel和成交的时间差导致的
-			self.volume = self.filled_volume
-		logging.info(u'O_CLS:on close,opened_volume=%s,volume=%s,trade_time=%s' % (self.filled_volume,volume,order_time))
-		self.position.re_calc()
+# 	def on_close(self,price,volume,order_time):
+# 		self.filled_volume = min(self.filled_volume + volume, self.volume)
+# 		#if self.volume < self.filled_volume:	#因为cancel和成交的时间差导致的
+# 		#	self.volume = self.filled_volume
+# 		logging.info(u'O_CLS:on close,opened_volume=%s,volume=%s,trade_time=%s' % (self.filled_volume,volume,order_time))
+# 		#self.position.re_calc()
 
 	def on_cancel(self):	#已经撤单
-		self.status = OrderStatus.Cancelled
-		self.volume = self.filled_volume	#不会再有成交回报
-		logging.info('O_OC:on cancel,self.volume=%s' % (self.volume,))
-		self.position.re_calc()
+		if self.status != OrderStatus.Cancelled:
+			self.status = OrderStatus.Cancelled
+			self.volume = self.filled_volume	#不会再有成交回报
+			logging.info('O_OC:on cancel,self.volume=%s' % (self.volume,))
+		#self.position.re_calc()
 
 	def is_closed(self): #是否已经完全平仓
 		return (self.status in [OrderStatus.Cancelled,OrderStatus.Done]) and self.filled_volume == self.volume

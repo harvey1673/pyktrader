@@ -984,12 +984,9 @@ class Agent(AbsAgent):
             exec_trade.order_dict = all_orders
             for inst in exec_trade.instIDs:
                 pos = self.positions[inst]
-                pos.add_orders(all_orders[inst])
                 for iorder in all_orders[inst]:
+                    pos.add_order(iorder)
                     self.ref2order[iorder.order_ref] = iorder
-                    if iorder.status == order.OrderStatus.Ready:
-                        self.send_order(iorder)
-                        iorder.status = order.OrderStatus.Sent
             exec_trade.status = order.ETradeStatus.Processed
             self.save_state()
             return True
@@ -998,12 +995,9 @@ class Agent(AbsAgent):
         
     def process_trade_list(self):
         for exec_trade in self.etrades:
-            if exec_trade.status == order.ETradeStatus.Done:
-                continue
-            elif exec_trade.status == order.ETradeStatus.Pending:
+            if exec_trade.status == order.ETradeStatus.Pending:
                 self.process_trade(exec_trade)
-                continue
-            else:
+            elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
                 exec_trade.update()
                 if (exec_trade.valid_time < self.tick_id): 
                     if exec_trade.status == order.ETradeStatus.Done:
@@ -1013,21 +1007,35 @@ class Agent(AbsAgent):
                         exec_trade.valid_time = self.tick_id + CANCEL_PROTECT_PERIOD
                         for inst in exec_trade.instIDs:
                             for iorder in exec_trade.order_dict[inst]:
-                                if iorder.status == order.OrderStatus.Sent:
-                                    self.cancel_order(iorder)
-                                    if (exec_trade.status == order.ETradeStatus.PFilled) and (iorder.volume - iorder.filled_volume>0):
+                                if (iorder.volume > iorder.filled_volume):
+                                    if ( iorder.status == order.OrderStatus.Waiting) \
+                                            or (iorder.status == order.OrderStatus.Ready):
+                                        iorder.on_cancel()
+                                    else:
+                                        self.cancel_order(iorder)
+                                    if exec_trade.status == order.ETradeStatus.PFilled:
                                         cond = {iorder:order.OrderStatus.Cancelled}
                                         norder =   order.Order(iorder.position, 
-                                                         iorder.limit_price, 
-                                                         iorder.volume - iorder.filled_volume, 
-                                                         self.tick_id, 
-                                                         iorder.action_type, 
-                                                         iorder.direction, 
-                                                         ApiStruct.OPT_AnyPrice, 
-                                                         cond )
+                                                     iorder.limit_price, 
+                                                     iorder.volume - iorder.filled_volume, 
+                                                     self.tick_id, 
+                                                     iorder.action_type, 
+                                                     iorder.direction, 
+                                                     ApiStruct.OPT_AnyPrice, 
+                                                     cond )
                                         exec_trade.order_dict[inst].append( norder )
-                        
-
+                                        self.positions[inst].add_order(norder)
+                                        self.ref2order[norder.order_ref] = norder
+        if self.check_order_list():
+            self.save_state()
+        
+    def check_order_list(self):
+        Is_Sent = False 
+        for iorder in self.ref2order.values():                                                        
+            if iorder.status == order.OrderStatus.Ready:
+                self.send_order(iorder)
+                Is_Sent = True
+        return Is_Sent
     def send_order(self,iorder):
         ''' 
             发出下单指令
@@ -1054,13 +1062,14 @@ class Agent(AbsAgent):
                 TimeCondition = ApiStruct.TC_GFD,
                 )
         self.logger.info(u'下单: instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % 
-                         (iorder.instrument,
-                          iorder.action_type,
+                         (iorder.instrument.name,
+                          'open' if iorder.action_type == ApiStruct.OF_Open else 'close',
                           u'多' if iorder.direction==ApiStruct.D_Buy else u'空',
                           iorder.volume,
                           iorder.limit_price, 
                           iorder.price_type))
-        #r = self.trader.ReqOrderInsert(req,self.inc_request_id())
+        r = self.trader.ReqOrderInsert(req,self.inc_request_id())
+        iorder.status = order.OrderStatus.Sent
 
     def cancel_order(self,iorder):
         '''
@@ -1069,10 +1078,10 @@ class Agent(AbsAgent):
         #print 'in cancel command'
         self.logger.info(u'A_CC:取消命令')
         req = ApiStruct.InputOrderAction(
-                InstrumentID = iorder.instrument,
+                InstrumentID = iorder.instrument.name,
                 OrderRef = str(iorder.order_ref),
-                BrokerID = self.cuser.broker_id,
-                InvestorID = self.cuser.investor_id,
+                BrokerID = self.trader.broker_id,
+                InvestorID = self.trader.investor_id,
                 FrontID = self.front_id,
                 SessionID = self.session_id,
                 ActionFlag = ApiStruct.AF_Delete,
@@ -1104,7 +1113,7 @@ class Agent(AbsAgent):
             is_completed = myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
             self.logger.info(u'A_RT31,开仓回报');
         else:
-            myorder.on_close(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
+            myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
             self.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (strade.Price,strade.TradeTime));
         self.save_state()
         ##查询可用资金
@@ -1127,9 +1136,10 @@ class Agent(AbsAgent):
             self.put_command(self.tick_id+5,self.fetch_trading_account)
             ##处理相关Order
             myorder = self.ref2order[int(sorder.OrderRef)]
-            if myorder.action_type == XOPEN:    #开仓指令cancel时需要处理，平仓指令cancel时不需要处理
+            if myorder.action_type == ApiStruct.OF_Open:    #开仓指令cancel时需要处理，平仓指令cancel时不需要处理
                 self.logger.info(u'撤销开仓单')
                 myorder.on_cancel()
+                self.save_state()
                 #self.process_trade_list()
     def err_order_insert(self,order_ref,instrument_id,error_id,error_msg):
         '''
@@ -1247,12 +1257,12 @@ def make_user(my_agent,hq_user):
     user.Init()
 
 
-def create_trader(trader_cfg, instruments, agent_name):
+def create_trader(trader_cfg, instruments, agent_name, tday=datetime.date.today()):
     logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
 
     logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
 
-    myagent = Agent(agent_name, None, trader_cfg, instruments) 
+    myagent = Agent(agent_name, None, trader_cfg, instruments, tday) 
     myagent.trader = trader = TraderSpiDelegate(instruments=myagent.instruments, 
                              broker_id=trader_cfg.broker_id,
                              investor_id= trader_cfg.investor_id,
@@ -1268,8 +1278,8 @@ def create_trader(trader_cfg, instruments, agent_name):
     
     return trader, myagent
 
-def create_agent(agent_name, usercfg, tradercfg, insts):
-    trader, my_agent = create_trader(tradercfg, insts, agent_name)
+def create_agent(agent_name, usercfg, tradercfg, insts, tday = datetime.date.today()):
+    trader, my_agent = create_trader(tradercfg, insts, agent_name, tday)
     make_user(my_agent,usercfg)
     return my_agent
 
@@ -1294,6 +1304,10 @@ def test_main(name='test_trade'):
                                    ports= ["tcp://zjzx-front11.ctp.shcifco.com:41205", 
                                            "tcp://zjzx-front12.ctp.shcifco.com:41205",
                                            "tcp://zjzx-front12.ctp.shcifco.com:41205"])
+    wkend_trader = BaseObject( broker_id="8070", 
+                                   investor_id="750305", 
+                                   passwd="801289", 
+                                   ports= ["tcp://zjzx-front20.ctp.shcifco.com:41205"] )
     test_user = BaseObject( broker_id="8000", 
                                  investor_id="*", 
                                  passwd="*", 
@@ -1307,17 +1321,47 @@ def test_main(name='test_trade'):
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
     insts = ['ag1506','ag1412']
-    trader_cfg = prod_trader
-    user_cfg = prod_user
+    trader_cfg = test_trader
+    user_cfg = test_user
     agent_name = name
+    tday = datetime.date(2014,9,1)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
-        
+
+# position/trade test        
+        myagent.positions['ag1506'].pos_tday.long  = 2
+        myagent.positions['ag1506'].pos_tday.short = 3
+        myagent.positions['ag1412'].pos_tday.long  = 1
+        myagent.positions['ag1412'].pos_tday.short = 2
+        myagent.positions['ag1506'].pos_yday.long  = 1
+        myagent.positions['ag1506'].pos_yday.short = 1
+        myagent.positions['ag1412'].pos_yday.long  = 1
+        myagent.positions['ag1412'].pos_yday.short = 1
         valid_time = myagent.tick_id + 100
-        etrade =  order.ETrade( ['ag1506', 'ag1412'], [1, -1], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], -22.0, [1,1], valid_time, myagent.name, 'test')
+        etrade =  order.ETrade( ['ag1506', 'ag1412'], [4, -4], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], 10.0, [1,1], valid_time, myagent.name, 'test')
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
+        
+        myagent.tick_id = valid_time - 10
+        for o in myagent.positions['ag1506'].orders:
+            o.on_trade(2000,o.volume,141558400)
+            #o.on_trade(2010,1,141558500)
+        myagent.process_trade_list() 
+        myagent.tick_id = valid_time + 10
+        myagent.process_trade_list()
+        print myagent.etrades
+
+# order test
+#         iorder = order.Order(myagent.positions['ag1412'], 
+#                              4100, 1, myagent.tick_id, 
+#                              ApiStruct.OF_Open, 
+#                              ApiStruct.D_Buy, 
+#                              ApiStruct.OPT_LimitPrice, {} )
+#         myagent.send_order(iorder)
+#         myagent.ref2order[iorder.order_ref] = iorder
+#         myagent.cancel_order(iorder)
+#         print iorder.status        
         #测试报单
 #         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=1)
 #         myagent.open_position(morder)
@@ -1334,7 +1378,7 @@ def test_main(name='test_trade'):
 #         rorder = agent.BaseObject(instrument='IF1103',order_ref=cref)
 #         myagent.cancel_command(rorder)
         
-        while 1: time.sleep(1)
+#        while 1: time.sleep(1)
     except KeyboardInterrupt:
         myagent.mdapis = [] 
         myagent.trader = None    
