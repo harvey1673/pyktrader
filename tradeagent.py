@@ -1005,7 +1005,9 @@ class Agent(AbsAgent):
                     else:
                         # cancel first, if PFilled, market order the unfilled.
                         exec_trade.valid_time = self.tick_id + CANCEL_PROTECT_PERIOD
+                        new_orders = {}
                         for inst in exec_trade.instIDs:
+                            orders = []
                             for iorder in exec_trade.order_dict[inst]:
                                 if (iorder.volume > iorder.filled_volume):
                                     if ( iorder.status == order.OrderStatus.Waiting) \
@@ -1014,6 +1016,7 @@ class Agent(AbsAgent):
                                     else:
                                         self.cancel_order(iorder)
                                     if exec_trade.status == order.ETradeStatus.PFilled:
+                                        
                                         cond = {iorder:order.OrderStatus.Cancelled}
                                         norder =   order.Order(iorder.position, 
                                                      iorder.limit_price, 
@@ -1023,9 +1026,16 @@ class Agent(AbsAgent):
                                                      iorder.direction, 
                                                      ApiStruct.OPT_AnyPrice, 
                                                      cond )
-                                        exec_trade.order_dict[inst].append( norder )
-                                        self.positions[inst].add_order(norder)
-                                        self.ref2order[norder.order_ref] = norder
+                                        orders.append(norder)
+                            if len(orders)>0:
+                                new_orders[inst] = orders
+                        for inst in new_orders:
+                            pos = self.positions[inst]
+                            for iorder in new_orders[inst]:
+                                exec_trade.order_dict[inst].append(iorder)
+                                pos.add_order(iorder)
+                                self.ref2order[iorder.order_ref] = iorder
+
         if self.check_order_list():
             self.save_state()
         
