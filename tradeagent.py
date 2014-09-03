@@ -594,7 +594,7 @@ class Agent(AbsAgent):
         #self.scheduler = sched.scheduler(time.time, time.sleep)
         #保存锁
         self.event = threading.Event()
-        self.timer_flag = False
+        self.proc_lock = False
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
 
@@ -899,11 +899,17 @@ class Agent(AbsAgent):
         if( not self.update_hist_data(ctick)):
             return 0
         
-        self.trade_on_tick(ctick)   
-        #self.process_trade_list()
+        # run strategies and send trade to trade list
+        self.run_strats(ctick)   
+        
+        # lock the trade processing to avoid position conflict
+        if not self.proc_lock:
+            self.proc_lock = True
+            self.process_trade_list()
+            self.proc_lock = False
         return 1
                 
-    def trade_on_tick(self, ctick):
+    def run_strats(self, ctick):
         pass
     
     def process_trade(self, exec_trade):
@@ -1046,6 +1052,7 @@ class Agent(AbsAgent):
                 self.send_order(iorder)
                 Is_Sent = True
         return Is_Sent
+    
     def send_order(self,iorder):
         ''' 
             发出下单指令
