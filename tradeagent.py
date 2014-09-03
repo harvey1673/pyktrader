@@ -405,7 +405,7 @@ class TraderSpiDelegate(TraderApi):
             CTP、交易所接受报单
             Agent中不区分，所得信息只用于撤单
         '''
-        #print repr(pOrder)
+        print repr(pOrder)
         TraderSpiDelegate.logger.info(u'报单响应,Order=%s' % str(pOrder))
         if pOrder.OrderStatus == 'a':
             #CTP接受，但未发到交易所
@@ -1145,7 +1145,7 @@ class Agent(AbsAgent):
             交易所接受下单回报(CTP接受的已经被过滤)
             暂时只处理撤单的回报. 
         '''
-        #print str(sorder)
+        print str(sorder)
         self.logger.info(u'成交/撤单回报:%s' % (str(sorder,)))
         if sorder.OrderStatus == ApiStruct.OST_Canceled or sorder.OrderStatus == ApiStruct.OST_PartTradedNotQueueing:   #完整撤单或部成部撤
             self.logger.info(u'撤单, 撤销开/平仓单')
@@ -1163,8 +1163,15 @@ class Agent(AbsAgent):
             ctp/交易所下单错误回报，不区分ctp和交易所
             正常情况下不应当出现
         '''
+        
         print "order insert error"
-        #self.process_trade_list()
+        if int(order_ref) not in self.ref2order:
+            self.logger.warning(u'非本程序保单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error_msg))
+        else:
+            self.logger.warning(u'报单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error_msg))
+            myorder = self.ref2order[int(order_ref)]
+            myorder.on_cancel()
+            self.save_state()
         pass    #可以忽略
 
     def err_order_action(self,order_ref,instrument_id,error_id,error_msg):
@@ -1338,10 +1345,10 @@ def test_main(name='test_trade'):
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
     insts = ['ag1506','ag1412']
-    trader_cfg = test_trader
-    user_cfg = test_user
+    trader_cfg = prod_trader
+    user_cfg = prod_user
     agent_name = name
-    tday = datetime.date(2014,9,1)
+    tday = datetime.date(2014,9,4)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()

@@ -1,0 +1,51 @@
+fut_daily
++--------------+---------------+------+-----+---------+-------+
+| Field        | Type          | Null | Key | Default | Extra |
++--------------+---------------+------+-----+---------+-------+
+| instID       | varchar(30)   | NO   | PRI | NULL    |       |
+| exch         | varchar(10)   | NO   | PRI | NULL    |       |
+| date         | date          | NO   | PRI | NULL    |       |
+| open         | decimal(12,4) | YES  |     | NULL    |       |
+| close        | decimal(12,4) | YES  |     | NULL    |       |
+| high         | decimal(12,4) | YES  |     | NULL    |       |
+| low          | decimal(12,4) | YES  |     | NULL    |       |
+| volume       | int(11)       | YES  |     | NULL    |       |
+| openInterest | int(11)       | YES  |     | NULL    |       |
++--------------+---------------+------+-----+---------+-------+
+
+fut_min
++--------------+---------------+------+-----+---------+-------+
+| Field        | Type          | Null | Key | Default | Extra |
++--------------+---------------+------+-----+---------+-------+
+| instID       | varchar(30)   | NO   | PRI | NULL    |       |
+| exch         | varchar(10)   | NO   | PRI | NULL    |       |
+| datetime     | datetime      | NO   | PRI | NULL    |       |
+| min_id       | int(11)       | YES  |     | NULL    |       |
+| open         | decimal(12,4) | YES  |     | NULL    |       |
+| close        | decimal(12,4) | YES  |     | NULL    |       |
+| high         | decimal(12,4) | YES  |     | NULL    |       |
+| low          | decimal(12,4) | YES  |     | NULL    |       |
+| volume       | int(11)       | YES  |     | NULL    |       |
+| openInterest | int(11)       | YES  |     | NULL    |       |
++--------------+---------------+------+-----+---------+-------+
+
+fut_tick
++--------------+---------------+------+-----+---------+-------+
+| Field        | Type          | Null | Key | Default | Extra |
++--------------+---------------+------+-----+---------+-------+
+| instID       | varchar(30)   | NO   | PRI | NULL    |       |
+| date         | date          | NO   | PRI | NULL    |       |
+| hour         | tinyint(4)    | NO   | PRI | NULL    |       |
+| min          | tinyint(4)    | NO   | PRI | NULL    |       |
+| sec          | tinyint(4)    | NO   | PRI | NULL    |       |
+| msec         | smallint(6)   | NO   | PRI | NULL    |       |
+| openInterest | int(11)       | YES  |     | NULL    |       |
+| volume       | int(11)       | YES  |     | NULL    |       |
+| price        | decimal(12,4) | YES  |     | NULL    |       |
+| high         | decimal(12,4) | YES  |     | NULL    |       |
+| low          | decimal(12,4) | YES  |     | NULL    |       |
+| bidPrice1    | decimal(12,4) | YES  |     | NULL    |       |
+| bidVol1      | int(11)       | YES  |     | NULL    |       |
+| askPrice1    | decimal(12,4) | YES  |     | NULL    |       |
+| askVol1      | int(11)       | YES  |     | NULL    |       |
++--------------+---------------+------+-----+---------+-------+
