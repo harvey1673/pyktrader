@@ -151,7 +151,16 @@ class ETrade(object):
 		volumes = [0] * len(self.instIDs)
 		for idx, inst in enumerate(self.instIDs):
 			for iorder in self.order_dict[inst]:
-				if len(iorder.conditionals)> 0:
+				if iorder.status in [OrderStatus.Done, OrderStatus.Cancelled]:
+					continue
+				if len(iorder.conditionals) == 1 and (OrderStatus.Cancelled in iorder.conditionals.values()):
+					sorder = iorder.conditionals.keys()[0]
+					iorder.volume = sorder.cancelled_volume
+					iorder.status = OrderStatus.Ready
+					iorder.conditionals = {}
+					logging.info('order %s is ready after %s is canceld, the remaining volume is %s' \
+									% (iorder.order_ref, sorder.order_ref, iorder.volume))
+				elif len(iorder.conditionals)> 0:
 					cond_status = [o.status == iorder.conditionals[o] for o in iorder.conditionals.keys()]
 					if False not in cond_status:
 						logging.info('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
@@ -190,6 +199,7 @@ class Order(object):
 		##
 		self.volume = vol #目标成交手数,锁定总数
 		self.filled_volume = 0  #实际成交手数
+		self.cancelled_volume = 0
 		self.filled_orders = []
 		self.conditionals = conditionals
 		if len(self.conditionals) == 0:
@@ -225,6 +235,7 @@ class Order(object):
 	def on_cancel(self):	#已经撤单
 		if self.status != OrderStatus.Cancelled:
 			self.status = OrderStatus.Cancelled
+			self.cancelled_volume = max(self.volume - self.filled_volume, 0)
 			self.volume = self.filled_volume	#不会再有成交回报
 			logging.info('O_OC:on cancel,self.volume=%s' % (self.volume,))
 		#self.position.re_calc()

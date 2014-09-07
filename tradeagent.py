@@ -504,7 +504,7 @@ class Instrument(object):
         self.broker_fee = 0
 
     def calc_margin_amount(self,price,direction):   
-        my_marginrate = self.marginrate[0] if direction == LONG else self.marginrate[1]
+        my_marginrate = self.marginrate[0] if direction == ApiStruct.D_Buy else self.marginrate[1]
         #print 'self.name=%s,price=%s,multiple=%s,my_marginrate=%s' % (self.name,price,self.multiple,my_marginrate)
         return price * self.multiple * my_marginrate * 1.05
      
@@ -931,6 +931,7 @@ class Agent(AbsAgent):
     
             curr_price = sum([p*v for p, v in zip(order_prices, exec_trade.volumes)])
         if curr_price <= exec_trade.limit_price: 
+            required_margin = 0
             for idx, (inst, v, otype) in enumerate(zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.order_types)):
                 orders = []
                 pos = self.positions[inst]
@@ -975,18 +976,23 @@ class Agent(AbsAgent):
                         orders.append(iorder)
                 
                 vol = abs(remained)
-                if vol > 0:                    
+                if vol > 0:                   
                     if remained >0:
                         direction = ApiStruct.D_Buy
                     else:
                         direction = ApiStruct.D_Sell
-                    
+                    required_margin += vol * self.instruments[inst].calc_margin_amount(order_prices[idx],direction)
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == ApiStruct.OPT_LimitPrice):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
                     iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, ApiStruct.OF_Open, direction, otype, cond )
                     orders.append(iorder)
                 all_orders[inst] = orders
+            #if required_margin*1.1 > self.available:
+            #    self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
+            #    exec_trade.status = order.ETradeStatus.Cancelled                
+            #    return False
+            #self.available -= required_margin
             exec_trade.order_dict = all_orders
             for inst in exec_trade.instIDs:
                 pos = self.positions[inst]
@@ -1002,7 +1008,11 @@ class Agent(AbsAgent):
     def process_trade_list(self):
         for exec_trade in self.etrades:
             if exec_trade.status == order.ETradeStatus.Pending:
-                self.process_trade(exec_trade)
+                if (exec_trade.valid_time < self.tick_id):
+                    exec_trade.status = order.ETradeStatus.Cancelled
+                    continue
+                else:
+                    self.process_trade(exec_trade)
             elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
                 exec_trade.update()
                 if (exec_trade.valid_time < self.tick_id): 
@@ -1025,8 +1035,8 @@ class Agent(AbsAgent):
                                         
                                         cond = {iorder:order.OrderStatus.Cancelled}
                                         norder =   order.Order(iorder.position, 
-                                                     iorder.limit_price, 
-                                                     iorder.volume - iorder.filled_volume, 
+                                                     0, 
+                                                     0, # fill in the volume when the dependent order is cancelled 
                                                      self.tick_id, 
                                                      iorder.action_type, 
                                                      iorder.direction, 
@@ -1058,13 +1068,28 @@ class Agent(AbsAgent):
             发出下单指令
         '''
         self.logger.info(u'A_CC:开仓平仓命令')
+        price_type = iorder.price_type
+        price = iorder.limit_price
+        inst = iorder.instrument
+        # 上期所不支持市价单
+        if (price_type == ApiStruct.OPT_AnyPrice):
+            if (inst.exchange == 'SHFE' or inst.exchange == 'CFFEX'):
+                price_type = ApiStruct.OPT_LimitPrice
+                # 以后可以改成涨停,跌停价
+                if iorder.direction == ApiStruct.D_Buy:
+                    price = inst.ask_price1 + inst.tick_base * 3
+                else:
+                    price = inst.bid_price1 - inst.tick_base * 3
+            else:
+                price = 0.0
+            
         req = ApiStruct.InputOrder(
                 InstrumentID = iorder.instrument.name,
                 Direction = iorder.direction,
                 OrderRef = str(iorder.order_ref),
-                LimitPrice = iorder.limit_price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
+                LimitPrice = price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
                 VolumeTotalOriginal = iorder.volume,
-                OrderPriceType = iorder.price_type,
+                OrderPriceType = price_type,
                 
                 BrokerID = self.trader.broker_id,
                 InvestorID = self.trader.investor_id,
@@ -1124,10 +1149,9 @@ class Agent(AbsAgent):
         if int(strade.OrderRef) not in self.ref2order or strade.InstrumentID not in self.instruments:
             self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (strade.InstrumentID,strade.OrderRef))
             return 
-        cur_inst = self.instruments[strade.InstrumentID]
         myorder = self.ref2order[int(strade.OrderRef)]
-        if myorder.action_type == XOPEN:#开仓, 也可用pTrade.OffsetFlag判断
-            is_completed = myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
+        if myorder.action_type == ApiStruct.OF_Open:#开仓, 也可用pTrade.OffsetFlag判断
+            myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
             self.logger.info(u'A_RT31,开仓回报');
         else:
             myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
@@ -1150,7 +1174,7 @@ class Agent(AbsAgent):
         if sorder.OrderStatus == ApiStruct.OST_Canceled or sorder.OrderStatus == ApiStruct.OST_PartTradedNotQueueing:   #完整撤单或部成部撤
             self.logger.info(u'撤单, 撤销开/平仓单')
             ##查询可用资金
-            self.put_command(self.tick_id+5,self.fetch_trading_account)
+            #self.put_command(self.tick_id+5,self.fetch_trading_account)
             ##处理相关Order
             myorder = self.ref2order[int(sorder.OrderRef)]
             if myorder.action_type == ApiStruct.OF_Open:    #开仓指令cancel时需要处理，平仓指令cancel时不需要处理
@@ -1345,10 +1369,10 @@ def test_main(name='test_trade'):
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
     insts = ['ag1506','ag1412']
-    trader_cfg = prod_trader
-    user_cfg = prod_user
+    trader_cfg = wkend_trader
+    user_cfg = test_user
     agent_name = name
-    tday = datetime.date(2014,9,4)
+    tday = datetime.date(2014,9,5)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
@@ -1363,7 +1387,7 @@ def test_main(name='test_trade'):
         myagent.positions['ag1412'].pos_yday.long  = 1
         myagent.positions['ag1412'].pos_yday.short = 1
         valid_time = myagent.tick_id + 100
-        etrade =  order.ETrade( ['ag1506', 'ag1412'], [4, -4], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], 10.0, [1,1], valid_time, myagent.name, 'test')
+        etrade =  order.ETrade( ['ag1506', 'ag1412'], [6, -6], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], 16.0, [1,1], valid_time, myagent.name, 'test')
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
@@ -1372,7 +1396,11 @@ def test_main(name='test_trade'):
             o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
         myagent.process_trade_list() 
+        orders = [iorder for iorder in myagent.positions['ag1412'].orders]
         myagent.tick_id = valid_time + 10
+        myagent.process_trade_list()
+        for o in orders: 
+            o.on_cancel()
         myagent.process_trade_list()
         print myagent.etrades
 
