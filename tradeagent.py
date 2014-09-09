@@ -633,9 +633,9 @@ class Agent(AbsAgent):
         self.logger.debug(u'查询命令序列长度:%s' % (len(self.qry_commands),))
         
     def get_eod_positions(self):
-        file_prefix = self.folder + self.name
+        file_prefix = self.folder + self.name + "\\"
         last_bday = workdays.workday(self.scur_day, -1, misc.CHN_Holidays)
-        logfile = file_prefix + '_eodpos_' + last_bday.strftime('%y%m%d')+'.csv'
+        logfile = file_prefix + 'EOD_Pos_' + last_bday.strftime('%y%m%d')+'.csv'
         if not os.path.isfile(logfile):
             return False
         with open(logfile, 'rb') as f:
@@ -649,8 +649,8 @@ class Agent(AbsAgent):
         return True
     
     def save_eod_positions(self):
-        file_prefix = self.folder + self.name
-        logfile = file_prefix + '_eodpos_' + self.scur_day.strftime('%y%m%d')+'.csv'
+        file_prefix = self.folder + self.name + "\\"
+        logfile = file_prefix + 'EOD_Pos_' + self.scur_day.strftime('%y%m%d')+'.csv'
         with open(logfile,'wb') as log_file:
             file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
             file_writer.writerow(['instID', 'long', 'short'])
@@ -662,7 +662,7 @@ class Agent(AbsAgent):
         
     def prepare_trade_env(self):
         self.get_eod_positions()
-        file_prefix = self.folder + self.name
+        file_prefix = self.folder + self.name + "\\"
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
         if len(keys) > 1:
@@ -893,6 +893,9 @@ class Agent(AbsAgent):
         self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
 
     ##交易处理
+    def run_strats(self, ctick):
+        pass
+    
     def RtnTick(self,ctick):#行情处理主循环
         if (not self.update_instrument(ctick)):
             return 0
@@ -1310,7 +1313,7 @@ def create_trader(trader_cfg, instruments, agent_name, tday=datetime.date.today(
 
     logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
 
-    myagent = Agent(agent_name, None, trader_cfg, instruments, tday) 
+    myagent = Agent(agent_name, None, None, instruments, tday) 
     myagent.trader = trader = TraderSpiDelegate(instruments=myagent.instruments, 
                              broker_id=trader_cfg.broker_id,
                              investor_id= trader_cfg.investor_id,

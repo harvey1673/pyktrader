@@ -15,7 +15,7 @@ class OrderStatus:
 
 
 def save_trade_list(curr_date, trade_list, file_prefix):
-	filename = file_prefix + '_trade_' + curr_date.strftime('%y%m%d')+'.csv'
+	filename = file_prefix + 'trade_' + curr_date.strftime('%y%m%d')+'.csv'
 	with open(filename,'wb') as log_file:
 		file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
 		
@@ -40,7 +40,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
 	pass
 
 def load_trade_list(curr_date, file_prefix):
-	logfile = file_prefix + '_trade_' + curr_date.strftime('%y%m%d')+'.csv'
+	logfile = file_prefix + 'trade_' + curr_date.strftime('%y%m%d')+'.csv'
 	if not os.path.isfile(logfile):
 		return []
 
@@ -80,7 +80,7 @@ def save_order_list(curr_date, order_dict, file_prefix):
 	if len(order_dict)>1:
 		orders.sort()
 	order_list = [order_dict[key] for key in orders]
-	filename = file_prefix + '_order_' + curr_date.strftime('%y%m%d')+'.csv'
+	filename = file_prefix + 'order_' + curr_date.strftime('%y%m%d')+'.csv'
 	with open(filename,'wb') as log_file:
 		file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
 		
@@ -97,7 +97,7 @@ def save_order_list(curr_date, order_dict, file_prefix):
 	pass
 
 def load_order_list(curr_date, file_prefix, positions):
-	logfile = file_prefix + '_order_' + curr_date.strftime('%y%m%d')+'.csv'
+	logfile = file_prefix + 'order_' + curr_date.strftime('%y%m%d')+'.csv'
 	if not os.path.isfile(logfile):
 		return {}
 	ref2order = {}
