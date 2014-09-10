@@ -585,6 +585,10 @@ class Agent(AbsAgent):
         self.scur_day = tday
         #当前资金/持仓
         self.available = 0  #可用资金
+        self.locked_margin = 0
+        self.used_margin = 0
+        self.cap_limit = 1000000
+        
         #positions
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
         ##查询命令队列
@@ -607,6 +611,9 @@ class Agent(AbsAgent):
         self.isSettlementInfoConfirmed = False  #结算单未确认
 
 
+    def set_capital_limit(self, cap_limit):
+        self.cap_limit = cap_limit
+        
     def initialize(self):
         '''
             初始化，如保证金率，账户资金等
@@ -621,8 +628,8 @@ class Agent(AbsAgent):
         self.initialized = True #避免因为断开后自动重连造成的重复访问
 
     def resume(self):
-        self.prepare_trade_env()
         self.prepare_data_env()
+        self.prepare_trade_env()
         
     def check_qry_commands(self):
         #必然是在rsp中要发出另一个查询
@@ -680,10 +687,25 @@ class Agent(AbsAgent):
         
         for inst in self.positions:
             self.positions[inst].re_calc()
+        
+        self.calc_margin()
     
     def prepare_data_env(self):
         pass
  
+    def calc_margin(self):
+        locked_margin = 0
+        used_margin = 0
+        for instID in self.instruments:
+            inst = self.instruments[instID]
+            pos = self.positions[instID]
+            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(inst.price,ApiStruct.D_Buy)
+            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ApiStruct.D_Sell) 
+            used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ApiStruct.D_Buy)
+            used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ApiStruct.D_Sell) 
+            
+        self.locked_margin = locked_margin
+        self.used_margin = used_margin
  
     def save_state(self):
         '''
@@ -911,9 +933,6 @@ class Agent(AbsAgent):
             self.process_trade_list()
             self.proc_lock = False
         return 1
-                
-    def run_strats(self, ctick):
-        pass
     
     def process_trade(self, exec_trade):
         all_orders = {}
@@ -991,11 +1010,12 @@ class Agent(AbsAgent):
                     iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, ApiStruct.OF_Open, direction, otype, cond )
                     orders.append(iorder)
                 all_orders[inst] = orders
-            #if required_margin*1.1 > self.available:
-            #    self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
-            #    exec_trade.status = order.ETradeStatus.Cancelled                
-            #    return False
-            #self.available -= required_margin
+                
+            if required_margin + self.locked_margin > self.cap_limit:
+                self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
+                exec_trade.status = order.ETradeStatus.Cancelled                
+                return False
+
             exec_trade.order_dict = all_orders
             for inst in exec_trade.instIDs:
                 pos = self.positions[inst]
