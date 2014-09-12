@@ -13,6 +13,18 @@ OptExpiryDict = {'IO1409': datetime.date(2014, 9, 19),
 			  'IO1412': datetime.date(2014,12, 19),
 			  'IO1503': datetime.date(2015, 3, 20) }
 
+def tick2time(curr_date, tick_id):
+	microsec = tick_id % 10
+	dtime = tick_id / 10
+	sec  = dtime % 100
+	dtime = dtime/100
+	min = dtime % 100
+	hrs = dtime/100
+	return datetime.datetime(curr_date.year,curr_date.month,curr_date.day, hrs, min, dtime, sec, microsec)
+
+def get_tick_id(dt):
+    return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
+	
 class OptArbAgent(Agent):
 	def __init__(self, name, trader, cuser, fut_inst, strikes, caplimit, tday=datetime.date.today()):
 		if fut_inst[1].isalpha():
@@ -24,10 +36,6 @@ class OptArbAgent(Agent):
 		else:
 			optkey = fut_inst
 		
-		self.opt_expiry = OptExpiryDict[optkey]
-		self.ir = 0.04
-		self.time2expiry = (self.opt_expiry-self.)
-		self.DF = np.exp(-ir* )
 		self.strikes = strikes
 		self.fut_inst   = fut_inst
 		self.call_insts = [optkey+'-C-'+str(s) for s in strikes]
@@ -35,7 +43,13 @@ class OptArbAgent(Agent):
 		insts = [self.fut_inst]+self.call_insts+self.put_insts		
 		Agent.__init__(self, name, trader, cuser, insts, tday)
 	
+	def init_init(self):
+		self.opt_expiry = OptExpiryDict[optkey]
+		self.ir = 0.04
+		self.DF = np.exp(-ir* )
+		
 	def run_strats(self, ctick):
+		pass
 		
 def test_main():
     logging.basicConfig(filename="ctp_user_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
@@ -82,5 +96,3 @@ def test_main():
 
 if __name__=="__main__":
     test_main()
-		
-	
