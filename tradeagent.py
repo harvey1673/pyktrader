@@ -712,7 +712,7 @@ class Agent(AbsAgent):
             保存环境
         '''
         self.logger.info(u'保存执行状态.....................')
-        file_prefix = self.folder + self.name
+        file_prefix = self.folder + self.name  + "\\"
         order.save_order_list(self.scur_day, self.ref2order, file_prefix)
         order.save_trade_list(self.scur_day, self.etrades, file_prefix)
         return
@@ -1392,10 +1392,10 @@ def test_main(name='test_trade'):
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
     insts = ['ag1506','ag1412']
-    trader_cfg = wkend_trader
+    trader_cfg = test_trader
     user_cfg = test_user
     agent_name = name
-    tday = datetime.date(2014,9,5)
+    tday = datetime.date(2014,9,13)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
@@ -1415,8 +1415,8 @@ def test_main(name='test_trade'):
         myagent.process_trade_list() 
         
         myagent.tick_id = valid_time - 10
-        for o in myagent.positions['ag1506'].orders:
-            o.on_trade(2000,o.volume,141558400)
+        #for o in myagent.positions['ag1506'].orders:
+        #    o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
         myagent.process_trade_list() 
         orders = [iorder for iorder in myagent.positions['ag1412'].orders]

@@ -1,4 +1,5 @@
 import * from tradeagent
+import workdays
 import numpy as np
 import datetime
 from ctp.futures import ApiStruct, MdApi, TraderApi
@@ -6,6 +7,8 @@ from ctp.futures import ApiStruct, MdApi, TraderApi
 THOST_TERT_RESTART  = ApiStruct.TERT_RESTART
 THOST_TERT_RESUME   = ApiStruct.TERT_RESUME
 THOST_TERT_QUICK    = ApiStruct.TERT_QUICK
+
+BDAYS_PER_YEAR = 252.0
 
 OptExpiryDict = {'IO1409': datetime.date(2014, 9, 19),
 			  'IO1410': datetime.date(2014,10, 17),
@@ -21,9 +24,6 @@ def tick2time(curr_date, tick_id):
 	min = dtime % 100
 	hrs = dtime/100
 	return datetime.datetime(curr_date.year,curr_date.month,curr_date.day, hrs, min, dtime, sec, microsec)
-
-def get_tick_id(dt):
-    return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
 	
 class OptArbAgent(Agent):
 	def __init__(self, name, trader, cuser, fut_inst, strikes, caplimit, tday=datetime.date.today()):
@@ -45,8 +45,20 @@ class OptArbAgent(Agent):
 	
 	def init_init(self):
 		self.opt_expiry = OptExpiryDict[optkey]
-		self.ir = 0.04
-		self.DF = np.exp(-ir* )
+		self.ir = 0.0
+		
+	
+	def time2expiry(self):
+		if self.scur_day < self.opt_expiry:
+			return workdays.networkdays(self.scur_day, self.opt_expiry, misc.CHN_Holidays)/BDAYS_PER_YEAR
+		else:
+			sec = int((self.tick_id % 1000)/10.0)
+			min = int((self.tick_id % 100000)/1000.0)
+			hr  = self.tick_id / 100000
+			return max(((21.0 -(hr+(min+sec/60.0)/60.0))/5.75)/BDAYS_PER_YEAR, 0.0)
+	
+	def discf(self):
+		return np.exp(-self.ir*self.time2expiry())
 		
 	def run_strats(self, ctick):
 		pass

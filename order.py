@@ -161,8 +161,14 @@ class ETrade(object):
 					logging.info('order %s is ready after %s is canceld, the remaining volume is %s' \
 									% (iorder.order_ref, sorder.order_ref, iorder.volume))
 				elif len(iorder.conditionals)> 0:
-					cond_status = [o.status == iorder.conditionals[o] for o in iorder.conditionals.keys()]
-					if False not in cond_status:
+					for o in iorder.conditionals:
+						if ((o.status == OrderStatus.Cancelled) and (iorder.conditionals[o] == OrderStatus.Done)) \
+						    or ((o.status == OrderStatus.Done) and (iorder.conditionals[o] == OrderStatus.Cancelled)):
+							iorder.on_cancel()
+							break
+						elif (o.status != iorder.conditionals[o]):
+							break	
+					else:
 						logging.info('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
 						iorder.status = OrderStatus.Ready
 						iorder.conditionals = {}
