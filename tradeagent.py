@@ -471,7 +471,7 @@ class Instrument(object):
         self.price = 0.0
         self.volume = 0
         self.open_interest = 0
-        self.last_update = datetime.datetime.now()
+        self.last_update = 0
         self.ask_price1 = 0.0
         self.ask_vol1 = 0
         self.bid_price1 = 0.0
@@ -722,8 +722,6 @@ class Agent(AbsAgent):
         return
        
     def update_instrument(self, tick):
-        #if ctick.timestamp <= self.instruments[ctick.instID].last_update:
-        #    return 
         inst = tick.instID    
         if inst not in self.instruments:
             self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
@@ -742,13 +740,13 @@ class Agent(AbsAgent):
         if (curr_tick > self.instruments[inst].last_tick_id+5):
             return False
             
-        if (self.instruments[inst].last_update >= tick.timestamp):
-            self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
+        if (self.instruments[inst].last_update >= curr_tick):
+            self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, curr_tick,))
             return False
         
         if self.tick_id < curr_tick:
             self.tick_id = curr_tick
-        self.instruments[tick.instID].last_update = tick.timestamp
+        self.instruments[tick.instID].last_update = curr_tick
         self.instruments[tick.instID].bid_price1 = tick.bidPrice1
         self.instruments[tick.instID].ask_price1 = tick.askPrice1
         self.instruments[tick.instID].bid_vol1   = tick.bidVol1
@@ -843,7 +841,8 @@ class Agent(AbsAgent):
             self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
             self.cur_day[inst]['date'] = self.scur_day
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-        self.save_eod_positions()
+        if self.trader != None:
+            self.save_eod_positions()
 
     def day_switch(self,scur_day):  #重新初始化opener
         self.scur_day = scur_day
@@ -1145,10 +1144,13 @@ class Agent(AbsAgent):
         '''
             发出撤单指令  
         '''
-        #print 'in cancel command'
-        self.logger.info(u'A_CC:取消命令')
+        inst = iorder.instrument
+        print 'cancel order %s, instID=%s, volume=%s, filled=%s, OrderPrice=%s, bidprice=%s, askprice=%s' \
+                % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.limit_price, inst.bid_price1, inst.ask_price1)
+        self.logger.info(u'A_CC:取消命令: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
+                % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
         req = ApiStruct.InputOrderAction(
-                InstrumentID = iorder.instrument.name,
+                InstrumentID = inst.name,
                 OrderRef = str(iorder.order_ref),
                 BrokerID = self.trader.broker_id,
                 InvestorID = self.trader.investor_id,
