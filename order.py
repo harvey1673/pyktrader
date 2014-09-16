@@ -214,18 +214,17 @@ class Order(object):
 			self.status = OrderStatus.Waiting
 		self.close_lock = False #平仓锁定，即已经发出平仓信号
 
-	def on_trade(self,price,volume,order_time):
+	def on_trade(self,price,volume,trade_time):
 		''' 返回是否完全成交
 		'''
-		if order_time not in [o.otime for o in self.filled_orders]:
-			self.filled_orders.append(BaseObject(price = price, volume = volume, otime = order_time))
-			logging.info(u'成交纪录:price=%s,volume=%s,trade_time=%s' % (price,volume,order_time))
+		if trade_time not in [o.otime for o in self.filled_orders]:
+			self.filled_orders.append(BaseObject(price = price, volume = volume, otime = trade_time))
 			self.filled_volume = sum([o.volume for o in self.filled_orders])
-			logging.info(u'price=%s,volume=%s,self.opened_volume=%s,is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
+			logging.info(u'成交纪录:price=%s,volume=%s,trade_time=%s,filled_vol=%s, is_closed=%s' % (price,volume,trade_time, self.filled_volume,self.is_closed()))
 			if self.filled_volume > self.volume:
 				self.filled_volume = self.volume
-				logging.warning(u'a new trade confirm exceeds the order volume price=%s,volume=%s, order_time=%s, filled_vol=%s, order_vol =%s' % \
-								(price, volume, order_time, self.filled_volume, self.volume))
+				logging.warning(u'a new trade confirm exceeds the order volume price=%s,volume=%s, trade_time=%s, filled_vol=%s, order_vol =%s' % \
+								(price, volume, trade_time, self.filled_volume, self.volume))
 			elif (self.filled_volume == self.volume) and (self.volume>0):
 				 self.status = OrderStatus.Done
 			#self.position.re_calc()
@@ -320,14 +319,14 @@ class Position(object):
 		#	self.can_close.long  = max(self.pos_yday.short + tday_opened.short - tday_c_locked.long,0) 
 		#	self.can_close.short = max(self.pos_yday.long + tday_opened.long  - tday_c_locked.short,0)			
 		
-		self.curr_pos.long = tday_opened.long-tday_closed.short+self.pos_yday.long-yday_closed.short
-		self.curr_pos.short = tday_opened.short-tday_closed.long+self.pos_yday.short-yday_closed.long
-		self.locked_pos.long = self.pos_yday.long-yday_closed.short + tday_o_locked.long - tday_closed.short
-		self.locked_pos.short = self.pos_yday.short-yday_closed.long + tday_o_locked.short - tday_closed.long
+		self.curr_pos.long = tday_opened.long - tday_closed.short + self.pos_tday.long + self.pos_yday.long - yday_closed.short
+		self.curr_pos.short =tday_opened.short- tday_closed.long  + self.pos_tday.short+ self.pos_yday.short- yday_closed.long
+		self.locked_pos.long = self.pos_yday.long -yday_closed.short+ self.pos_tday.long + tday_o_locked.long - tday_closed.short
+		self.locked_pos.short =self.pos_yday.short-yday_closed.long + self.pos_tday.short+ tday_o_locked.short- tday_closed.long
 		
 		self.can_open.long  = max(self.instrument.max_holding[0] - self.locked_pos.long,0)
 		self.can_open.short = max(self.instrument.max_holding[1] - self.locked_pos.short,0)
-		logging.info(u'P_RC_1:%s 重算头寸，已开数 long=%s,short=%s 锁定数 long=%s,short=%s' % (str(self), self.curr_pos.long,self.curr_pos.short,self.locked_pos.long,self.locked_pos.short))
+		logging.info(u'P_RC_1:%s 重算头寸，当前已开数 long=%s,short=%s 当前锁定数 long=%s,short=%s' % (str(self), self.curr_pos.long,self.curr_pos.short,self.locked_pos.long,self.locked_pos.short))
 
 	def get_open_volume(self):
 		return (self.can_open.long, self.can_open.short)

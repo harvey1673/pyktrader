@@ -651,8 +651,12 @@ class Agent(AbsAgent):
                 if idx > 0:
                     inst = row[0]
                     if inst in self.positions:
-                        self.positions[inst].pos_yday.long = row[1] 
-                        self.positions[inst].pos_yday.short = row[2]
+                        if self.instruments[inst].exchange == 'SHFE': 
+                            self.positions[inst].pos_yday.long = int(row[1]) 
+                            self.positions[inst].pos_yday.short = int(row[2])
+                        else:
+                            self.positions[inst].pos_tday.long = int(row[1]) 
+                            self.positions[inst].pos_tday.short = int(row[2])                            
         return True
     
     def save_eod_positions(self):
@@ -1026,6 +1030,7 @@ class Agent(AbsAgent):
             self.save_state()
             return True
         else:
+            print "do not meet the limit price"
             return False    
         
     def process_trade_list(self):
@@ -1168,14 +1173,14 @@ class Agent(AbsAgent):
                    在OnTrade中进行position的细致处理 
             #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''
-        self.logger.info(u'A_RT1:成交回报,%s:orderref=%s,orders=%s,price=%s' % (strade.InstrumentID,strade.OrderRef,self.ref2order,strade.Price))
+        self.logger.info(u'A_RT1:成交回报,%s:OrderRef=%s,orders=%s,price=%s' % (strade.InstrumentID,strade.OrderRef,self.ref2order,strade.Price))
         if int(strade.OrderRef) not in self.ref2order or strade.InstrumentID not in self.instruments:
             self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (strade.InstrumentID,strade.OrderRef))
             return 
         myorder = self.ref2order[int(strade.OrderRef)]
         if myorder.action_type == ApiStruct.OF_Open:#开仓, 也可用pTrade.OffsetFlag判断
             myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
-            self.logger.info(u'A_RT31,开仓回报');
+            self.logger.info(u'A_RT31,开仓回报,price=%s,time=%s' % (strade.Price,strade.TradeTime));
         else:
             myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
             self.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (strade.Price,strade.TradeTime));
@@ -1192,7 +1197,7 @@ class Agent(AbsAgent):
             交易所接受下单回报(CTP接受的已经被过滤)
             暂时只处理撤单的回报. 
         '''
-        print str(sorder)
+        #print str(sorder)
         self.logger.info(u'成交/撤单回报:%s' % (str(sorder,)))
         if sorder.OrderStatus == ApiStruct.OST_Canceled or sorder.OrderStatus == ApiStruct.OST_PartTradedNotQueueing:   #完整撤单或部成部撤
             self.logger.info(u'撤单, 撤销开/平仓单')
@@ -1200,11 +1205,11 @@ class Agent(AbsAgent):
             #self.put_command(self.tick_id+5,self.fetch_trading_account)
             ##处理相关Order
             myorder = self.ref2order[int(sorder.OrderRef)]
-            if myorder.action_type == ApiStruct.OF_Open:    #开仓指令cancel时需要处理，平仓指令cancel时不需要处理
-                self.logger.info(u'撤销开仓单')
-                myorder.on_cancel()
-                self.save_state()
-                #self.process_trade_list()
+            #if myorder.action_type == ApiStruct.OF_Open or myorder.action_type == ApiStruct.OF_Close :    #开仓指令cancel时需要处理，平仓指令cancel时不需要处理
+            self.logger.info(u'撤销开仓单')
+            myorder.on_cancel()
+            self.save_state()
+            #self.process_trade_list()
     def err_order_insert(self,order_ref,instrument_id,error_id,error_msg):
         '''
             ctp/交易所下单错误回报，不区分ctp和交易所
@@ -1354,7 +1359,7 @@ def create_agent(agent_name, usercfg, tradercfg, insts, tday = datetime.date.tod
     make_user(my_agent,usercfg)
     return my_agent
 
-def test_main(name='test_trade'):
+def test_main(name='option_test_trade'):
     '''
     import agent
     trader,myagent = agent.trade_test_main()
@@ -1391,39 +1396,41 @@ def test_main(name='test_trade'):
                                            "tcp://qqfz-front2.ctp.shcifco.com:32305",
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
-    insts = ['ag1506','ag1412']
+    insts = ['IF1412','IF1409']
     trader_cfg = test_trader
     user_cfg = test_user
     agent_name = name
-    tday = datetime.date(2014,9,13)
+    tday = datetime.date(2014,9,16)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
 
 # position/trade test        
-        myagent.positions['ag1506'].pos_tday.long  = 2
-        myagent.positions['ag1506'].pos_tday.short = 3
-        myagent.positions['ag1412'].pos_tday.long  = 1
-        myagent.positions['ag1412'].pos_tday.short = 2
-        myagent.positions['ag1506'].pos_yday.long  = 1
-        myagent.positions['ag1506'].pos_yday.short = 1
-        myagent.positions['ag1412'].pos_yday.long  = 1
-        myagent.positions['ag1412'].pos_yday.short = 1
-        valid_time = myagent.tick_id + 100
-        etrade =  order.ETrade( ['ag1506', 'ag1412'], [6, -6], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], 16.0, [1,1], valid_time, myagent.name, 'test')
+        myagent.positions['IF1412'].pos_tday.long  = 0
+        myagent.positions['IF1412'].pos_tday.short  = 0
+        myagent.positions['IF1409'].pos_tday.long  = 2
+        myagent.positions['IF1409'].pos_tday.short = 0
+        
+        myagent.positions['IF1409'].re_calc()
+        myagent.positions['IF1412'].re_calc()        
+        
+        valid_time = myagent.tick_id + 500
+        etrade =  order.ETrade( ['IF1412', 'IF1409'], [1, -1], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], 25.0, [1,1], valid_time, myagent.name, 'test')
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
-        myagent.tick_id = valid_time - 10
+        #myagent.tick_id = valid_time - 10
         #for o in myagent.positions['ag1506'].orders:
         #    o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
         myagent.process_trade_list() 
-        orders = [iorder for iorder in myagent.positions['ag1412'].orders]
-        myagent.tick_id = valid_time + 10
-        myagent.process_trade_list()
-        for o in orders: 
-            o.on_cancel()
+        myagent.positions['IF1409'].re_calc()
+        myagent.positions['IF1412'].re_calc()
+        #orders = [iorder for iorder in myagent.positions['ag1412'].orders]
+        #myagent.tick_id = valid_time + 10
+        #myagent.process_trade_list()
+        #for o in orders: 
+        #    o.on_cancel()
         myagent.process_trade_list()
         print myagent.etrades
 
