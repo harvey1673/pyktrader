@@ -940,21 +940,13 @@ class Agent(AbsAgent):
     def process_trade(self, exec_trade):
         all_orders = {}
         order_prices = []
-        if len(exec_trade.instIDs) == 1:
-            inst = exec_trade.instIDs[0]
-            order_prices.append(exec_trade.limit_price)
-            if exec_trade.volumes[0] > 0:
-                curr_price = self.instruments[inst].bid_price1
+        for inst, v, tick in zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.slip_ticks):
+            if v>0:
+                order_prices.append(self.instruments[inst].bid_price1+self.instruments[inst].tick_base*tick)
             else:
-                curr_price = self.instruments[inst].ask_price1
-        else:
-            for inst, v, tick in zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.slip_ticks):
-                if v>0:
-                    order_prices.append(self.instruments[inst].bid_price1+self.instruments[inst].tick_base*tick)
-                else:
-                    order_prices.append(self.instruments[inst].ask_price1-self.instruments[inst].tick_base*tick)
+                order_prices.append(self.instruments[inst].ask_price1-self.instruments[inst].tick_base*tick)
     
-            curr_price = sum([p*v for p, v in zip(order_prices, exec_trade.volumes)])
+        curr_price = sum([p*v for p, v in zip(order_prices, exec_trade.volumes)])
         if curr_price <= exec_trade.limit_price: 
             required_margin = 0
             for idx, (inst, v, otype) in enumerate(zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.order_types)):
@@ -1137,7 +1129,7 @@ class Agent(AbsAgent):
                           iorder.volume,
                           iorder.limit_price, 
                           iorder.price_type))
-        r = self.trader.ReqOrderInsert(req,self.inc_request_id())
+        #r = self.trader.ReqOrderInsert(req,self.inc_request_id())
         iorder.status = order.OrderStatus.Sent
 
     def cancel_order(self,iorder):
@@ -1399,25 +1391,25 @@ def test_main(name='option_test_trade'):
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
     insts = ['IF1412','IF1409']
-    trader_cfg = test_trader
-    user_cfg = test_user
+    trader_cfg = prod_trader
+    user_cfg = prod_user
     agent_name = name
-    tday = datetime.date(2014,9,16)
+    tday = datetime.date(2014,9,17)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
 
 # position/trade test        
-        myagent.positions['IF1412'].pos_tday.long  = 0
-        myagent.positions['IF1412'].pos_tday.short  = 0
-        myagent.positions['IF1409'].pos_tday.long  = 2
-        myagent.positions['IF1409'].pos_tday.short = 0
+        myagent.positions['cu1412'].pos_tday.long  = 0
+        myagent.positions['cu1412'].pos_tday.short  = 0
+        myagent.positions['cu1411'].pos_tday.long  = 0
+        myagent.positions['cu1411'].pos_tday.short = 0
         
-        myagent.positions['IF1409'].re_calc()
-        myagent.positions['IF1412'].re_calc()        
+        #myagent.positions['IF1409'].re_calc()
+        #myagent.positions['IF1412'].re_calc()        
         
-        valid_time = myagent.tick_id + 500
-        etrade =  order.ETrade( ['IF1412', 'IF1409'], [1, -1], [ApiStruct.OPT_LimitPrice,ApiStruct.OPT_LimitPrice], 25.0, [1,1], valid_time, myagent.name, 'test')
+        valid_time = myagent.tick_id + 200
+        etrade =  order.ETrade( ['cu1411'], [-1], [ApiStruct.OPT_LimitPrice], -49480, [0], valid_time, myagent.name, 'test')
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
@@ -1426,8 +1418,8 @@ def test_main(name='option_test_trade'):
         #    o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
         myagent.process_trade_list() 
-        myagent.positions['IF1409'].re_calc()
-        myagent.positions['IF1412'].re_calc()
+        myagent.positions['cu1411'].re_calc()
+        myagent.positions['cu1412'].re_calc()
         #orders = [iorder for iorder in myagent.positions['ag1412'].orders]
         #myagent.tick_id = valid_time + 10
         #myagent.process_trade_list()
