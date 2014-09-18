@@ -17,7 +17,7 @@ from base import *
 
 from ctp.futures import ApiStruct, MdApi, TraderApi
 
-CANCEL_PROTECT_PERIOD = 20
+CANCEL_PROTECT_PERIOD = 200
 #数据定义中唯一一个enum
 THOST_TERT_RESTART  = ApiStruct.TERT_RESTART
 THOST_TERT_RESUME   = ApiStruct.TERT_RESUME
@@ -1021,7 +1021,8 @@ class Agent(AbsAgent):
             self.save_state()
             return True
         else:
-            print "do not meet the limit price"
+            print "do not meet the limit price, curr price = %s, limit price = %s" % (curr_price, exec_trade.limit_price)
+            print order_prices
             return False    
         
     def process_trade_list(self):
@@ -1129,7 +1130,7 @@ class Agent(AbsAgent):
                           iorder.volume,
                           iorder.limit_price, 
                           iorder.price_type))
-        #r = self.trader.ReqOrderInsert(req,self.inc_request_id())
+        r = self.trader.ReqOrderInsert(req,self.inc_request_id())
         iorder.status = order.OrderStatus.Sent
 
     def cancel_order(self,iorder):
@@ -1353,7 +1354,7 @@ def create_agent(agent_name, usercfg, tradercfg, insts, tday = datetime.date.tod
     make_user(my_agent,usercfg)
     return my_agent
 
-def test_main(name='option_test_trade'):
+def test_main(name='test_trade'):
     '''
     import agent
     trader,myagent = agent.trade_test_main()
@@ -1362,7 +1363,8 @@ def test_main(name='option_test_trade'):
     ##释放连接
     trader.RegisterSpi(None)
     '''
-    logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    name='test_trade'
+    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
 
     prod_user = BaseObject( broker_id="8070", 
                                  investor_id="*", 
@@ -1390,11 +1392,11 @@ def test_main(name='option_test_trade'):
                                            "tcp://qqfz-front2.ctp.shcifco.com:32305",
                                            "tcp://qqfz-front3.ctp.shcifco.com:32305"])
     
-    insts = ['IF1412','IF1409']
+    insts = ['cu1411','cu1412']
     trader_cfg = prod_trader
     user_cfg = prod_user
     agent_name = name
-    tday = datetime.date(2014,9,17)
+    tday = datetime.date(2014,9,18)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
@@ -1409,8 +1411,8 @@ def test_main(name='option_test_trade'):
         #myagent.positions['IF1412'].re_calc()        
         
         valid_time = myagent.tick_id + 200
-        etrade =  order.ETrade( ['cu1411'], [-1], [ApiStruct.OPT_LimitPrice], -49480, [0], valid_time, myagent.name, 'test')
-        myagent.submit_trade(etrade)
+        etrade =  order.ETrade( ['cu1411'], [1], [ApiStruct.OPT_LimitPrice], 48890, [0], valid_time, myagent.name, 'test')
+        #myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
         #myagent.tick_id = valid_time - 10
