@@ -84,14 +84,14 @@ def save_order_list(curr_date, order_dict, file_prefix):
 	with open(filename,'wb') as log_file:
 		file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
 		
-		file_writer.writerow(['order_ref', 'inst', 'volume', 'filledvolume', 'action_type', 'direction',
+		file_writer.writerow(['order_ref', 'sysID', 'inst', 'volume', 'filledvolume', 'action_type', 'direction',
 							  'price_type','limitprice','order_time', 'status', 'conditionals'])
 
 		for order in order_list:
 			inst = order.position.instrument.name
 			cond = [ str(o.order_ref)+':'+str(order.conditionals[o]) for o in order.conditionals]
 			cond_str = ' '.join(cond)
-			file_writer.writerow([order.order_ref, inst, order.volume, order.filled_volume, 
+			file_writer.writerow([order.order_ref, order.sys_id, inst, order.volume, order.filled_volume, 
 								  order.action_type, order.direction, order.price_type,
 								  order.limit_price, order.start_tick, order.status, cond_str])  
 	pass
@@ -105,17 +105,18 @@ def load_order_list(curr_date, file_prefix, positions):
 		reader = csv.reader(f)
 		for idx, row in enumerate(reader):
 			if idx > 0:
-				inst = row[1]
+				inst = row[2]
 				pos = positions[inst]
-				if ':' in row[10]:
-					cond = dict([ tuple([int(k) for k in n.split(':')]) for n in row[10].split(' ')])
+				if ':' in row[11]:
+					cond = dict([ tuple([int(k) for k in n.split(':')]) for n in row[11].split(' ')])
 				else:
 					cond = {}
-				iorder = Order(pos, float(row[7]), int(row[2]), int(row[8]),
-							   row[4], row[5], row[6], cond)
-				iorder.filled_volume = int(row[3])
+				iorder = Order(pos, float(row[8]), int(row[3]), int(row[9]),
+							   row[5], row[6], row[7], cond)
+				iorder.sys_id = row[1]
+				iorder.filled_volume = int(row[4])
 				iorder.order_ref = int(row[0])
-				iorder.status = int(row[9])
+				iorder.status = int(row[10])
 				ref2order[iorder.order_ref] = iorder
 				pos.add_order(iorder)				
 	return ref2order
@@ -190,23 +191,24 @@ class ETrade(object):
 		elif PFill_status:
 			self.status = ETradeStatus.PFilled
 	
-####下单
+####??
 class Order(object):
 	id_generator = itertools.count(int(datetime.datetime.strftime(datetime.datetime.now(),'%d%H%M%S')))
 	def __init__(self,position,limit_price,vol,order_time,action_type,direction, price_type, conditionals={}):
 		self.position = position
-		self.limit_price = limit_price		#开仓基准价
+		self.limit_price = limit_price		#?????
 		self.start_tick  = order_time
 		self.order_ref = next(self.id_generator)
-		##衍生
+		##??
 		self.instrument = position.instrument
+		self.sys_id = ''
 		self.direction = direction # D_Buy, D_Sell
-		##操作类型
+		##????
 		self.action_type = action_type # utype.OF_CloseToday, utype.OF_Close, utype.OF_Open
 		self.price_type = price_type
 		##
-		self.volume = vol #目标成交手数,锁定总数
-		self.filled_volume = 0  #实际成交手数
+		self.volume = vol #??????,????
+		self.filled_volume = 0  #??????
 		self.cancelled_volume = 0
 		self.filled_orders = []
 		self.conditionals = conditionals
@@ -214,15 +216,15 @@ class Order(object):
 			self.status = OrderStatus.Ready
 		else:
 			self.status = OrderStatus.Waiting
-		self.close_lock = False #平仓锁定，即已经发出平仓信号
+		self.close_lock = False #????,?????????
 
 	def on_trade(self,price,volume,trade_time):
-		''' 返回是否完全成交
+		''' ????????
 		'''
 		if trade_time not in [o.otime for o in self.filled_orders]:
 			self.filled_orders.append(BaseObject(price = price, volume = volume, otime = trade_time))
 			self.filled_volume = sum([o.volume for o in self.filled_orders])
-			logging.info(u'成交纪录:price=%s,volume=%s,trade_time=%s,filled_vol=%s, is_closed=%s' % (price,volume,trade_time, self.filled_volume,self.is_closed()))
+			logging.info(u'????:price=%s,volume=%s,trade_time=%s,filled_vol=%s, is_closed=%s' % (price,volume,trade_time, self.filled_volume,self.is_closed()))
 			if self.filled_volume > self.volume:
 				self.filled_volume = self.volume
 				logging.warning(u'a new trade confirm exceeds the order volume price=%s,volume=%s, trade_time=%s, filled_vol=%s, order_vol =%s' % \
@@ -234,40 +236,40 @@ class Order(object):
 		
 # 	def on_close(self,price,volume,order_time):
 # 		self.filled_volume = min(self.filled_volume + volume, self.volume)
-# 		#if self.volume < self.filled_volume:	#因为cancel和成交的时间差导致的
+# 		#if self.volume < self.filled_volume:	#??cancel??????????
 # 		#	self.volume = self.filled_volume
 # 		logging.info(u'O_CLS:on close,opened_volume=%s,volume=%s,trade_time=%s' % (self.filled_volume,volume,order_time))
 # 		#self.position.re_calc()
 
-	def on_cancel(self):	#已经撤单
+	def on_cancel(self):	#????
 		if self.status != OrderStatus.Cancelled:
 			self.status = OrderStatus.Cancelled
 			self.cancelled_volume = max(self.volume - self.filled_volume, 0)
-			self.volume = self.filled_volume	#不会再有成交回报
-			logging.info(u'撤单记录: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
+			self.volume = self.filled_volume	#????????
+			logging.info(u'????: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
 				% (self.order_ref, self.instrument.name, self.volume, self.filled_volume, self.cancelled_volume))
 		#self.position.re_calc()
 
-	def is_closed(self): #是否已经完全平仓
+	def is_closed(self): #????????
 		return (self.status in [OrderStatus.Cancelled,OrderStatus.Done]) and self.filled_volume == self.volume
 
 	def release_close_lock(self):
-		logging.info(u'释放平仓锁,order=%s' % self.__str__())
+		logging.info(u'?????,order=%s' % self.__str__())
 		self.close_lock = False
 
 	def __str__(self):
-		return u'Order_A: 合约=%s,方向=%s,目标数=%s,开仓数=%s,状态=%s' % (self.instrument.name,
-				u'多' if self.direction==utype.D_Buy else u'空',
+		return u'Order_A: ??=%s,??=%s,???=%s,???=%s,??=%s' % (self.instrument.name,
+				u'?' if self.direction==utype.D_Buy else u'?',
 				self.volume,
 				self.filled_volume,
 				self.status,
 			)
 
-		####头寸
+		####??
 class Position(object):
 	def __init__(self,instrument):
 		self.instrument = instrument
-		self.orders = []	#元素为Order
+		self.orders = []	#???Order
 		self.pos_tday = BaseObject(long=0, short=0) # SOD position for SHFE, zero for others
 		self.pos_yday = BaseObject(long=0, short=0) # today's new open position for
 
@@ -329,7 +331,7 @@ class Position(object):
 		
 		self.can_open.long  = max(self.instrument.max_holding[0] - self.locked_pos.long,0)
 		self.can_open.short = max(self.instrument.max_holding[1] - self.locked_pos.short,0)
-		logging.info(u'P_RC_1:%s 重算头寸，当前已开数 long=%s,short=%s 当前锁定数 long=%s,short=%s' % (str(self), self.curr_pos.long,self.curr_pos.short,self.locked_pos.long,self.locked_pos.short))
+		logging.info(u'P_RC_1:%s ????,????? long=%s,short=%s ????? long=%s,short=%s' % (str(self), self.curr_pos.long,self.curr_pos.short,self.locked_pos.long,self.locked_pos.short))
 
 	def get_open_volume(self):
 		return (self.can_open.long, self.can_open.short)
@@ -350,4 +352,3 @@ class Position(object):
 
 	def __str__(self):
 		return u'%s:%x' % (self.instrument.name,id(self))
-
