@@ -18,6 +18,8 @@ from base import *
 from ctp.futures import ApiStruct, MdApi, TraderApi
 
 CANCEL_PROTECT_PERIOD = 200
+MO_MULTIPLIER = 3
+
 #数据定义中唯一一个enum
 THOST_TERT_RESTART  = ApiStruct.TERT_RESTART
 THOST_TERT_RESUME   = ApiStruct.TERT_RESUME
@@ -325,8 +327,7 @@ class TraderSpiDelegate(TraderApi):
             #logging
             #print pInstrument
             self.agent.rsp_qry_instrument(pInstrument)  #模糊查询的结果,获得了多个合约的数据，只有最后一个的bLast是True
-
-
+			
     def OnRspQryTradingAccount(self, pTradingAccount, pRspInfo, nRequestID, bIsLast):
         '''
             请求查询资金账户响应
@@ -367,7 +368,7 @@ class TraderSpiDelegate(TraderApi):
         if bIsLast and self.isRspSuccess(pRspInfo):
             self.agent.rsp_qry_order(pOrder)
         else:
-            TraderSpiDelegate.logger.error(u'TD:requestID:%s,IsLast:%s,info:%s' % (nRequestID,bIsLast,str(pRspInfo)))
+            self.agent.rsp_qry_order(pOrder) 
             pass
 
     def OnRspQryTrade(self, pTrade, pRspInfo, nRequestID, bIsLast):
@@ -375,7 +376,7 @@ class TraderSpiDelegate(TraderApi):
         if bIsLast and self.isRspSuccess(pRspInfo):
             self.agent.rsp_qry_trade(pTrade)
         else:
-            #logging
+            self.agent.rsp_qry_trade(pTrade)
             pass
 
     ###交易操作
@@ -568,6 +569,8 @@ class Agent(AbsAgent):
         self.initialized = False
         
         # market data
+		self.hist_days = 0
+		self.hist_min = 0
         self.tick_data  = dict([(inst, []) for inst in instruments])
         self.min_data   = dict([(inst, []) for inst in instruments])
         self.day_data   = dict([(inst, []) for inst in instruments])
@@ -598,12 +601,14 @@ class Agent(AbsAgent):
         #self.scheduler = sched.scheduler(time.time, time.sleep)
         #保存锁
         self.event = threading.Event()
-        self.proc_lock = False
+        self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
 
         #actions
         self.etrades = []
+		self.ctp_orders = {}
+		self.ctp_trades = {}
 
         self.init_init()    #init中的init,用于子类的处理
 
@@ -623,14 +628,41 @@ class Agent(AbsAgent):
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(fcustom(self.fetch_instruments_by_exchange,exchange_id = ''))
-        time.sleep(1)   #保险起见
-        self.check_qry_commands()
-        self.initialized = True #避免因为断开后自动重连造成的重复访问
+        #time.sleep(1)   #保险起见
+		self.ctp_orders = {}
+		self.qry_commands.append(self.fetch_order)
+		#time.sleep(1)
+		self.ctp_trades = {}
+		self.qry_commands.append(self.fetch_trade)
+		self.check_qry_commands()
+		self.initialized = True #避免因为断开后自动重连造成的重复访问
 
     def resume(self):
+		self.proc_lock = True
+		self.ctp_orders = {}
+		self.fetch_order()		
         self.prepare_data_env()
-        self.prepare_trade_env()
-        
+		self.prepare_trade_env()
+		for order_ref in self.ref2order:
+			iorder = self.ref2order[order_ref]
+			if iorder.sys_id in self.ctp_orders:
+				sorder = self.ctp.orders[iorder.sys_id]
+				if sorder.OrderStatus in [ApiStruct.OST_NoTradeQueueing, ApiStruct.OST_PartTradedQueueing, ApiStruct.OST_Unknown]:
+					if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
+						self.logger.waning('order status for OrderSysID = %s, Inst = is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
+						iorder.status = order.OrderStatus.Sent
+						iorder.conditionals = {}
+				elif sorder.OrderStatus in [ApiStruct.OST_Canceled, ApiStruct.OST_PartTradedNotQueueing, ApiStruct.OST_NoTradeNotQueueing]:
+					if iorder.status != order.OrderStatus.Cancelled:
+						self.logger.waning('order status for OrderSysID = %s, Inst = is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
+						iorder.on_calcel()			
+			#if iorder.sys_id in self.ctp_orders:
+				#pass
+        for inst in self.positions:
+            self.positions[inst].re_calc()        
+        self.calc_margin()
+		self.proc_lock = False
+		
     def check_qry_commands(self):
         #必然是在rsp中要发出另一个查询
         if len(self.qry_commands)>0:
@@ -688,14 +720,12 @@ class Agent(AbsAgent):
             orderdict = etrade.order_dict
             for inst in orderdict:
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
-        
-        for inst in self.positions:
-            self.positions[inst].re_calc()
-        
-        self.calc_margin()
     
     def prepare_data_env(self):
-        pass
+		if self.hist_days>0:
+			pass
+		if self.hist_min >0:
+			pass
  
     def calc_margin(self):
         locked_margin = 0
@@ -843,6 +873,8 @@ class Agent(AbsAgent):
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
         if self.trader != None:
             self.save_eod_positions()
+			self.etrades = []
+			self.ref2order = {}
 
     def day_switch(self,scur_day):  #重新初始化opener
         self.scur_day = scur_day
@@ -916,6 +948,30 @@ class Agent(AbsAgent):
                 )
         r = self.trader.ReqQryInstrument(req,self.inc_request_id())
         self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
+		
+	def fetch_order(self, t_start='09:00:00', t_end='15:15:00'):
+		req = ApiStruct.QryOrder(
+						BrokerID=self.trader.broker_id, 
+						InvestorID=self.trader.investor_id,
+						InstrumentID='',
+						ExchangeID = '', #交易所代码, char[9]
+						#OrderSysID = '', #报单编号, char[21]
+						InsertTimeStart = t_start, #开始时间, char[9]
+						InsertTimeEnd = t_end, #结束时间, char[9]
+				)
+		r = self.trader.ReqQryOrder(req, self.inc_request_id())
+
+	def fetch_trade(self, t_start='09:00:00', t_end='15:15:00'):
+		req = ApiStruct.QryTrade(
+						BrokerID=self.trader.broker_id, 
+						InvestorID=self.trader.investor_id,
+						InstrumentID=inst_id,
+						ExchangeID = exch_id, #交易所代码, char[9]
+						#TradeID = '', #报单编号, char[21]
+						TradeTimeStart = t_start, #开始时间, char[9]
+						TradeTimeEnd = t_end, #结束时间, char[9]
+				)
+		r = self.trader.ReqQryTrade(req, self.inc_request_id())
 
     ##交易处理
     def run_strats(self, ctick):
@@ -926,13 +982,11 @@ class Agent(AbsAgent):
             return 0
         if( not self.update_hist_data(ctick)):
             return 0
-        
-        # run strategies and send trade to trade list
-        self.run_strats(ctick)   
-        
+   
         # lock the trade processing to avoid position conflict
         if not self.proc_lock:
             self.proc_lock = True
+			self.run_strats(ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1
@@ -1026,6 +1080,7 @@ class Agent(AbsAgent):
             return False    
         
     def process_trade_list(self):
+		#self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.Cancelled ] 
         for exec_trade in self.etrades:
             if exec_trade.status == order.ETradeStatus.Pending:
                 if (exec_trade.valid_time < self.tick_id):
@@ -1076,7 +1131,7 @@ class Agent(AbsAgent):
             self.save_state()
         
     def check_order_list(self):
-        Is_Sent = False 
+        Is_Sent = False
         for iorder in self.ref2order.values():                                                        
             if iorder.status == order.OrderStatus.Ready:
                 self.send_order(iorder)
@@ -1088,28 +1143,27 @@ class Agent(AbsAgent):
             发出下单指令
         '''
         self.logger.info(u'A_CC:开仓平仓命令')
-        price_type = iorder.price_type
-        price = iorder.limit_price
         inst = iorder.instrument
         # 上期所不支持市价单
-        if (price_type == ApiStruct.OPT_AnyPrice):
+        if (iorder.price_type == ApiStruct.OPT_AnyPrice):
             if (inst.exchange == 'SHFE' or inst.exchange == 'CFFEX'):
-                price_type = ApiStruct.OPT_LimitPrice
+				self.logger.info('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, iorder.instrument.name))
+                iorder.price_type = ApiStruct.OPT_LimitPrice
                 # 以后可以改成涨停,跌停价
                 if iorder.direction == ApiStruct.D_Buy:
-                    price = inst.ask_price1 + inst.tick_base * 3
+                    iorder.limit_price = inst.ask_price1 + inst.tick_base * MO_MULTIPLIER
                 else:
-                    price = inst.bid_price1 - inst.tick_base * 3
+                    iorder.limit_price = inst.bid_price1 - inst.tick_base * MO_MULTIPLIER
             else:
-                price = 0.0
+                iorder.limit_price = 0.0
             
         req = ApiStruct.InputOrder(
                 InstrumentID = iorder.instrument.name,
                 Direction = iorder.direction,
                 OrderRef = str(iorder.order_ref),
-                LimitPrice = price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
+                LimitPrice = iorder.limit_price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
                 VolumeTotalOriginal = iorder.volume,
-                OrderPriceType = price_type,
+                OrderPriceType = iorder.price_type,
                 
                 BrokerID = self.trader.broker_id,
                 InvestorID = self.trader.investor_id,
@@ -1138,11 +1192,21 @@ class Agent(AbsAgent):
             发出撤单指令  
         '''
         inst = iorder.instrument
-        print 'cancel order %s, instID=%s, volume=%s, filled=%s, OrderPrice=%s, bidprice=%s, askprice=%s' \
-                % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.limit_price, inst.bid_price1, inst.ask_price1)
+        print 'cancel order %s, SysID=%s, instID=%s, volume=%s, filled=%s, OrderPrice=%s, bidprice=%s, askprice=%s' \
+                % (iorder.order_ref, iorder.sys_id, inst.name, iorder.volume, iorder.filled_volume, iorder.limit_price, inst.bid_price1, inst.ask_price1)
         self.logger.info(u'A_CC:取消命令: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
                 % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
-        req = ApiStruct.InputOrderAction(
+		if len(iorder.sys_id) >0:
+			req = ApiStruct.InputOrderAction(
+                InstrumentID = inst.name,
+                ExchangeID = inst.exchange,
+                OrderSysID = iorder.sys_id
+                ActionFlag = ApiStruct.AF_Delete,
+                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
+            )
+		else:
+			self.logger.warning('order=%s has no OrderSysID, using Order_ref to cancel' % (iorder.order_ref)) 
+			req = ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
                 OrderRef = str(iorder.order_ref),
                 BrokerID = self.trader.broker_id,
@@ -1156,9 +1220,6 @@ class Agent(AbsAgent):
     
     def submit_trade(self, etrade):
         self.etrades.append(etrade)
-    
-    def cancel_trade(self, etrade):
-        pass
          
     ###回应
     def rtn_trade(self,strade):
@@ -1192,19 +1253,21 @@ class Agent(AbsAgent):
             交易所接受下单回报(CTP接受的已经被过滤)
             暂时只处理撤单的回报. 
         '''
-        #print str(sorder)
         self.logger.info(u'成交/撤单回报:%s' % (str(sorder,)))
+		order_ref = int(sorder.OrderRef)
+		myorder = self.ref2order[order_ref]
+		if myorder.sys_id != sorder.OrderSysID:
+			myorder.sys_id = sorder.OrderSysID
         if sorder.OrderStatus == ApiStruct.OST_Canceled or sorder.OrderStatus == ApiStruct.OST_PartTradedNotQueueing:   #完整撤单或部成部撤
             self.logger.info(u'撤单, 撤销开/平仓单')
             ##查询可用资金
             #self.put_command(self.tick_id+5,self.fetch_trading_account)
             ##处理相关Order
-            myorder = self.ref2order[int(sorder.OrderRef)]
-            #if myorder.action_type == ApiStruct.OF_Open or myorder.action_type == ApiStruct.OF_Close :    #开仓指令cancel时需要处理，平仓指令cancel时不需要处理
             self.logger.info(u'撤销开仓单')
             myorder.on_cancel()
             self.save_state()
             #self.process_trade_list()
+			
     def err_order_insert(self,order_ref,instrument_id,error_id,error_msg):
         '''
             ctp/交易所下单错误回报，不区分ctp和交易所
@@ -1298,6 +1361,8 @@ class Agent(AbsAgent):
             查询报单
             可以忽略
         '''
+		if sorder.InStrumentID in self.instruments:
+			self.ctp_orders[sorder.OrderSysID] = sorder
         self.check_qry_commands()
 
     def rsp_qry_trade(self,strade):
@@ -1305,6 +1370,8 @@ class Agent(AbsAgent):
             查询成交
             可以忽略
         '''
+		if strade.InstrumentID in self.instruments:
+			self.ctp_trades[strade.OrderSysID] = strade
         self.check_qry_commands()
         
 
