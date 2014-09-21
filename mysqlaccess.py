@@ -10,12 +10,16 @@ import mysql.connector
 import csv
 import os.path
 import misc
+import pandas as pd
 
 dbconfig = {'user': 'harvey', 
           'password':'9619252y', 
           'host':'localhost',
           'database': 'blueshale',
           }
+
+min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
+daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
 def insert_tick_data(dbtable, tick):
 	cnx = mysql.connector.connect(**dbconfig)
@@ -91,4 +95,33 @@ def import_tick_from_file(dbtable):
 				cnx.commit()
 	cnx.close()
 	pass
-    
+
+def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1, minid_end = 2400):
+    cnx = mysql.connector.connect(**dbconfig)
+    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)
+    stmt = stmt + "and min_id >= %s " % minid_start
+    stmt = stmt + "and min_id <= %s " % minid_end
+    stmt = stmt + "and datetime >= '%s' " % d_start.strftime('%Y-%m-%d')
+    stmt = stmt + "and datetime < '%s' " % d_end.strftime('%Y-%m-%d')
+    stmt = stmt + "order by date(datetime), min_id" 
+    df = pd.io.sql.read_sql(stmt, cnx, index_col = 'datetime')
+    cnx.close()
+    return df    
+
+def load_daily_data_to_df(dbtable, inst, d_start, d_end):
+    cnx = mysql.connector.connect(**dbconfig)
+    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(daily_columns), table= dbtable, instID = inst)
+    stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
+    stmt = stmt + "and date <= '%s' " % d_end.strftime('%Y-%m-%d')
+    stmt = stmt + "order by date" 
+    df = pd.io.sql.read_sql(stmt, cnx, index_col = 'date')
+    cnx.close()
+    return df
+
+def insert_min_data_to_df(df, min_data):
+    new_data = [min_data[key] for key in min_columns[1:]]
+    df.loc[min_data.datetime] = new_data
+
+def insert_daily_data_to_df(df, daily_data):
+    new_data = [daily_data[key] for key in daily_columns[1:]]
+    df.loc[daily_data.date] = new_data
