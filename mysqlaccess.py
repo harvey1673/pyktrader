@@ -120,8 +120,8 @@ def load_daily_data_to_df(dbtable, inst, d_start, d_end):
 
 def insert_min_data_to_df(df, min_data):
     new_data = [min_data[key] for key in min_columns[1:]]
-    df.loc[min_data.datetime] = new_data
+    df.loc[min_data['datetime']] = new_data
 
 def insert_daily_data_to_df(df, daily_data):
     new_data = [daily_data[key] for key in daily_columns[1:]]
-    df.loc[daily_data.date] = new_data
+    df.loc[daily_data['date']] = new_data

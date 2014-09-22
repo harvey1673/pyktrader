@@ -110,6 +110,7 @@ def save_option():
     pass
 
 if __name__ == '__main__':
+    save_all()
     insts = ['ag1412','au1412']
     my_agent = create_agent(prod_user, prod_trader, insts)
     

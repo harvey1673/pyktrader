@@ -640,7 +640,6 @@ class Agent(AbsAgent):
 
     def prepare_data_env(self): 
         if self.daily_data_days > 0:
-            print self.daily_data_days
             self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, misc.CHN_Holidays)
             daily_end = workdays.workday(self.scur_day, 1, misc.CHN_Holidays)
@@ -660,7 +659,7 @@ class Agent(AbsAgent):
         #self.fetch_order()   
         #self.fetch_trade()     
         self.get_eod_positions()
-        self.logger.info('Starting: prepare trade environment' % self.scur_day.strftime('%y%m%d'))
+        self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder + self.name + "\\"
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
@@ -677,21 +676,6 @@ class Agent(AbsAgent):
             for inst in orderdict:
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
                 
-        for order_ref in self.ref2order:
-            iorder = self.ref2order[order_ref]
-            if iorder.sys_id in self.ctp_orders:
-                sorder = self.ctp.orders[iorder.sys_id]
-                if sorder.OrderStatus in [ApiStruct.OST_NoTradeQueueing, ApiStruct.OST_PartTradedQueueing, ApiStruct.OST_Unknown]:
-                    if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
-                        self.logger.waning('order status for OrderSysID = %s, Inst = is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
-                        iorder.status = order.OrderStatus.Sent
-                        iorder.conditionals = {}
-                elif sorder.OrderStatus in [ApiStruct.OST_Canceled, ApiStruct.OST_PartTradedNotQueueing, ApiStruct.OST_NoTradeNotQueueing]:
-                    if iorder.status != order.OrderStatus.Cancelled:
-                        self.logger.waning('order status for OrderSysID = %s, Inst = is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
-                        iorder.on_cancel()            
-            #if iorder.sys_id in self.ctp_orders:
-                #pass
         for inst in self.positions:
             self.positions[inst].re_calc()        
         self.calc_margin()
@@ -1099,21 +1083,28 @@ class Agent(AbsAgent):
             return False    
         
     def process_trade_list(self):
+        Is_Set = False
         #self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.Cancelled ] 
         for exec_trade in self.etrades:
             if exec_trade.status == order.ETradeStatus.Pending:
                 if (exec_trade.valid_time < self.tick_id):
                     exec_trade.status = order.ETradeStatus.Cancelled
+                    Is_Set = True
                     continue
                 else:
-                    self.process_trade(exec_trade)
+                    if self.process_trade(exec_trade):
+                        Is_Set = True
             elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
+                prev_update = exec_trade.status
                 exec_trade.update()
+                if exec_trade.status != prev_update:
+                    Is_Set = True
                 if (exec_trade.valid_time < self.tick_id): 
                     if exec_trade.status == order.ETradeStatus.Done:
                         continue
                     else:
                         # cancel first, if PFilled, market order the unfilled.
+                        Is_Set= True
                         exec_trade.valid_time = self.tick_id + CANCEL_PROTECT_PERIOD
                         new_orders = {}
                         for inst in exec_trade.instIDs:
@@ -1146,16 +1137,41 @@ class Agent(AbsAgent):
                                 pos.add_order(iorder)
                                 self.ref2order[iorder.order_ref] = iorder
 
-        if self.check_order_list():
+        Is_Set = Is_Set or (self.check_order_list())
+        if Is_Set:
             self.save_state()
         
     def check_order_list(self):
-        Is_Sent = False
+        Is_Set = False
+        if len(self.ctp_orders)>0:
+            order_list = []
+            for order_ref in self.ctp_orders:
+                if order_ref in self.ref2order:
+                    iorder = self.ref2order[order_ref]
+                    sorder = self.ctp_orders[order_ref]
+                    iorder.sys_id = sorder.OrderSysID
+                    if sorder.OrderStatus in [ApiStruct.OST_NoTradeQueueing, ApiStruct.OST_PartTradedQueueing, ApiStruct.OST_Unknown]:
+                        if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
+                            self.logger.waning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
+                            iorder.status = order.OrderStatus.Sent
+                            iorder.conditionals = {}
+                            Is_Set = True
+                    elif sorder.OrderStatus in [ApiStruct.OST_Canceled, ApiStruct.OST_PartTradedNotQueueing, ApiStruct.OST_NoTradeNotQueueing]:
+                        if iorder.status != order.OrderStatus.Cancelled:
+                            self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
+                            iorder.on_cancel()
+                            Is_Set = True 
+                else:
+                    order_list.append(order_ref)
+            self.ctp_orders = { o: self.ctp_orders[o] for o in order_list}
+                
+        
         for iorder in self.ref2order.values():                                                        
             if iorder.status == order.OrderStatus.Ready:
                 self.send_order(iorder)
-                Is_Sent = True
-        return Is_Sent
+                Is_Set = True
+        
+        return Is_Set
     
     def send_order(self,iorder):
         ''' 
@@ -1277,7 +1293,7 @@ class Agent(AbsAgent):
         order_ref = int(sorder.OrderRef)
         order_sysid = sorder.OrderSysID
         sysid_list = [o.sys_id for o in self.ref2order.values()]
-        if order_sysid not in sysid_list:
+        if (order_sysid not in sysid_list) and (order_ref not in self.ref2order):
             self.logger.info('receive order update from other agents, OrderSysID=%s' % order_sysid)
             return
         myorder = self.ref2order[order_ref]
@@ -1315,10 +1331,10 @@ class Agent(AbsAgent):
             ctp/交易所撤单错误回报，不区分ctp和交易所
             必须处理，如果已成交，撤单后必然到达这个位置
         '''
-        self.logger.info(u'撤单时已成交，error_id=%s,error_msg=%s' %(error_id,error_msg))
+        self.logger.info(u'撤单时已成交，error_id=%s,error_msg=%s, order_ref=%s' %(error_id,error_msg, order_ref))
         myorder = self.ref2order[int(order_ref)]
-        if myorder.action_type == XOPEN and int(error_id) == 26:
-            #开仓指令cancel时需要处理，平仓指令cancel时不需要处理
+        print order_ref, error_id, error_msg
+        if int(error_id) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
             self.logger.info(u'撤销开仓单')
             myorder.on_cancel()
             self.process_trade_list()
@@ -1387,8 +1403,8 @@ class Agent(AbsAgent):
             查询报单
             可以忽略
         '''
-        if sorder.InstrumentID in self.instruments:
-            self.ctp_orders[sorder.OrderSysID] = sorder
+        if (sorder!= None) and (sorder.InstrumentID in self.instruments):
+            self.ctp_orders[int(sorder.OrderRef)] = sorder
         self.check_qry_commands()
 
     def rsp_qry_trade(self,strade):
@@ -1396,8 +1412,8 @@ class Agent(AbsAgent):
             查询成交
             可以忽略
         '''
-        if strade != None and strade.InstrumentID in self.instruments:
-            self.ctp_trades[strade.OrderSysID] = strade
+        if (strade != None) and (strade.InstrumentID in self.instruments):
+            self.ctp_trades[strade.OrderRef] = strade
         self.check_qry_commands()
         
 
@@ -1489,23 +1505,23 @@ def test_main(name='test_trade'):
     trader_cfg = prod_trader
     user_cfg = prod_user
     agent_name = name
-    tday = datetime.date(2014,9,19)
+    tday = datetime.date(2014,9,22)
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
     try:
         myagent.resume()
 
 # position/trade test        
-        myagent.positions['cu1412'].pos_yday.long  = 1
-        myagent.positions['cu1412'].pos_yday.short  =0
+        myagent.positions['cu1412'].pos_yday.long  = 0
+        myagent.positions['cu1412'].pos_yday.short = 0
         myagent.positions['cu1411'].pos_yday.long  = 0
-        myagent.positions['cu1411'].pos_yday.short = 1
+        myagent.positions['cu1411'].pos_yday.short = 0
         
         #myagent.positions['IF1409'].re_calc()
         #myagent.positions['IF1412'].re_calc()        
         
-        valid_time = myagent.tick_id + 400
-        etrade =  order.ETrade( ['cu1411'], [1], [ApiStruct.OPT_LimitPrice], 48820, [0], valid_time, myagent.name, 'test')
-        #myagent.submit_trade(etrade)
+        valid_time = myagent.tick_id + 20
+        etrade =  order.ETrade( ['cu1412'], [1], [ApiStruct.OPT_LimitPrice], 47310, [0], valid_time, myagent.name, 'test')
+        myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
         #myagent.tick_id = valid_time - 10
