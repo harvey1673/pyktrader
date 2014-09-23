@@ -578,7 +578,13 @@ class Agent(AbsAgent):
         self.min_data  = dict([(inst, pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])) for inst in instruments])
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
         self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])
-                
+        
+        self.daily_data_freq = [1]
+        self.min_data_freq = [1, 3, 15]
+        
+        self.daily_data_func = {}
+        self.min_data_func = {}
+        
         self.startup_time = datetime.datetime.now()
         self.prepare_data_env()
         
@@ -824,11 +830,7 @@ class Agent(AbsAgent):
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                 self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                mysqlaccess.insert_min_data_to_df(self.min_data[inst], self.cur_min[inst])
-                if self.save_flag:
-                    mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
-                    mysqlaccess.insert_min_data('fut_min', tick.instID, self.cur_min[inst])
-                
+                self.min_switch(inst)                
                 self.cur_min[inst]['volume'] = last_tick.volume                    
             else:
                 self.cur_min[inst]['volume'] = 0
@@ -849,6 +851,12 @@ class Agent(AbsAgent):
                        
         return True  
     
+    def min_switch(self, inst):
+        mysqlaccess.insert_min_data_to_df(self.min_data[inst], self.cur_min[inst])
+        if self.save_flag:
+            mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
+            mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
+        
     def day_finalize(self, insts):
         for inst in insts:
             if (len(self.tick_data[inst]) > 0) :
