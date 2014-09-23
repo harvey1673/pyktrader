@@ -1,27 +1,19 @@
 import datetime
 import pandas as pd
-import pandas.io.sql as psql
-import mysql.connector as msql
-from mysqlaccess import dbconfig
+from mysqlaccess import *
 
+def conv_ohlc_freq(df, freq):
+	highcol = pd.DataFrame(df.high).resample(freq, how ='max').dropna()
+	lowcol  = pd.DataFrame(df.low).resample(freq, how ='min').dropna()
+	opencol = pd.DataFrame(df.open).resample(freq, how ='first').dropna()
+	closecol= pd.DataFrame(df.close).resample(freq, how ='last').dropna()
+	res =  pd.concat([opencol, highcol, lowcol, closecol], join='outer', axis =1)
+	return res
 
-def get_min_df(inst, startD = datetime.date(2000,1,1), endD = datetime.date.today()):
-	conn = msql.connect(**dbconfig)
-	
-	sqlcmd = "select datetime, open, high, low, close, volume, openInterest from fut_min" + \
-			 " where datetime>=%s and datetime<=%s" % (startD., endD) + \
-			 " and instID='%s' and min_id>=1500 and min_id<=2115" % inst + \
-             " order by datetime" 
-	df = psql.frame_query(sqlcmd, con = conn, index_col='datetime')
-	conn.close()
-	return df
-	
-def get_daily_df(inst, startD, endD):
-	conn = msql.connect(**dbconfig)
-	
-	sqlcmd = "select datetime, open, high, low, close, volume, openInterest" + \
-			 " from fut_min where instID='%s' and min_id>=1500 and min_id<=2115" % inst + \
-             " order by datetime" 
-	df = psql.frame_query(sqlcmd, con = conn, index_col='datetime')
-	conn.close()
-	return df
+def TR(df):
+	tr_df = pd.concat([df.high-df.close, abs(df.high-df.close.shift(1)), abs(df.low--df.close.shift(1))], join='outer', axis=1)
+	return tr_df.idxmax(1)
+
+def ATR(df, window=20):
+	tr = TR(df)
+	atr = pd.stats.moments.ewma(tr, span=20)
