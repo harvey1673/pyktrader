@@ -579,9 +579,6 @@ class Agent(AbsAgent):
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
         self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])
         
-        self.daily_data_freq = [1]
-        self.min_data_freq = [1, 3, 15]
-        
         self.daily_data_func = {}
         self.min_data_func = {}
         
@@ -644,6 +641,18 @@ class Agent(AbsAgent):
         self.check_qry_commands()
         self.initialized = True #避免因为断开后自动重连造成的重复访问
 
+    def register_data_func(self, freq, func):
+        if 'd' in freq:
+            days = int(freq[:-1])
+            if days not in self.day_data_func:
+                self.day_data_func[days] = []
+            self.day_data_func[days].append(func)
+        else:
+            mins = int(freq[:-1])
+            if mins not in self.min_data_func:
+                self.min_data_func[mins] = []
+            self.min_data_func[days].append(func)
+            
     def prepare_data_env(self): 
         if self.daily_data_days > 0:
             self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
