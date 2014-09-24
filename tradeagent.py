@@ -13,6 +13,7 @@ import math
 import os
 import csv
 import pandas as pd
+import data_handler
 
 from base import *
 
@@ -575,11 +576,11 @@ class Agent(AbsAgent):
         self.min_data_days = min_data_days
         self.tick_data  = dict([(inst, []) for inst in instruments])
         self.day_data  = dict([(inst, pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])) for inst in instruments])
-        self.min_data  = dict([(inst, pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])) for inst in instruments])
+        self.min_data  = dict([(inst, {1:pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}) for inst in instruments])
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
         self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])
         
-        self.daily_data_func = {}
+        self.daily_data_func = []
         self.min_data_func = {}
         
         self.startup_time = datetime.datetime.now()
@@ -641,17 +642,14 @@ class Agent(AbsAgent):
         self.check_qry_commands()
         self.initialized = True #避免因为断开后自动重连造成的重复访问
 
-    def register_data_func(self, freq, func):
+    def register_data_func(self, freq, fobj):
         if 'd' in freq:
-            days = int(freq[:-1])
-            if days not in self.day_data_func:
-                self.day_data_func[days] = []
-            self.day_data_func[days].append(func)
+            self.day_data_func.append(fobj)
         else:
             mins = int(freq[:-1])
             if mins not in self.min_data_func:
                 self.min_data_func[mins] = []
-            self.min_data_func[days].append(func)
+            self.min_data_func[mins].append(fobj)
             
     def prepare_data_env(self): 
         if self.daily_data_days > 0:
@@ -660,14 +658,25 @@ class Agent(AbsAgent):
             daily_end = workdays.workday(self.scur_day, 1, misc.CHN_Holidays)
             for inst in self.instruments:  
                 self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
+                df = self.day_data[inst]
+                for fobj in self.day_data_func:
+                    ts = fobj.sfunc(df)
+                    df[ts.name]= pd.Series(ts, index=df.index)  
 
         if self.min_data_days > 0:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
             min_start = workdays.workday(self.scur_day, -self.min_data_days, misc.CHN_Holidays)
             min_end   = workdays.workday(self.scur_day, 1, misc.CHN_Holidays)
             for inst in self.instruments:
-                self.min_data[inst] = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
- 
+                self.min_data[inst][1] = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
+                for m in self.min_data_func:
+                    if m != 1:
+                        self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'m')
+                    df = self.min_data[inst][d]
+                    for fobj in self.min_data_func[m]:
+                        ts = fobj.sfunc(df)
+                        df[ts.name]= pd.Series(ts, index=df.index)  
+  
     def resume(self):
         self.proc_lock = True
         time.sleep(1)
@@ -861,7 +870,22 @@ class Agent(AbsAgent):
         return True  
     
     def min_switch(self, inst):
-        mysqlaccess.insert_min_data_to_df(self.min_data[inst], self.cur_min[inst])
+        min_id = self.cur_min[inst]['min_id']
+        mins = int(min_id/100)*60+ min_id % 100
+        df = self.min_data[inst][1]
+        mysqlaccess.insert_min_data_to_df(df, self.cur_min[inst])
+        for m in self.min_data_func:
+            df_m = self.min_data[inst][m]
+            if m > 1 and mins % m == 0:
+                s_start = self.cur_min[inst]['datetime'] - datetime.timedelta(minutes=m)
+                slices = df[df.index>s_start]
+                new_data = {'open':slices['open'][0],'high':max(slices['high']), \
+                            'low': min(slices['low']),'close': slice['close'][-1],\
+                            'volume': sum(slices['volume'])}
+                df_m.loc[slices.index[0]] = pd.Series(new_data)
+            if mins % m == 0:
+                for fobj in self.min_data_func[m]:
+                    fobj.rfunc(df_m)
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
             mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
@@ -872,11 +896,12 @@ class Agent(AbsAgent):
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                 self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                mysqlaccess.insert_min_data_to_df(self.min_data[inst], self.cur_min[inst])
+                self.min_switch(inst)
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
+                df = self.day_data[inst]
+                for fobj in self.day_data_func:
+                    fobj.rfunc(df)
                 if self.save_flag:
-                    mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
-                    mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
                     mysqlaccess.insert_daily_data('fut_daily', inst, self.cur_day[inst])
             
             self.tick_data[inst] = []

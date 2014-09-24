@@ -2,31 +2,31 @@ import datetime
 import pandas as pd
 
 def conv_ohlc_freq(df, freq):
-	highcol = pd.DataFrame(df['high']).resample(freq, how ='max').dropna()
-	lowcol  = pd.DataFrame(df['low']).resample(freq, how ='min').dropna()
-	opencol = pd.DataFrame(df['open']).resample(freq, how ='first').dropna()
-	closecol= pd.DataFrame(df['close']).resample(freq, how ='last').dropna()
-	allcol = [opencol, highcol, lowcol, closecol]
-	if 'volume' in df.columns:
-		volcol  = pd.DataFrame(df['volume']).resample(freq, how ='sum').dropna()
-		allcol.append(volcol)
-	res =  pd.concat(allcol, join='outer', axis =1)
-	return res
+    highcol = pd.DataFrame(df['high']).resample(freq, how ='max').dropna()
+    lowcol  = pd.DataFrame(df['low']).resample(freq, how ='min').dropna()
+    opencol = pd.DataFrame(df['open']).resample(freq, how ='first').dropna()
+    closecol= pd.DataFrame(df['close']).resample(freq, how ='last').dropna()
+    allcol = [opencol, highcol, lowcol, closecol]
+    if 'volume' in df.columns:
+        volcol  = pd.DataFrame(df['volume']).resample(freq, how ='sum').dropna()
+        allcol.append(volcol)
+    res =  pd.concat(allcol, join='outer', axis =1)
+    return res
 
 def TR(df):
-	tr_df = pd.concat([df['high'] - df['close'], abs(df['high'] - df['close'].shift(1)), abs(df['low'] - df['close'].shift(1))], join='outer', axis=1)
-	return tr_df.max(1)
+    tr_df = pd.concat([df['high'] - df['close'], abs(df['high'] - df['close'].shift(1)), abs(df['low'] - df['close'].shift(1))], join='outer', axis=1)
+    return tr_df.max(1)
 
 def ATR(df, span=20):
-	tr = TR(df)
-	return pd.ewma(tr, span=span)
+    tr = TR(df)
+    return pd.ewma(tr, span=span)
 
-def MA(ts, n):
-    return pd.Series(pd.rolling_mean(ts, n), name = 'MA_' + str(n))
+def MA(df, n):
+    return pd.Series(pd.rolling_mean(df['close'], n), name = 'MA_' + str(n))
 
 #Exponential Moving Average
-def EMA(ts, n):
-    return pd.Series(pd.ewma(ts, span = n, min_periods = n - 1), name = 'EMA_' + str(n))
+def EMA(df, n):
+    return pd.Series(pd.ewma(df['close'], span = n, min_periods = n - 1), name = 'EMA_' + str(n))
 
 #Momentum
 def MOM(df, n):
@@ -43,7 +43,7 @@ def BBANDS(df, n):
     MSD = pd.Series(pd.rolling_std(df['close'], n))
     b1 = 4 * MSD / MA
     B1 = pd.Series(b1, name = 'BollingerB_' + str(n))
-    b2 = (ts - MA + 2 * MSD) / (4 * MSD)
+    b2 = (df['close'] - MA + 2 * MSD) / (4 * MSD)
     B2 = pd.Series(b2, name = 'Bollingerb_' + str(n))
     return pd.concat([B1,B2], join='outer', axis=1)
 
@@ -79,15 +79,14 @@ def TRIX(df, n):
 
 #Average Directional Movement Index
 def ADX(df, n, n_ADX):
-    i = 0
     UpI = []
     DoI = []
-	UpMove = df['high'] - df['high'].shift(1)
-	DoMove = df['low'].shift(1) - df['low']
-	UpD = pd.Series(UpMove)
-	DoD = pd.Series(DoMove)
-	UpD[(UpMove<=DoMove)|(UpMove <= 0)] = 0
-	DoD[(DoMove<=UpMove)|(DoMove <= 0)] = 0
+    UpMove = df['high'] - df['high'].shift(1)
+    DoMove = df['low'].shift(1) - df['low']
+    UpD = pd.Series(UpMove)
+    DoD = pd.Series(DoMove)
+    UpD[(UpMove<=DoMove)|(UpMove <= 0)] = 0
+    DoD[(DoMove<=UpMove)|(DoMove <= 0)] = 0
 
     i = 0
     TR_l = [0]
@@ -259,9 +258,9 @@ def COPP(df, n):
 
 #Keltner Channel
 def KELCH(df, n):
-    KelChM = pd.Series(rolling_mean((df['high'] + df['low'] + df['close']) / 3, n), name = 'KelChM_' + str(n))
-    KelChU = pd.Series(rolling_mean((4 * df['high'] - 2 * df['low'] + df['close']) / 3, n), name = 'KelChU_' + str(n))
-    KelChD = pd.Series(rolling_mean((-2 * df['high'] + 4 * df['low'] + df['close']) / 3, n), name = 'KelChD_' + str(n))
+    KelChM = pd.Series(pd.rolling_mean((df['high'] + df['low'] + df['close']) / 3, n), name = 'KelChM_' + str(n))
+    KelChU = pd.Series(pd.rolling_mean((4 * df['high'] - 2 * df['low'] + df['close']) / 3, n), name = 'KelChU_' + str(n))
+    KelChD = pd.Series(pd.rolling_mean((-2 * df['high'] + 4 * df['low'] + df['close']) / 3, n), name = 'KelChD_' + str(n))
     return pd.concat([KelChM, KelChU, KelChD], join='outer', axis=1)
 
 #Ultimate Oscillator
@@ -295,7 +294,7 @@ def DONCH(df, n):
     return DonCh
 
 #Standard Deviation
-def STDDEV(ts, n):
-    return pd.Series(pd.rolling_std(ts, n), name = 'STD_' + str(n))
-	
+def STDDEV(df, n):
+    return pd.Series(pd.rolling_std(df['close'], n), name = 'STD_' + str(n))
+    
 #def var_ratio(
