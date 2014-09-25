@@ -27,6 +27,12 @@ THOST_TERT_RESTART  = ApiStruct.TERT_RESTART
 THOST_TERT_RESUME   = ApiStruct.TERT_RESUME
 THOST_TERT_QUICK    = ApiStruct.TERT_QUICK
 
+f_ma7  = BaseObject(name = 'MA_7',  sfunc=fcustom(data_handler.MA, n=7),  rfunc=fcustom(data_handler.ma, n=7))
+f_ma12 = BaseObject(name = 'MA_12', sfunc=fcustom(data_handler.MA, n=12), rfunc=fcustom(data_handler.ma, n=12))
+f_ma20 = BaseObject(name = 'MA_20', sfunc=fcustom(data_handler.MA, n=20), rfunc=fcustom(data_handler.ma, n=20))
+f_ma26 = BaseObject(name = 'MA_26', sfunc=fcustom(data_handler.MA, n=26), rfunc=fcustom(data_handler.ma, n=26))
+f_atr  = BaseObject(name = 'ATR',   sfunc=data_handler.ATR, rfunc=atr)
+
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
 
@@ -580,7 +586,7 @@ class Agent(AbsAgent):
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
         self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])
         
-        self.daily_data_func = []
+        self.day_data_func = []
         self.min_data_func = {}
         
         self.startup_time = datetime.datetime.now()
