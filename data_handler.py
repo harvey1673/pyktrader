@@ -15,19 +15,37 @@ def conv_ohlc_freq(df, freq):
 
 def TR(df):
     tr_df = pd.concat([df['high'] - df['close'], abs(df['high'] - df['close'].shift(1)), abs(df['low'] - df['close'].shift(1))], join='outer', axis=1)
-    return tr_df.max(1)
+    ts_tr = pd.Series(tr_df.max(1), name='TR')
+	return ts_tr
 
-def ATR(df, span=20):
+def tr(df):
+	df.ix[-1:'TR'] = max(df.ix[-1:'high'],df.ix[-2:'close']) - min(df.ix[-1:'low'],df.ix[-2:'close'])
+	
+def ATR(df, n = 20):
     tr = TR(df)
-    return pd.ewma(tr, span=span)
+    ts_atr = atrpd.ewma(tr, span=n,  min_periods = n-1)
+	ts_atr.name = 'ATR_'+str(n)
+	return ts_atr
 
+def atr(df, n = 20):
+	new_tr = max(df.ix[-1:'high'],df.ix[-2:'close']) - min(df.ix[-1:'low'],df.ix[-2:'close'])
+	alpha = 2.0/(n+1)
+	df.ix[-1:'ATR_'+str(n)] = df.ix[-2:'ATR_'+str(n)]* (1-alpha) + alpha * new_tr
+	
 def MA(df, n):
     return pd.Series(pd.rolling_mean(df['close'], n), name = 'MA_' + str(n))
+
+def ma(df, n):
+	df.ix[-1:'MA_'+str(n)] = df.ix[-2:'MA_'+str(n)] + ( df.ix[-1:'close'] - df.ix[-1-n:'close'])/float(n)
 
 #Exponential Moving Average
 def EMA(df, n):
     return pd.Series(pd.ewma(df['close'], span = n, min_periods = n - 1), name = 'EMA_' + str(n))
 
+def ema(df, n):
+	alpha = 2.0/(n+1)
+	df.ix[-1:'EMA_'+str(n)] = df.ix[-2:'EMA_'+str(n)]*(1-alpha) + df.ix[-1:'close']*alpha
+	
 #Momentum
 def MOM(df, n):
     return pd.Series(df['close'].diff(n), name = 'Momentum_' + str(n))#Rate of Change
@@ -79,27 +97,15 @@ def TRIX(df, n):
 
 #Average Directional Movement Index
 def ADX(df, n, n_ADX):
-    UpI = []
-    DoI = []
     UpMove = df['high'] - df['high'].shift(1)
     DoMove = df['low'].shift(1) - df['low']
     UpD = pd.Series(UpMove)
     DoD = pd.Series(DoMove)
     UpD[(UpMove<=DoMove)|(UpMove <= 0)] = 0
     DoD[(DoMove<=UpMove)|(DoMove <= 0)] = 0
-
-    i = 0
-    TR_l = [0]
-    while i < df.index[-1]:
-        TR = max(df.get_value(i + 1, 'high'), df.get_value(i, 'close')) - min(df.get_value(i + 1, 'low'), df.get_value(i, 'close'))
-        TR_l.append(TR)
-        i = i + 1
-    TR_s = pd.Series(TR_l)
-    ATR = pd.Series(pd.ewma(TR_s, span = n, min_periods = n))
-    UpI = pd.Series(UpI)
-    DoI = pd.Series(DoI)
-    PosDI = pd.Series(pd.ewma(UpI, span = n, min_periods = n - 1) / ATR)
-    NegDI = pd.Series(pd.ewma(DoI, span = n, min_periods = n - 1) / ATR)
+    ATRs = ATR(df,span = n, min_periods = n)
+    PosDI = pd.Series(pd.ewma(UpD, span = n, min_periods = n - 1) / ATR)
+    NegDI = pd.Series(pd.ewma(DoD, span = n, min_periods = n - 1) / ATR)
     ADX = pd.Series(pd.ewma(abs(PosDI - NegDI) / (PosDI + NegDI), span = n_ADX, min_periods = n_ADX - 1), name = 'ADX_' + str(n) + '_' + str(n_ADX))
     return ADX 
 
@@ -147,25 +153,14 @@ def KST(df, r1, r2, r3, r4, n1, n2, n3, n4):
 
 #Relative Strength Index
 def RSI(df, n):
-    i = 0
-    UpI = [0]
-    DoI = [0]
-    while i + 1 <= df.index[-1]:
-        UpMove = df.get_value(i + 1, 'high') - df.get_value(i, 'high')
-        DoMove = df.get_value(i, 'low') - df.get_value(i + 1, 'low')
-        if UpMove > DoMove and UpMove > 0:
-            UpD = UpMove
-        else: UpD = 0
-        UpI.append(UpD)
-        if DoMove > UpMove and DoMove > 0:
-            DoD = DoMove
-        else: DoD = 0
-        DoI.append(DoD)
-        i = i + 1
-    UpI = pd.Series(UpI)
-    DoI = pd.Series(DoI)
-    PosDI = pd.Series(pd.ewma(UpI, span = n, min_periods = n - 1))
-    NegDI = pd.Series(pd.ewma(DoI, span = n, min_periods = n - 1))
+    UpMove = df['high'] - df['high'].shift(1)
+    DoMove = df['low'].shift(1) - df['low']
+    UpD = pd.Series(UpMove)
+    DoD = pd.Series(DoMove)
+    UpD[(UpMove<=DoMove)|(UpMove <= 0)] = 0
+    DoD[(DoMove<=UpMove)|(DoMove <= 0)] = 0
+    PosDI = pd.Series(pd.ewma(UpD, span = n, min_periods = n - 1))
+    NegDI = pd.Series(pd.ewma(DoD, span = n, min_periods = n - 1))
     RSI = pd.Series(PosDI / (PosDI + NegDI), name = 'RSI_' + str(n))
     return RSI
 
@@ -198,15 +193,10 @@ def Chaikin(df):
 #Money Flow Index and Ratio
 def MFI(df, n):
     PP = (df['high'] + df['low'] + df['close']) / 3
-    i = 0
-    PosMF = [0]
-    while i < df.index[-1]:
-        if PP[i + 1] > PP[i]:
-            PosMF.append(PP[i + 1] * df.get_value(i + 1, 'volume'))
-        else:
-            PosMF.append(0)
-        i = i + 1
-    PosMF = pd.Series(PosMF)
+	PP > PP.shift(1)
+	PosMF = pd.Series(PP)
+	PosMF[PosMF <= PosMF.shift(1)] = 0
+	PosMF = PosMF * df['volume']
     TotMF = PP * df['volume']
     MFR = pd.Series(PosMF / TotMF)
     MFI = pd.Series(rolling_mean(MFR, n), name = 'MFI_' + str(n))
@@ -214,19 +204,12 @@ def MFI(df, n):
 
 #On-balance Volume
 def OBV(df, n):
-    i = 0
-    OBV = [0]
-    while i < df.index[-1]:
-        if df.get_value(i + 1, 'close') - df.get_value(i, 'close') > 0:
-            OBV.append(df.get_value(i + 1, 'volume'))
-        if df.get_value(i + 1, 'close') - df.get_value(i, 'close') == 0:
-            OBV.append(0)
-        if df.get_value(i + 1, 'close') - df.get_value(i, 'close') < 0:
-            OBV.append(-df.get_value(i + 1, 'volume'))
-        i = i + 1
-    OBV = pd.Series(OBV)
-    OBV_ma = pd.Series(pd.rolling_mean(OBV, n), name = 'OBV_' + str(n))
-    return OBV_ma
+	PosVol = pd.Series(df['volume'])
+	NegVol = pd.Series(-df['volume'])
+	PosVol[df['close'] <= df['close'].shift(1)] = 0
+	NegVol[df['close'] >= df['close'].shift(1)] = 0
+	OBV = pd.Series(pd.rolling_mean(PosVol + NegVol, n), name = 'OBV_' + str(n))
+    return OBV
 
 #Force Index
 def FORCE(df, n):
@@ -265,33 +248,18 @@ def KELCH(df, n):
 
 #Ultimate Oscillator
 def ULTOSC(df):
-    i = 0
-    TR_l = [0]
-    BP_l = [0]
-    while i < df.index[-1]:
-        TR = max(df.get_value(i + 1, 'high'), df.get_value(i, 'close')) - min(df.get_value(i + 1, 'low'), df.get_value(i, 'close'))
-        TR_l.append(TR)
-        BP = df.get_value(i + 1, 'close') - min(df.get_value(i + 1, 'low'), df.get_value(i, 'close'))
-        BP_l.append(BP)
-        i = i + 1
-    UltO = pd.Series((4 * pd.rolling_sum(pd.Series(BP_l), 7) / pd.rolling_sum(pd.Series(TR_l), 7)) + (2 * pd.rolling_sum(pd.Series(BP_l), 14) / pd.rolling_sum(pd.Series(TR_l), 14)) + (pd.rolling_sum(pd.Series(BP_l), 28) / pd.rolling_sum(pd.Series(TR_l), 28)), name = 'Ultimate_Osc')
+	TR_l = TR(df)
+	BP_l = df['close'] - pd.concat([df['low'], df['close'].shift(1)], axis=1).min(axis=1)
+    UltO = pd.Series((4 * pd.rolling_sum(BP_l, 7) / pd.rolling_sum(TR_l, 7)) + (2 * pd.rolling_sum(BP_l, 14) / pd.rolling_sum(TR_l, 14)) + (pd.rolling_sum(BP_l, 28) / pd.rolling_sum(TR_l, 28)), name = 'Ultimate_Osc')
     return UltO
 
 #Donchian Channel
 def DONCH(df, n):
-    i = 0
-    DC_l = []
-    while i < n - 1:
-        DC_l.append(0)
-        i = i + 1
-    i = 0
-    while i + n - 1 < df.index[-1]:
-        DC = max(df['high'].ix[i:i + n - 1]) - min(df['low'].ix[i:i + n - 1])
-        DC_l.append(DC)
-        i = i + 1
-    DonCh = pd.Series(DC_l, name = 'Donchian_' + str(n))
-    DonCh = DonCh.shift(n - 1)
-    return DonCh
+    DC_H = pd.rolling_max(df['high'],n)
+    DC_H.name = 'DonchianH_'+ str(n)
+    DC_L = pd.rolling_min(df['low'], n)
+    DC_L.name = 'DonchianL_'+ str(n)
+    return pd.concat([DC_H, DC_L], join='outer', axis=1)
 
 #Standard Deviation
 def STDDEV(df, n):
