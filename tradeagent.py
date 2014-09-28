@@ -1,6 +1,6 @@
 #-*- coding:utf-8 -*-
 import workdays
-import sched
+#import sched
 import time
 import datetime
 import logging
@@ -14,9 +14,7 @@ import os
 import csv
 import pandas as pd
 import data_handler
-
 from base import *
-
 from ctp.futures import ApiStruct, MdApi, TraderApi
 
 CANCEL_PROTECT_PERIOD = 200
@@ -26,12 +24,6 @@ MO_MULTIPLIER = 3
 THOST_TERT_RESTART  = ApiStruct.TERT_RESTART
 THOST_TERT_RESUME   = ApiStruct.TERT_RESUME
 THOST_TERT_QUICK    = ApiStruct.TERT_QUICK
-
-f_ma7  = BaseObject(name = 'MA_7',  sfunc=fcustom(data_handler.MA, n=7),  rfunc=fcustom(data_handler.ma, n=7))
-f_ma12 = BaseObject(name = 'MA_12', sfunc=fcustom(data_handler.MA, n=12), rfunc=fcustom(data_handler.ma, n=12))
-f_ma20 = BaseObject(name = 'MA_20', sfunc=fcustom(data_handler.MA, n=20), rfunc=fcustom(data_handler.ma, n=20))
-f_ma26 = BaseObject(name = 'MA_26', sfunc=fcustom(data_handler.MA, n=26), rfunc=fcustom(data_handler.ma, n=26))
-f_atr  = BaseObject(name = 'ATR',   sfunc=data_handler.ATR, rfunc=atr)
 
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
@@ -555,7 +547,7 @@ class Agent(AbsAgent):
     
 
     def __init__(self, name, trader,cuser,instruments, tday=datetime.date.today(), 
-                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=20, min_data_days=5):
+                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -590,8 +582,17 @@ class Agent(AbsAgent):
         self.min_data_func = {}
         
         self.startup_time = datetime.datetime.now()
-        self.prepare_data_env()
+
+        self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.ATR, n=60), \
+                                                rfunc=fcustom(data_handler.atr, n=60)))
+        self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.EMA, n=20), \
+                                                rfunc=fcustom(data_handler.ema, n=20)))
+        self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.EMA, n=12), \
+                                                rfunc=fcustom(data_handler.ema, n=12)))
+        self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.MA, n=15), \
+                                                rfunc=fcustom(data_handler.ma, n=15)))
         
+        self.prepare_data_env()
         for inst in instruments:
             self.cur_day[inst]['date'] = tday
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(tday.toordinal())
@@ -628,8 +629,7 @@ class Agent(AbsAgent):
 
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
-
-
+                
     def set_capital_limit(self, cap_limit):
         self.cap_limit = cap_limit
         
@@ -641,7 +641,7 @@ class Agent(AbsAgent):
         #time.sleep(12)
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
-        self.qry_commands.append(self.fetch_order)
+        #self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(fcustom(self.fetch_instruments_by_exchange,exchange_id = ''))
         #self.qry_commands.append(self.fetch_trade)
         #time.sleep(1)   #保险起见
@@ -677,8 +677,8 @@ class Agent(AbsAgent):
                 self.min_data[inst][1] = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
                 for m in self.min_data_func:
                     if m != 1:
-                        self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'m')
-                    df = self.min_data[inst][d]
+                        self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
+                    df = self.min_data[inst][m]
                     for fobj in self.min_data_func[m]:
                         ts = fobj.sfunc(df)
                         df[ts.name]= pd.Series(ts, index=df.index)  
@@ -886,12 +886,15 @@ class Agent(AbsAgent):
                 s_start = self.cur_min[inst]['datetime'] - datetime.timedelta(minutes=m)
                 slices = df[df.index>s_start]
                 new_data = {'open':slices['open'][0],'high':max(slices['high']), \
-                            'low': min(slices['low']),'close': slice['close'][-1],\
-                            'volume': sum(slices['volume'])}
-                df_m.loc[slices.index[0]] = pd.Series(new_data)
+                            'low': min(slices['low']),'close': slices['close'][-1],\
+                            'volume': sum(slices['volume']), 'min_id':slices['min_id'][0]}
+                df_m.loc[s_start] = pd.Series(new_data)
+                print df_m.loc[s_start]
             if mins % m == 0:
                 for fobj in self.min_data_func[m]:
                     fobj.rfunc(df_m)
+            if m > 1 and mins % m == 0:
+                print df_m.ix[-1]
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
             mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
@@ -1530,9 +1533,9 @@ def test_main(name='test_trade'):
     prod_trader = BaseObject( broker_id="8070", 
                                    investor_id="750305", 
                                    passwd="801289", 
-                                   ports= ["tcp://zjzx-front11.ctp.shcifco.com:41205", 
-                                           "tcp://zjzx-front12.ctp.shcifco.com:41205",
-                                           "tcp://zjzx-front12.ctp.shcifco.com:41205"])
+                                   ports= ["tcp://zjzx-front12.ctp.shcifco.com:41205"]) 
+                                           #"tcp://zjzx-front12.ctp.shcifco.com:41205",
+                                           #"tcp://zjzx-front13.ctp.shcifco.com:41205"])
     wkend_trader = BaseObject( broker_id="8070", 
                                    investor_id="750305", 
                                    passwd="801289", 
@@ -1569,7 +1572,7 @@ def test_main(name='test_trade'):
         
         valid_time = myagent.tick_id + 20
         etrade =  order.ETrade( ['cu1412'], [1], [ApiStruct.OPT_LimitPrice], 47310, [0], valid_time, myagent.name, 'test')
-        myagent.submit_trade(etrade)
+        #myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
         #myagent.tick_id = valid_time - 10

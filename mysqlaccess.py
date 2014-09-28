@@ -96,7 +96,7 @@ def import_tick_from_file(dbtable):
 	cnx.close()
 	pass
 
-def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1, minid_end = 2400):
+def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1501, minid_end = 2060):
     cnx = mysql.connector.connect(**dbconfig)
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)
     stmt = stmt + "and min_id >= %s " % minid_start

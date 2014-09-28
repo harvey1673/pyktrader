@@ -19,13 +19,14 @@ def save_trade_list(curr_date, trade_list, file_prefix):
     with open(filename,'wb') as log_file:
         file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
         
-        file_writer.writerow(['id', 'insts', 'volumes', 'filled', 'otypes', 'slipticks',
-                              'order_dict','limitprice','validtime',
+        file_writer.writerow(['id', 'insts', 'volumes', 'filledvol', 'filledprice', 'otypes', 'slipticks',
+                              'order_dict','limitprice', 'validtime',
                               'strategy','book','status'])
         for trade in trade_list:
             insts = ' '.join(trade.instIDs)
             volumes = ' '.join([str(i) for i in trade.volumes])
             filled_vol = ' '.join([str(i) for i in trade.filled_vol])
+            filled_price = ' '.join([str(i) for i in trade.filled_price])
             otypes = ' '.join([str(i) for i in trade.order_types])
             slip_ticks = ' '.join([str(i) for i in trade.slip_ticks])
             if len(trade.order_dict)>0:
@@ -34,7 +35,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
             else:
                 order_dict = ''
                                 
-            file_writer.writerow([trade.id, insts, volumes, filled_vol, otypes, slip_ticks,
+            file_writer.writerow([trade.id, insts, volumes, filled_vol, filled_price, otypes, slip_ticks,
                                   order_dict, trade.limit_price, trade.valid_time,
                                   trade.strategy, trade.book, trade.status])  
     pass
@@ -52,10 +53,11 @@ def load_trade_list(curr_date, file_prefix):
                 instIDs = row[1].split(' ')
                 volumes = [ int(n) for n in row[2].split(' ')]
                 filled_vol = [ int(n) for n in row[3].split(' ')]
-                otypes = [ int(n) for n in row[4].split(' ')]
-                ticks = [ int(n) for n in row[5].split(' ')]
-                if ':' in row[6]:
-                    order_dict =  dict([tuple(s.split(':')) for s in row[6].split(' ')])
+                filled_price = [ int(n) for n in row[4].split(' ')]
+                otypes = [ int(n) for n in row[5].split(' ')]
+                ticks = [ int(n) for n in row[6].split(' ')]
+                if ':' in row[7]:
+                    order_dict =  dict([tuple(s.split(':')) for s in row[7].split(' ')])
                     for inst in order_dict:
                         if len(order_dict[inst])>0:
                             order_dict[inst] = [int(o_id) for o_id in order_dict[inst].split('_')]
@@ -63,15 +65,16 @@ def load_trade_list(curr_date, file_prefix):
                             order_dict[inst] = []
                 else:
                     order_dict = {}
-                limit_price = float(row[7])
-                valid_time = int(row[8])
-                strategy = row[9]
-                book = row[10]
+                limit_price = float(row[8])
+                valid_time = int(row[9])
+                strategy = row[10]
+                book = row[11]
                 etrade = ETrade(instIDs, volumes, otypes, limit_price, ticks, valid_time, strategy, book)
                 etrade.id = int(row[0])
-                etrade.status = int(row[11])
+                etrade.status = int(row[12])
                 etrade.order_dict = order_dict
                 etrade.filled_vol = filled_vol 
+                etrade.filled_price = filled_price 
                 trade_list.append(etrade)    
     return trade_list
 
@@ -84,14 +87,14 @@ def save_order_list(curr_date, order_dict, file_prefix):
     with open(filename,'wb') as log_file:
         file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
         
-        file_writer.writerow(['order_ref', 'sysID', 'inst', 'volume', 'filledvolume', 'action_type', 'direction',
+        file_writer.writerow(['order_ref', 'sysID', 'inst', 'volume', 'filledvolume', 'filledprice', 'action_type', 'direction',
                               'price_type','limitprice','order_time', 'status', 'conditionals'])
 
         for order in order_list:
             inst = order.position.instrument.name
             cond = [ str(o.order_ref)+':'+str(order.conditionals[o]) for o in order.conditionals]
             cond_str = ' '.join(cond)
-            file_writer.writerow([order.order_ref, order.sys_id, inst, order.volume, order.filled_volume, 
+            file_writer.writerow([order.order_ref, order.sys_id, inst, order.volume, order.filled_volume, order.filled_price,
                                   order.action_type, order.direction, order.price_type,
                                   order.limit_price, order.start_tick, order.status, cond_str])  
     pass
@@ -107,16 +110,17 @@ def load_order_list(curr_date, file_prefix, positions):
             if idx > 0:
                 inst = row[2]
                 pos = positions[inst]
-                if ':' in row[11]:
-                    cond = dict([ tuple([int(k) for k in n.split(':')]) for n in row[11].split(' ')])
+                if ':' in row[12]:
+                    cond = dict([ tuple([int(k) for k in n.split(':')]) for n in row[12].split(' ')])
                 else:
                     cond = {}
-                iorder = Order(pos, float(row[8]), int(row[3]), int(row[9]),
-                               row[5], row[6], row[7], cond)
+                iorder = Order(pos, float(row[9]), int(row[3]), int(row[10]),
+                               row[6], row[7], row[8], cond)
                 iorder.sys_id = row[1]
                 iorder.filled_volume = int(row[4])
+                iorder.filled_price = float(row[5])
                 iorder.order_ref = int(row[0])
-                iorder.status = int(row[10])
+                iorder.status = int(row[11])
                 ref2order[iorder.order_ref] = iorder
                 pos.add_order(iorder)                
     return ref2order
@@ -134,6 +138,7 @@ class ETrade(object):
         self.instIDs = instIDs
         self.volumes = volumes
         self.filled_vol = [0]*len(volumes)
+        self.filled_price = [0]*len(volumes)
         self.order_types = otypes
         self.slip_ticks  = ticks
         self.limit_price = limit_price
@@ -176,6 +181,7 @@ class ETrade(object):
                         iorder.status = OrderStatus.Ready
                         iorder.conditionals = {}
             self.filled_vol[idx] = sum([iorder.filled_volume for iorder in self.order_dict[inst]])
+            self.filled_price[idx] = sum([iorder.filled_volume*iorder.filled_price for iorder in self.order_dict[inst]])/self.filled_vol[idx]
             volumes[idx] = sum([iorder.volume for iorder in self.order_dict[inst]])                    
             if volumes[idx] > 0:
                 Zero_Volume = False
@@ -209,6 +215,7 @@ class Order(object):
         ##
         self.volume = vol #目标成交手数,锁定总数
         self.filled_volume = 0  #实际成交手数
+        self.filled_price  = 0
         self.cancelled_volume = 0
         self.filled_orders = []
         self.conditionals = conditionals
@@ -224,6 +231,7 @@ class Order(object):
         if trade_time not in [o.otime for o in self.filled_orders]:
             self.filled_orders.append(BaseObject(price = price, volume = volume, otime = trade_time))
             self.filled_volume = sum([o.volume for o in self.filled_orders])
+            self.filled_price = sum([o.volume*o.price for o in self.filled_orders])/self.filled_volume
             logging.info(u'成交纪录:price=%s,volume=%s,trade_time=%s,filled_vol=%s, is_closed=%s' % (price,volume,trade_time, self.filled_volume,self.is_closed()))
             if self.filled_volume > self.volume:
                 self.filled_volume = self.volume

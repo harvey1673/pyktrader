@@ -10,42 +10,45 @@ def conv_ohlc_freq(df, freq):
     if 'volume' in df.columns:
         volcol  = pd.DataFrame(df['volume']).resample(freq, how ='sum').dropna()
         allcol.append(volcol)
+    if 'min_id' in df.columns:
+        mincol  = pd.DataFrame(df['min_id']).resample(freq, how ='first').dropna()
+        allcol.append(mincol)
     res =  pd.concat(allcol, join='outer', axis =1)
     return res
 
 def TR(df):
     tr_df = pd.concat([df['high'] - df['close'], abs(df['high'] - df['close'].shift(1)), abs(df['low'] - df['close'].shift(1))], join='outer', axis=1)
     ts_tr = pd.Series(tr_df.max(1), name='TR')
-	return ts_tr
+    return ts_tr
 
 def tr(df):
-	df.ix[-1:'TR'] = max(df.ix[-1:'high'],df.ix[-2:'close']) - min(df.ix[-1:'low'],df.ix[-2:'close'])
-	
+    df.ix[-1,'TR'] = max(df.ix[-1,'high'],df.ix[-2,'close']) - min(df.ix[-1,'low'],df.ix[-2,'close'])
+    
 def ATR(df, n = 20):
     tr = TR(df)
-    ts_atr = atrpd.ewma(tr, span=n,  min_periods = n-1)
-	ts_atr.name = 'ATR_'+str(n)
-	return ts_atr
+    ts_atr = pd.ewma(tr, span=n,  min_periods = n-1)
+    ts_atr.name = 'ATR_'+str(n)
+    return ts_atr
 
 def atr(df, n = 20):
-	new_tr = max(df.ix[-1:'high'],df.ix[-2:'close']) - min(df.ix[-1:'low'],df.ix[-2:'close'])
-	alpha = 2.0/(n+1)
-	df.ix[-1:'ATR_'+str(n)] = df.ix[-2:'ATR_'+str(n)]* (1-alpha) + alpha * new_tr
-	
+    new_tr = max(df.ix[-1,'high'],df.ix[-2,'close']) - min(df.ix[-1,'low'],df.ix[-2,'close'])
+    alpha = 2.0/(n+1)
+    df.ix[-1,'ATR_'+str(n)] = df.ix[-2,'ATR_'+str(n)]* (1-alpha) + alpha * new_tr
+    
 def MA(df, n):
     return pd.Series(pd.rolling_mean(df['close'], n), name = 'MA_' + str(n))
 
 def ma(df, n):
-	df.ix[-1:'MA_'+str(n)] = df.ix[-2:'MA_'+str(n)] + ( df.ix[-1:'close'] - df.ix[-1-n:'close'])/float(n)
+    df.ix[-1,'MA_'+str(n)] = df.ix[-2,'MA_'+str(n)] + ( df.ix[-1,'close'] - df.ix[-1-n,'close'])/float(n)
 
 #Exponential Moving Average
 def EMA(df, n):
     return pd.Series(pd.ewma(df['close'], span = n, min_periods = n - 1), name = 'EMA_' + str(n))
 
 def ema(df, n):
-	alpha = 2.0/(n+1)
-	df.ix[-1:'EMA_'+str(n)] = df.ix[-2:'EMA_'+str(n)]*(1-alpha) + df.ix[-1:'close']*alpha
-	
+    alpha = 2.0/(n+1)
+    df.ix[-1,'EMA_'+str(n)] = df.ix[-2,'EMA_'+str(n)]*(1-alpha) + df.ix[-1,'close']*alpha
+    
 #Momentum
 def MOM(df, n):
     return pd.Series(df['close'].diff(n), name = 'Momentum_' + str(n))#Rate of Change
@@ -193,10 +196,10 @@ def Chaikin(df):
 #Money Flow Index and Ratio
 def MFI(df, n):
     PP = (df['high'] + df['low'] + df['close']) / 3
-	PP > PP.shift(1)
-	PosMF = pd.Series(PP)
-	PosMF[PosMF <= PosMF.shift(1)] = 0
-	PosMF = PosMF * df['volume']
+    PP > PP.shift(1)
+    PosMF = pd.Series(PP)
+    PosMF[PosMF <= PosMF.shift(1)] = 0
+    PosMF = PosMF * df['volume']
     TotMF = PP * df['volume']
     MFR = pd.Series(PosMF / TotMF)
     MFI = pd.Series(rolling_mean(MFR, n), name = 'MFI_' + str(n))
@@ -204,11 +207,11 @@ def MFI(df, n):
 
 #On-balance Volume
 def OBV(df, n):
-	PosVol = pd.Series(df['volume'])
-	NegVol = pd.Series(-df['volume'])
-	PosVol[df['close'] <= df['close'].shift(1)] = 0
-	NegVol[df['close'] >= df['close'].shift(1)] = 0
-	OBV = pd.Series(pd.rolling_mean(PosVol + NegVol, n), name = 'OBV_' + str(n))
+    PosVol = pd.Series(df['volume'])
+    NegVol = pd.Series(-df['volume'])
+    PosVol[df['close'] <= df['close'].shift(1)] = 0
+    NegVol[df['close'] >= df['close'].shift(1)] = 0
+    OBV = pd.Series(pd.rolling_mean(PosVol + NegVol, n), name = 'OBV_' + str(n))
     return OBV
 
 #Force Index
@@ -248,19 +251,27 @@ def KELCH(df, n):
 
 #Ultimate Oscillator
 def ULTOSC(df):
-	TR_l = TR(df)
-	BP_l = df['close'] - pd.concat([df['low'], df['close'].shift(1)], axis=1).min(axis=1)
+    TR_l = TR(df)
+    BP_l = df['close'] - pd.concat([df['low'], df['close'].shift(1)], axis=1).min(axis=1)
     UltO = pd.Series((4 * pd.rolling_sum(BP_l, 7) / pd.rolling_sum(TR_l, 7)) + (2 * pd.rolling_sum(BP_l, 14) / pd.rolling_sum(TR_l, 14)) + (pd.rolling_sum(BP_l, 28) / pd.rolling_sum(TR_l, 28)), name = 'Ultimate_Osc')
     return UltO
 
 #Donchian Channel
-def DONCH(df, n):
+def DONCH_H(df, n):
     DC_H = pd.rolling_max(df['high'],n)
-    DC_H.name = 'DonchianH_'+ str(n)
-    DC_L = pd.rolling_min(df['low'], n)
-    DC_L.name = 'DonchianL_'+ str(n)
-    return pd.concat([DC_H, DC_L], join='outer', axis=1)
+    DC_H.name = 'DONCH_H'+ str(n)
+    return DC_H
 
+def donch_h(df, n):
+    df.ix[-1,'DONCH_H'+str(n)] = max(df.ix[-n:,'high'])
+
+def DONCH_L(df, n):
+    DC_L = pd.rolling_min(df['low'], n)
+    DC_L.name = 'Donch_L'+ str(n)
+    return DC_L
+
+def donch_l(df, n):
+    df.ix[-1,'DONCH_L'+str(n)] = min(df.ix[-n:,'low'])
 #Standard Deviation
 def STDDEV(df, n):
     return pd.Series(pd.rolling_std(df['close'], n), name = 'STD_' + str(n))
