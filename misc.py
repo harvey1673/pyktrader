@@ -1,3 +1,5 @@
+import mysql.connector
+import mysqlaccess
 from datetime import *
 CHN_Holidays = [date(2014,1,1),  date(2014,1,2), date(2014,1,3), 
                 date(2014,1,31), date(2014,2,3), date(2014,2,4),
@@ -30,7 +32,7 @@ CHN_Holidays = [date(2014,1,1),  date(2014,1,2), date(2014,1,3),
 product_code = {'SHFE':['cu', 'al', 'zn', 'pb', 'wr', 'rb', 'fu', 'ru', 'bu', 'hc', 'ag', 'au'], 
                 'CFFEX': ['IF', 'TF', 'IO'],
                 'DCE': ['c', 'j', 'jd', 'a', 'b', 'm', 'y', 'p', 'l', 'v', 'jm', 'i', 'fb', 'bb', 'pp'],
-                'ZCE': ['WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'ME', 'FG', 'RS', 'RM', 'TC', 'JR'] }
+                'ZCE': ['WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'ME', 'FG', 'RS', 'RM', 'TC', 'JR', 'LR', 'MA', 'SM', 'SF'] }
 
 night_session_markets = ['cu', 'al', 'zn', 'pb', 'ag','au']
 
@@ -54,11 +56,15 @@ product_lotsize = {'zn': 5,
                    'OI': 10,
                    'RI': 20,
                    'ME': 50,
+                   'MA': 10,
                    'FG': 20,
                    'RS': 10,
                    'RM': 10,
                    'TC': 200, 
                    'JR': 20,
+                   'LR': 20,
+                   'SM': 5,
+                   'SF': 5,
                    'c' : 10, 
                    'j' : 100,
                    'jd': 10,
@@ -99,11 +105,15 @@ product_ticksize = {'zn': 5,
                    'OI': 2,
                    'RI': 1,
                    'ME': 1,
+                   'MA': 1,
                    'FG': 1,
                    'RS': 1,
                    'RM': 1,
                    'TC': 0.2, 
                    'JR': 1,
+                   'LR': 1,
+                   'SF': 2,
+                   'SM': 2,
                    'c' : 1, 
                    'j' : 1,
                    'jd': 1,
@@ -139,3 +149,16 @@ def inst2exch(inst):
             return exch
     
     return 0
+
+def inst_to_exch(inst):
+    key = inst2product(inst)
+    cnx = mysql.connector.connect(**mysqlaccess.dbconfig)
+    cursor = cnx.cursor()
+    stmt = "select exchange from trade_products where product_code='{prod}' ".format(prod=key)
+    cursor.execute(stmt)
+    out = [exchange for exchange in cursor]
+    cnx.close()
+    return str(out[0][0])
+
+def nearby(prodcode, n, start_date, end_date, roll_rule):
+    pass
