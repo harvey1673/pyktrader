@@ -469,7 +469,7 @@ class Instrument(object):
         self.price = 0.0
         self.volume = 0
         self.open_interest = 0
-        self.last_update = 0
+        self.last_update = datetime.datetime.now()
         self.ask_price1 = 0.0
         self.ask_vol1 = 0
         self.bid_price1 = 0.0
@@ -796,13 +796,13 @@ class Agent(AbsAgent):
         if (curr_tick > self.instruments[inst].last_tick_id+5):
             return False
             
-        if (self.instruments[inst].last_update >= curr_tick):
+        if (self.instruments[inst].last_update >= tick.timestamp):
             self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, curr_tick,))
             return False
         
         if self.tick_id < curr_tick:
             self.tick_id = curr_tick
-        self.instruments[tick.instID].last_update = curr_tick
+        self.instruments[tick.instID].last_update = tick.timestamp
         self.instruments[tick.instID].bid_price1 = tick.bidPrice1
         self.instruments[tick.instID].ask_price1 = tick.askPrice1
         self.instruments[tick.instID].bid_vol1   = tick.bidVol1
@@ -906,6 +906,8 @@ class Agent(AbsAgent):
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                 self.cur_min[inst]['openInterest'] = last_tick.openInterest
                 self.min_switch(inst)
+
+            if self.cur_day[inst]['close'] > 0:
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
                 for fobj in self.day_data_func:
