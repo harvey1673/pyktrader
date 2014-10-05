@@ -1,3 +1,4 @@
+#-*- coding:utf-8 -*-
 import pandas as pd
 from base import *
 import data_handler
@@ -9,17 +10,25 @@ import logging
 sign = lambda x: math.copysign(1, x)
 
 class Strategy(object):
-	def __init__(self, name, instIDs, agent, capital):
+	def __init__(self, name, instIDs, scaler=1, agent = None):
 		self.name = name
 		self.instIDs = instIDs
 		self.agent = agent
-		self.capital = capital
+		self.pos_scaling = scaler
 		self.trade_unit = dict([(inst, 1) for inst in instIDs])
 		self.positions  = dict([(inst, []) for inst in instIDs])
 		self.daily_func = []
 		self.min_func = {}
+		if agent == None:
+			self.folder = ''
+		else:
+			self.folder = self.folder + self.name + '\\'
 		
 	def initialize(self):
+		if self.agent == None:
+			self.folder = ''
+		else:
+			self.folder = self.agent.folder + self.name + '\\'
 		if len(self.daily_func)>0:
 			curr_fobjs = [ fobj.name for fobj in self.agent.day_data_func ]
 			for fobj in self.daily_func:
@@ -35,6 +44,7 @@ class Strategy(object):
 	
 	def day_finalize(self):	
 		self.update_trade_unit()
+		self.save_state()
 		pass
 		
 	def run(self, ctick):
@@ -46,11 +56,12 @@ class Strategy(object):
 	def update_trade_unit(self):
 		pass
 	
+	def save_state(self):
+		pass
 	
-
 class TurtleTrader(Strategy):
-	def __init__(self, name, instIDs, agent, capital):
-		Strategy.__init__(instIDs, agent, capital)
+	def __init__(self, name, instIDs,  scaler = 1, agent = None):
+		Strategy.__init__(name, instIDs, scaler, agent)
 		self.daily_func = [ 
 					BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
 					BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
@@ -66,10 +77,11 @@ class TurtleTrader(Strategy):
 		self.breakout_signals   = dict([(inst, 0) for inst in instIDs])
 		self.submitted_pos = dict([(inst, None) for inst in instIDs])
 		self.last_flag = dict([(inst, True) for inst in instIDs])
+	
+	def save_state(self):
 		
-	def day_finalize(self):
 		pass
-		
+			
 	def run(self, ctick):
 		inst = ctick.instID
 		df = self.agent.day_data[inst]
@@ -177,4 +189,4 @@ class TurtleTrader(Strategy):
 			if self.positions[inst] == 0: 
 				pinst  = self.agent.instruments[inst]
 				df  = self.agent.day_data[inst]				
-				self.trade_unit = int(self.capital * self.pos_ratio /(pinst.multiple*df.ix[-1,'ATR_20']))
+				self.trade_unit = int(self.pos_scaling * 1000000*self.pos_ratio /(pinst.multiple*df.ix[-1,'ATR_20']))

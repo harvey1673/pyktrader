@@ -546,7 +546,7 @@ class AbsAgent(object):
 class Agent(AbsAgent):
     
 
-    def __init__(self, name, trader,cuser,instruments, tday=datetime.date.today(), 
+    def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), 
                  folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5):
         '''
             trader为交易对象
@@ -559,7 +559,7 @@ class Agent(AbsAgent):
         self.mdapis = []
         self.trader = trader
         self.name = name
-        self.folder = folder
+        self.folder = folder + self.name + '\\'
         self.cuser = cuser
         self.instruments = Instrument.create_instruments(instruments)
         self.request_id = 1
@@ -582,15 +582,19 @@ class Agent(AbsAgent):
         self.min_data_func = {}
         
         self.startup_time = datetime.datetime.now()
+        self.strategies = strategies
+        for strat in self.strategies:
+            strat.initialize()
+            strat.agent = self
 
-        self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.ATR, n=60), \
-                                                rfunc=fcustom(data_handler.atr, n=60)))
-        self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.EMA, n=20), \
-                                                rfunc=fcustom(data_handler.ema, n=20)))
-        self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.EMA, n=12), \
-                                                rfunc=fcustom(data_handler.ema, n=12)))
-        self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.MA, n=15), \
-                                                rfunc=fcustom(data_handler.ma, n=15)))
+        #self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.ATR, n=60), \
+        #                                        rfunc=fcustom(data_handler.atr, n=60)))
+        #self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.EMA, n=20), \
+        #                                        rfunc=fcustom(data_handler.ema, n=20)))
+        #self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.EMA, n=12), \
+        #                                        rfunc=fcustom(data_handler.ema, n=12)))
+        #self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.MA, n=15), \
+        #                                        rfunc=fcustom(data_handler.ma, n=15)))
         
         self.prepare_data_env()
         for inst in instruments:
@@ -690,7 +694,7 @@ class Agent(AbsAgent):
         #self.fetch_trade()     
         self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
-        file_prefix = self.folder + self.name + "\\"
+        file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
         if len(keys) > 1:
@@ -720,7 +724,7 @@ class Agent(AbsAgent):
         self.logger.debug(u'查询命令序列长度:%s' % (len(self.qry_commands),))
         
     def get_eod_positions(self):
-        file_prefix = self.folder + self.name + "\\"
+        file_prefix = self.folder
         last_bday = workdays.workday(self.scur_day, -1, misc.CHN_Holidays)
         self.logger.info('Starting; getting EOD position for %s' % last_bday.strftime('%y%m%d'))
         logfile = file_prefix + 'EOD_Pos_' + last_bday.strftime('%y%m%d')+'.csv'
@@ -741,7 +745,7 @@ class Agent(AbsAgent):
         return True
     
     def save_eod_positions(self):
-        file_prefix = self.folder + self.name + "\\"
+        file_prefix = self.folder
         logfile = file_prefix + 'EOD_Pos_' + self.scur_day.strftime('%y%m%d')+'.csv'
         self.logger.info('EOD process: saving EOD position for %s' % self.scur_day.strftime('%y%m%d'))
         with open(logfile,'wb') as log_file:
@@ -772,7 +776,7 @@ class Agent(AbsAgent):
             保存环境
         '''
         self.logger.info(u'保存执行状态.....................')
-        file_prefix = self.folder + self.name  + "\\"
+        file_prefix = self.folder
         order.save_order_list(self.scur_day, self.ref2order, file_prefix)
         order.save_trade_list(self.scur_day, self.etrades, file_prefix)
         return
@@ -924,7 +928,14 @@ class Agent(AbsAgent):
             self.save_eod_positions()
             self.etrades = []
             self.ref2order = {}
+        for strat in self.strategies():
+            strat.day_finalize()
 
+    def add_strategy(self, strat):
+        self.append(strat)
+        strat.agent = self
+        strat.initialize()
+         
     def day_switch(self,scur_day):  #重新初始化opener
         self.scur_day = scur_day
         self.day_finalize(self.instruments.keys())
@@ -1028,10 +1039,6 @@ class Agent(AbsAgent):
         self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
         #if r < 0:
         #    self.qry_commands.append(self.fetch_trade)
-
-    ##交易处理
-    def run_strats(self, ctick):
-        pass
     
     def RtnTick(self,ctick):#行情处理主循环
         if (not self.update_instrument(ctick)):
@@ -1042,7 +1049,8 @@ class Agent(AbsAgent):
         # lock the trade processing to avoid position conflict
         if not self.proc_lock:
             self.proc_lock = True
-            self.run_strats(ctick)  
+            for strat in self.strategies:
+                strat.run(ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1
