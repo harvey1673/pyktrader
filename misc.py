@@ -214,6 +214,40 @@ def nearby(prodcode, n, start_date, end_date, roll_rule, freq):
         sdate = min(exp,end_date) + datetime.timedelta(days=1)
     return df        
 
+def rolling_hist_data(product, n, start_date, end_date, cont_roll, freq, win_roll= '-20b'):
+    if start_date > end_date: 
+        return None
+    cnx = mysql.connector.connect(**mysqlaccess.dbconfig)
+    cursor = cnx.cursor()
+    stmt = "select exchange, contract from trade_products where product_code='{prod}' ".format(prod=prodcode)
+    cursor.execute(stmt)
+    out = [(exchange, contract) for (exchange, contract) in cursor]
+    exch = str(out[0][0])
+    cont = str(out[0][1])
+    cont_mth = [month_code_map[c] for c in cont]
+    cnx.close()  
+    contlist = contract_range(prodcode, exch, cont_mth, start_date, end_date)
+    exp_dates = [day_shift(contract_expiry(cont), cont_roll) for cont in contlist]
+    #print contlist, exp_dates
+    sdate = start_date
+    is_new = True
+	all_data = {}
+	i = 0
+    for idx, exp in enumerate(exp_dates):
+        if exp < start_date:
+            continue
+        elif sdate > end_date:
+            break
+        nb_cont = contlist[idx+n-1]
+        if freq == 'd':
+            df = mysqlaccess.load_daily_data_to_df('fut_daily', nb_cont, sdate, min(exp,end_date))
+        else:
+            df = mysqlaccess.load_min_data_to_df('fut_min', nb_cont, sdate, min(exp,end_date))    
+        all_data[i] = {'contract': nb_cont, 'data': df}
+		i += 1
+        sdate = day_shift(min(exp,end_date), win_roll)
+    return all_data    
+	
 def day_shift(d, roll_rule):
     if 'b' in roll_rule:
         days = int(roll_rule[:-1])
