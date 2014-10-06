@@ -257,21 +257,17 @@ def ULTOSC(df):
     return UltO
 
 #Donchian Channel
-def DONCH_H(df, n):
+def DONCH(df, n):
     DC_H = pd.rolling_max(df['high'],n)
     DC_H.name = 'DONCH_H'+ str(n)
-    return DC_H
-
-def donch_h(df, n):
-    df.ix[-1,'DONCH_H'+str(n)] = max(df.ix[-n:,'high'])
-
-def DONCH_L(df, n):
     DC_L = pd.rolling_min(df['low'], n)
-    DC_L.name = 'Donch_L'+ str(n)
-    return DC_L
+    DC_L.name = 'DONCH_L'+ str(n)
+    return pd.concat([DC_H, DC_L], join='outer', axis=1)
 
-def donch_l(df, n):
+def donch(df, n):
+    df.ix[-1,'DONCH_H'+str(n)] = max(df.ix[-n:,'high'])
     df.ix[-1,'DONCH_L'+str(n)] = min(df.ix[-n:,'low'])
+    
 #Standard Deviation
 def STDDEV(df, n):
     return pd.Series(pd.rolling_std(df['close'], n), name = 'STD_' + str(n))
