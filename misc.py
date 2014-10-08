@@ -176,7 +176,7 @@ def inst_to_exch(inst):
     cnx.close()
     return str(out[0][0])
 
-def nearby(prodcode, n, start_date, end_date, roll_rule, freq):
+def nearby(prodcode, n, start_date, end_date, roll_rule, freq, need_shift=False):
     if start_date > end_date: 
         return None
     cnx = mysql.connector.connect(**mysqlaccess.dbconfig)
@@ -203,14 +203,21 @@ def nearby(prodcode, n, start_date, end_date, roll_rule, freq):
             new_df = mysqlaccess.load_daily_data_to_df('fut_daily', nb_cont, sdate, min(exp,end_date))
         else:
             new_df = mysqlaccess.load_min_data_to_df('fut_min', nb_cont, sdate, min(exp,end_date))    
-        nn = new_df.shape[0]
+
+		nn = new_df.shape[0]
         if nn > 0:
             new_df['contract'] = pd.Series([nb_cont]*nn, index=new_df.index)
         if is_new:
             df = new_df
             is_new = False
         else:
-            df = df.append(new_df)
+			if need_shift:
+				last_date = df.index[-1].date()
+				tmp_df = load_daily_data_to_df('fut_daily', nb_cont, last_date, last_date)
+				shift = tmp_df['close'][-1] - df['close'][-1]
+				for ticker in ['open','high','low','close']:
+					df[ticker] = df[ticker] + shift
+			df = df.append(new_df)
         sdate = min(exp,end_date) + datetime.timedelta(days=1)
     return df        
 
