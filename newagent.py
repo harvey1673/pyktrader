@@ -75,7 +75,6 @@ class MdSpiDelegate(MdApi):
         self.passwd = passwd
         self.agent = agent
         ##必须在每日重新连接时初始化它. 这一点用到了生产行情服务器收盘后关闭的特点(模拟的不关闭)
-        self.last_received = dict([(inst, datetime.datetime.now()) for inst in instruments])
         self.last_day = 0
         agent.add_mdapi(self)
         pass
@@ -131,9 +130,6 @@ class MdSpiDelegate(MdApi):
             
             timestamp = datetime.datetime.strptime(timestr, '%Y%m%d %H:%M:%S %f')
             self.last_day = timestamp.year*10000+timestamp.month*100+timestamp.day
-            if timestamp <= self.last_received[dp.InstrumentID]:
-                self.logger.warning(u'MD:receive late tick data:%s arriving at %s later than %s' %(dp.InstrumentID, timestr,self.last_received[dp.InstrumentID]))
-                return
             tick = self.market_data2tick(dp, timestamp)
             self.agent.RtnTick(tick)
         finally:
@@ -471,7 +467,7 @@ class Instrument(object):
         self.price = 0.0
         self.volume = 0
         self.open_interest = 0
-        self.last_update = 0
+        self.last_update = datetime.datetime.now()
         self.ask_price1 = 0.0
         self.ask_vol1 = 0
         self.bid_price1 = 0.0
@@ -790,7 +786,7 @@ class Agent(AbsAgent):
             return False
             
         if (self.instruments[inst].last_update >= tick.timestamp):
-            self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, curr_tick,))
+            self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
             return False
         
         if self.tick_id < curr_tick:

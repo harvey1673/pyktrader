@@ -1,5 +1,4 @@
-import tradeagent as agent
-import newagent
+import newagent as agent
 import base
 import time
 import logging
