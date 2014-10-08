@@ -14,6 +14,7 @@ import os
 import csv
 import pandas as pd
 import data_handler
+import strategy as strat
 from base import *
 from ctp.futures import ApiStruct, MdApi, TraderApi
 
@@ -580,8 +581,8 @@ class Agent(AbsAgent):
         self.startup_time = datetime.datetime.now()
         self.strategies = strategies
         for strat in self.strategies:
-            strat.initialize()
             strat.agent = self
+            strat.initialize()
 
         #self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.ATR, n=60), \
         #                                        rfunc=fcustom(data_handler.atr, n=60)))
@@ -788,15 +789,16 @@ class Agent(AbsAgent):
             return False
         
         if self.scur_day < tick.timestamp.date():
-            self.scur_day = tick.timestamp.date()
             self.day_finalize(self.instruments.keys())
+            self.scur_day = tick.timestamp.date()
         
         if (curr_tick < self.instruments[inst].start_tick_id-5):
             return False
         if (curr_tick > self.instruments[inst].last_tick_id+5):
             return False
-            
-        if (self.instruments[inst].last_update >= tick.timestamp):
+        
+        update_tick = get_tick_id(self.instruments[inst].last_update)    
+        if (self.instruments[inst].last_update.date() > tick.timestamp.date() or update_tick > curr_tick):
             self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
             return False
         
@@ -924,7 +926,7 @@ class Agent(AbsAgent):
             self.save_eod_positions()
             self.etrades = []
             self.ref2order = {}
-        for strat in self.strategies():
+        for strat in self.strategies:
             strat.day_finalize()
 
     def add_strategy(self, strat):
@@ -1494,12 +1496,15 @@ def make_user(my_agent,hq_user):
     user.Init()
 
 
-def create_trader(trader_cfg, instruments, agent_name, tday=datetime.date.today()):
+def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.date.today()):
     logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
 
     logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
-
-    myagent = Agent(agent_name, None, None, instruments, tday) 
+    strategies = strat_cfg['strategies']
+    folder = strat_cfg['folder']
+    daily_days = strat_cfg['daily_data_days']
+    min_days = strat_cfg['min_data_days']
+    myagent = Agent(agent_name, None, None, instruments, strategies, tday, folder, daily_days, min_days) 
     myagent.trader = trader = TraderSpiDelegate(instruments=myagent.instruments, 
                              broker_id=trader_cfg.broker_id,
                              investor_id= trader_cfg.investor_id,
@@ -1515,8 +1520,8 @@ def create_trader(trader_cfg, instruments, agent_name, tday=datetime.date.today(
     
     return trader, myagent
 
-def create_agent(agent_name, usercfg, tradercfg, insts, tday = datetime.date.today()):
-    trader, my_agent = create_trader(tradercfg, insts, agent_name, tday)
+def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = datetime.date.today()):
+    trader, my_agent = create_trader(tradercfg, insts, strat_cfg, agent_name, tday)
     make_user(my_agent,usercfg)
     return my_agent
 
@@ -1539,9 +1544,9 @@ def test_main(name='test_trade'):
     prod_trader = BaseObject( broker_id="8070", 
                                    investor_id="750305", 
                                    passwd="801289", 
-                                   ports= ["tcp://zjzx-front12.ctp.shcifco.com:41205"]) 
-                                           #"tcp://zjzx-front12.ctp.shcifco.com:41205",
-                                           #"tcp://zjzx-front13.ctp.shcifco.com:41205"])
+                                   ports= ["tcp://zjzx-front12.ctp.shcifco.com:41205", 
+                                           "tcp://zjzx-front12.ctp.shcifco.com:41205",
+                                           "tcp://zjzx-front13.ctp.shcifco.com:41205"])
     wkend_trader = BaseObject( broker_id="8070", 
                                    investor_id="750305", 
                                    passwd="801289", 
@@ -1562,8 +1567,24 @@ def test_main(name='test_trade'):
     trader_cfg = prod_trader
     user_cfg = prod_user
     agent_name = name
-    tday = datetime.date(2014,9,22)
-    myagent = create_agent(agent_name, user_cfg, trader_cfg, insts)
+    tday = datetime.date(2014,10,8)
+    strategies = []
+    test_strat = strat.Strategy('TestStrat', insts)
+    test_strat.daily_func = [ 
+                BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
+                BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
+                BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
+                BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20)),\
+                BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
+                BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
+                BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))]    
+    test_strat.min_func = {}
+    strategies.append(test_strat)
+    strat_cfg = {'strategies': strategies, \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':80, \
+                 'min_data_days':5 }
+    myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
     try:
         myagent.resume()
 
@@ -1576,16 +1597,16 @@ def test_main(name='test_trade'):
         #myagent.positions['IF1409'].re_calc()
         #myagent.positions['IF1412'].re_calc()        
         
-        valid_time = myagent.tick_id + 20
-        etrade =  order.ETrade( ['cu1412'], [1], [ApiStruct.OPT_LimitPrice], 47310, [0], valid_time, myagent.name, 'test')
-        #myagent.submit_trade(etrade)
+        valid_time = myagent.tick_id + 100
+        etrade =  order.ETrade( ['cu1412'], [1], [ApiStruct.OPT_AnyPrice], 47340, [0], valid_time, test_strat.name, myagent.name)
+        myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
         #myagent.tick_id = valid_time - 10
         #for o in myagent.positions['ag1506'].orders:
         #    o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
-        myagent.process_trade_list() 
+        #myagent.process_trade_list() 
         myagent.positions['cu1411'].re_calc()
         myagent.positions['cu1412'].re_calc()
         #orders = [iorder for iorder in myagent.positions['ag1412'].orders]

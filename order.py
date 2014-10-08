@@ -53,7 +53,7 @@ def load_trade_list(curr_date, file_prefix):
                 instIDs = row[1].split(' ')
                 volumes = [ int(n) for n in row[2].split(' ')]
                 filled_vol = [ int(n) for n in row[3].split(' ')]
-                filled_price = [ int(n) for n in row[4].split(' ')]
+                filled_price = [ float(n) for n in row[4].split(' ')]
                 otypes = [ int(n) for n in row[5].split(' ')]
                 ticks = [ int(n) for n in row[6].split(' ')]
                 if ':' in row[7]:
@@ -181,7 +181,8 @@ class ETrade(object):
                         iorder.status = OrderStatus.Ready
                         iorder.conditionals = {}
             self.filled_vol[idx] = sum([iorder.filled_volume for iorder in self.order_dict[inst]])
-            self.filled_price[idx] = sum([iorder.filled_volume*iorder.filled_price for iorder in self.order_dict[inst]])/self.filled_vol[idx]
+            if self.filled_vol[idx] > 0:
+                self.filled_price[idx] = sum([iorder.filled_volume*iorder.filled_price for iorder in self.order_dict[inst]])/self.filled_vol[idx]
             volumes[idx] = sum([iorder.volume for iorder in self.order_dict[inst]])                    
             if volumes[idx] > 0:
                 Zero_Volume = False

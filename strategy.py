@@ -64,9 +64,12 @@ class TurtleTrader(Strategy):
 		Strategy.__init__(name, instIDs, scaler, agent)
 		self.daily_func = [ 
 				BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
-				BaseObject(name = 'DONCH_10', sfunc=fcustom(data_handler.DONCH, n=10), rfunc=fcustom(data_handler.donch, n=10)),\
-				BaseObject(name = 'DONCH_20', sfunc=fcustom(data_handler.DONCH, n=20), rfunc=fcustom(data_handler.donch, n=20)),\
-				BaseObject(name = 'DONCH_55', sfunc=fcustom(data_handler.DONCH, n=55), rfunc=fcustom(data_handler.donch, n=55))]	
+				BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
+				BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
+				BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20)),\
+				BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
+				BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
+				BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))]	
 		self.min_func = {}
 		self.pos_ratio = 0.01
 		self.stop_loss = 2.0
