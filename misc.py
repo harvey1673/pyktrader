@@ -204,20 +204,23 @@ def nearby(prodcode, n, start_date, end_date, roll_rule, freq, need_shift=False)
         else:
             new_df = mysqlaccess.load_min_data_to_df('fut_min', nb_cont, sdate, min(exp,end_date))    
 
-		nn = new_df.shape[0]
+        nn = new_df.shape[0]
         if nn > 0:
             new_df['contract'] = pd.Series([nb_cont]*nn, index=new_df.index)
         if is_new:
             df = new_df
             is_new = False
         else:
-			if need_shift:
-				last_date = df.index[-1].date()
-				tmp_df = load_daily_data_to_df('fut_daily', nb_cont, last_date, last_date)
-				shift = tmp_df['close'][-1] - df['close'][-1]
-				for ticker in ['open','high','low','close']:
-					df[ticker] = df[ticker] + shift
-			df = df.append(new_df)
+            if need_shift:
+                if isinstance(df.index[-1], datetime.datetime):
+                    last_date = df.index[-1].date()
+                else:
+                    last_date = df.index[-1]
+                tmp_df = mysqlaccess.load_daily_data_to_df('fut_daily', nb_cont, last_date, last_date)
+                shift = tmp_df['close'][-1] - df['close'][-1]
+                for ticker in ['open','high','low','close']:
+                    df[ticker] = df[ticker] + shift
+            df = df.append(new_df)
         sdate = min(exp,end_date) + datetime.timedelta(days=1)
     return df        
 
@@ -246,12 +249,12 @@ def rolling_hist_data(product, n, start_date, end_date, cont_roll, freq, win_rol
             break
         nb_cont = contlist[idx+n-1]
         if freq == 'd':
-            df = mysqlaccess.load_daily_data_to_df('fut_daily', nb_cont, sdate, min(exp,end_date))
+            df = mysqlaccess.load_daily_data_to_df('fut_daily', nb_cont, day_shift(sdate,win_roll), min(exp,end_date))
         else:
-            df = mysqlaccess.load_min_data_to_df('fut_min', nb_cont, sdate, min(exp,end_date))    
+            df = mysqlaccess.load_min_data_to_df('fut_min', nb_cont, day_shift(sdate,win_roll), min(exp,end_date))    
         all_data[i] = {'contract': nb_cont, 'data': df}
         i += 1
-        sdate = day_shift(min(exp,end_date), win_roll)
+        sdate = min(exp,end_date) + datetime.timedelta(days=1)
     return all_data    
     
 def day_shift(d, roll_rule):
