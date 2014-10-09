@@ -59,6 +59,10 @@ class Strategy(object):
 	def save_state(self):
 		pass
 	
+	def load_state(self):
+		pass	
+	
+	
 class TurtleTrader(Strategy):
 	def __init__(self, name, instIDs,  scaler = 1, agent = None):
 		Strategy.__init__(name, instIDs, scaler, agent)
@@ -80,7 +84,10 @@ class TurtleTrader(Strategy):
 	def save_state(self):
 		
 		pass
-			
+	
+	def load_state(self):
+		pass	
+	
 	def run(self, ctick):
 		inst = ctick.instID
 		df = self.agent.day_data[inst]
@@ -89,14 +96,14 @@ class TurtleTrader(Strategy):
 		ll  = [df.ix[-1,'DONCH_L55'],df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_H10']]
 		pos = self.submitted_pos[inst]
 		if pos!= None:
-			if pos.trade.status == order.ETradeStatus.Done:
-				traded_price = pos.trade.filled_price[0]
-				traded_vol = pos.trade.volumes[0]
-				pos.trade = None
-				if pos.sn >= len(self.positions[inst]):
-					pexit = pos.exit
+			if pos['trade'].status == order.ETradeStatus.Done:
+				traded_price = pos['trade'].filled_price[0]
+				traded_vol = pos['trade'].volumes[0]
+				pos.pop('trade', None)
+				if pos['serialno'] >= len(self.positions[inst]):
+					pexit = pos['exit']
 					for p in self.positions[inst]:
-						p.exit = pexit
+						p['exit'] = pexit
 					self.positions[inst].append(pos)
 				else:
 					pos_inst = self.positions[inst]
