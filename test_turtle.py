@@ -29,7 +29,7 @@ def turtle_sim( assets, start_date, end_date, nearby=1 ):
     trades = {}
     atr_dict = {}
     for pc in assets:
-        ddata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, '-20b', 'd', '-55b')
+        ddata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, '-20b', 'd', '-25b')
         mdata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, '-20b', 'm', '-1b')
         res = {}
         all_trades = {}
@@ -154,6 +154,18 @@ def save_sim_results(filename, res, trades):
     return
     
 if __name__=="__main__":
-    filename = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle55.xlsx'
-    (res, trades) = turtle_sim( ['m','y','a','p','v','l','ru','rb'], datetime.date(2010,9,1), datetime.date(2014,7,28) )
+    filename = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle20_20broll.xlsx'
+    (res, trades) = turtle_sim( ['m','y','a','p','v','l','ru','rb','au'], datetime.date(2010,9,1), datetime.date(2014,7,28), 1 )
+    save_sim_results(filename, res, trades)
+    (res, trades) = turtle_sim( ['cu','al','zn'], datetime.date(2011,1,2), datetime.date(2014,7,28), 3 )
+    save_sim_results(filename, res, trades)
+    (res, trades) = turtle_sim( ['pb'], datetime.date(2011,11,1), datetime.date(2014,7,28), 3 )
+    save_sim_results(filename, res, trades)
+    (res, trades) = turtle_sim( ['ag'], datetime.date(2012,7,1), datetime.date(2014,7,28), 1 )
+    save_sim_results(filename, res, trades)
+    (res, trades) = turtle_sim( ['i'], datetime.date(2014,1,2), datetime.date(2014,7,28), 1 )
+    save_sim_results(filename, res, trades)
+    (res, trades) = turtle_sim( ['j'], datetime.date(2011,6,1), datetime.date(2014,7,28), 1 )
+    save_sim_results(filename, res, trades)
+    (res, trades) = turtle_sim( ['jm'], datetime.date(2013,5,1), datetime.date(2014,7,28), 1 )
     save_sim_results(filename, res, trades)
