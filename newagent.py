@@ -1,6 +1,6 @@
 #-*- coding:utf-8 -*-
 import workdays
-import sched
+#import sched
 import time
 import datetime
 import logging
@@ -14,9 +14,8 @@ import os
 import csv
 import pandas as pd
 import data_handler
-
+import strategy as strat
 from base import *
-
 from ctp.futures import ApiStruct, MdApi, TraderApi
 
 CANCEL_PROTECT_PERIOD = 200
@@ -119,9 +118,10 @@ class MdSpiDelegate(MdApi):
         try:
             if dp.LastPrice > 999999 or dp.LastPrice < 0.1:
                 self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
+                return
             if dp.InstrumentID not in self.instruments:
                 self.logger.warning(u'MD:收到未订阅的行情:%s' %(dp.InstrumentID,))
-                
+                return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
             if len(dp.TradingDay.strip()) > 0:
                 timestr = str(dp.TradingDay) + ' ' + timestr
@@ -544,8 +544,8 @@ class AbsAgent(object):
 class Agent(AbsAgent):
     
 
-    def __init__(self, name, trader,cuser,instruments, tday=datetime.date.today(), 
-                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=20, min_data_days=5):
+    def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), 
+                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -557,7 +557,7 @@ class Agent(AbsAgent):
         self.mdapis = []
         self.trader = trader
         self.name = name
-        self.folder = folder
+        self.folder = folder + self.name + '\\'
         self.cuser = cuser
         self.instruments = Instrument.create_instruments(instruments)
         self.request_id = 1
@@ -580,6 +580,19 @@ class Agent(AbsAgent):
         self.min_data_func = {}
         
         self.startup_time = datetime.datetime.now()
+        self.strategies = strategies
+        for strat in self.strategies:
+            strat.agent = self
+            strat.initialize()
+
+        #self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.ATR, n=60), \
+        #                                        rfunc=fcustom(data_handler.atr, n=60)))
+        #self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.EMA, n=20), \
+        #                                        rfunc=fcustom(data_handler.ema, n=20)))
+        #self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.EMA, n=12), \
+        #                                        rfunc=fcustom(data_handler.ema, n=12)))
+        #self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.MA, n=15), \
+        #                                        rfunc=fcustom(data_handler.ma, n=15)))
         
         self.prepare_data_env()
         for inst in instruments:
@@ -630,7 +643,7 @@ class Agent(AbsAgent):
         #time.sleep(12)
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
-        self.qry_commands.append(self.fetch_order)
+        #self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(fcustom(self.fetch_instruments_by_exchange,exchange_id = ''))
         #self.qry_commands.append(self.fetch_trade)
         #time.sleep(1)   #保险起见
@@ -666,7 +679,7 @@ class Agent(AbsAgent):
                 self.min_data[inst][1] = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
                 for m in self.min_data_func:
                     if m != 1:
-                        self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'m')
+                        self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
                     df = self.min_data[inst][m]
                     for fobj in self.min_data_func[m]:
                         ts = fobj.sfunc(df)
@@ -679,7 +692,7 @@ class Agent(AbsAgent):
         #self.fetch_trade()     
         self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
-        file_prefix = self.folder + self.name + "\\"
+        file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
         if len(keys) > 1:
@@ -709,7 +722,7 @@ class Agent(AbsAgent):
         self.logger.debug(u'查询命令序列长度:%s' % (len(self.qry_commands),))
         
     def get_eod_positions(self):
-        file_prefix = self.folder + self.name + "\\"
+        file_prefix = self.folder
         last_bday = workdays.workday(self.scur_day, -1, misc.CHN_Holidays)
         self.logger.info('Starting; getting EOD position for %s' % last_bday.strftime('%y%m%d'))
         logfile = file_prefix + 'EOD_Pos_' + last_bday.strftime('%y%m%d')+'.csv'
@@ -730,7 +743,7 @@ class Agent(AbsAgent):
         return True
     
     def save_eod_positions(self):
-        file_prefix = self.folder + self.name + "\\"
+        file_prefix = self.folder
         logfile = file_prefix + 'EOD_Pos_' + self.scur_day.strftime('%y%m%d')+'.csv'
         self.logger.info('EOD process: saving EOD position for %s' % self.scur_day.strftime('%y%m%d'))
         with open(logfile,'wb') as log_file:
@@ -761,7 +774,7 @@ class Agent(AbsAgent):
             保存环境
         '''
         self.logger.info(u'保存执行状态.....................')
-        file_prefix = self.folder + self.name  + "\\"
+        file_prefix = self.folder
         order.save_order_list(self.scur_day, self.ref2order, file_prefix)
         order.save_trade_list(self.scur_day, self.etrades, file_prefix)
         return
@@ -779,16 +792,19 @@ class Agent(AbsAgent):
         if self.scur_day < tick.timestamp.date():
             self.scur_day = tick.timestamp.date()
             self.day_finalize(self.instruments.keys())
+            
         
         if (curr_tick < self.instruments[inst].start_tick_id-5):
             return False
         if (curr_tick > self.instruments[inst].last_tick_id+5):
             return False
-            
-        if (self.instruments[inst].last_update >= tick.timestamp):
+        
+        update_tick = get_tick_id(self.instruments[inst].last_update)
+        if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
+                ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick > curr_tick))):
             self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
             return False
-        
+                
         if self.tick_id < curr_tick:
             self.tick_id = curr_tick
         self.instruments[tick.instID].last_update = tick.timestamp
@@ -818,7 +834,7 @@ class Agent(AbsAgent):
             return False
         
         if self.cur_day[inst]['date'] != tick_dt.date():
-            self.logger.warning('the daily data date is not same as tick data')
+            self.logger.warning('the daily data date is not same as tick data, daily data=%s, tick data-%s' % (self.cur_day[inst]['date'], tick_dt.date()))
             return False
         
         if (tick_id - self.instruments[inst].start_tick_id < 10) and (self.cur_day[inst]['open']==0.0):
@@ -875,24 +891,28 @@ class Agent(AbsAgent):
                 s_start = self.cur_min[inst]['datetime'] - datetime.timedelta(minutes=m)
                 slices = df[df.index>s_start]
                 new_data = {'open':slices['open'][0],'high':max(slices['high']), \
-                            'low': min(slices['low']),'close': slice['close'][-1],\
-                            'volume': sum(slices['volume'])}
-                df_m.loc[slices.index[0]] = pd.Series(new_data)
+                            'low': min(slices['low']),'close': slices['close'][-1],\
+                            'volume': sum(slices['volume']), 'min_id':slices['min_id'][0]}
+                df_m.loc[s_start] = pd.Series(new_data)
+                print df_m.loc[s_start]
             if mins % m == 0:
                 for fobj in self.min_data_func[m]:
                     fobj.rfunc(df_m)
+            if m > 1 and mins % m == 0:
+                print df_m.ix[-1]
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
             mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
         
     def day_finalize(self, insts):
+        self.logger.info('finalizing the day for data and save positions')
         for inst in insts:
             if (len(self.tick_data[inst]) > 0) :
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                 self.cur_min[inst]['openInterest'] = last_tick.openInterest
                 self.min_switch(inst)
-            
+
             if self.cur_day[inst]['close'] > 0:
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
@@ -910,8 +930,16 @@ class Agent(AbsAgent):
             self.save_eod_positions()
             self.etrades = []
             self.ref2order = {}
+        for strat in self.strategies:
+            strat.day_finalize()
 
+    def add_strategy(self, strat):
+        self.append(strat)
+        strat.agent = self
+        strat.initialize()
+         
     def day_switch(self,scur_day):  #重新初始化opener
+        self.logging.info('switching the trading day from %s to %s' % (self.scur_day, scur_day))
         self.scur_day = scur_day
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
@@ -1014,10 +1042,6 @@ class Agent(AbsAgent):
         self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
         #if r < 0:
         #    self.qry_commands.append(self.fetch_trade)
-
-    ##交易处理
-    def run_strats(self, ctick):
-        pass
     
     def RtnTick(self,ctick):#行情处理主循环
         if (not self.update_instrument(ctick)):
@@ -1028,7 +1052,8 @@ class Agent(AbsAgent):
         # lock the trade processing to avoid position conflict
         if not self.proc_lock:
             self.proc_lock = True
-            self.run_strats(ctick)  
+            for strat in self.strategies:
+                strat.run(ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1
@@ -1476,12 +1501,15 @@ def make_user(my_agent,hq_user):
     user.Init()
 
 
-def create_trader(trader_cfg, instruments, agent_name, tday=datetime.date.today()):
+def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.date.today()):
     logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
 
     logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
-
-    myagent = Agent(agent_name, None, None, instruments, tday) 
+    strategies = strat_cfg['strategies']
+    folder = strat_cfg['folder']
+    daily_days = strat_cfg['daily_data_days']
+    min_days = strat_cfg['min_data_days']
+    myagent = Agent(agent_name, None, None, instruments, strategies, tday, folder, daily_days, min_days) 
     myagent.trader = trader = TraderSpiDelegate(instruments=myagent.instruments, 
                              broker_id=trader_cfg.broker_id,
                              investor_id= trader_cfg.investor_id,
@@ -1497,10 +1525,134 @@ def create_trader(trader_cfg, instruments, agent_name, tday=datetime.date.today(
     
     return trader, myagent
 
-def create_agent(agent_name, usercfg, tradercfg, insts, tday = datetime.date.today()):
-    trader, my_agent = create_trader(tradercfg, insts, agent_name, tday)
+def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = datetime.date.today()):
+    trader, my_agent = create_trader(tradercfg, insts, strat_cfg, agent_name, tday)
     make_user(my_agent,usercfg)
     return my_agent
+
+def test_main(name='test_trade'):
+    '''
+    import agent
+    trader,myagent = agent.trade_test_main()
+    #开仓
+    
+    ##释放连接
+    trader.RegisterSpi(None)
+    '''
+    name='test_trade'
+    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+
+    prod_user = BaseObject( broker_id="8070", 
+                                 investor_id="*", 
+                                 passwd="*", 
+                                 port="tcp://zjzx-md11.ctp.shcifco.com:41213")
+    prod_trader = BaseObject( broker_id="8070", 
+                                   investor_id="750305", 
+                                   passwd="801289", 
+                                   ports= ["tcp://zjzx-front12.ctp.shcifco.com:41205", 
+                                           "tcp://zjzx-front12.ctp.shcifco.com:41205",
+                                           "tcp://zjzx-front13.ctp.shcifco.com:41205"])
+    wkend_trader = BaseObject( broker_id="8070", 
+                                   investor_id="750305", 
+                                   passwd="801289", 
+                                   ports= ["tcp://zjzx-front20.ctp.shcifco.com:41205"] )
+    test_user = BaseObject( broker_id="8000", 
+                                 investor_id="*", 
+                                 passwd="*", 
+                                 port="tcp://qqfz-md1.ctp.shcifco.com:32313"
+                                 )
+    test_trader = BaseObject( broker_id="8000", 
+                                 investor_id="24661668", 
+                                 passwd ="121862", 
+                                 ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305",
+                                           "tcp://qqfz-front2.ctp.shcifco.com:32305",
+                                           "tcp://qqfz-front3.ctp.shcifco.com:32305"])
+    
+    insts = ['cu1411','cu1412']
+    trader_cfg = prod_trader
+    user_cfg = prod_user
+    agent_name = name
+    tday = datetime.date(2014,10,8)
+    strategies = []
+    test_strat = strat.Strategy('TestStrat', insts)
+    test_strat.daily_func = [ 
+                BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
+                BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
+                BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
+                BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20)),\
+                BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
+                BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
+                BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))]    
+    test_strat.min_func = {}
+    strategies.append(test_strat)
+    strat_cfg = {'strategies': strategies, \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':80, \
+                 'min_data_days':5 }
+    myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
+    try:
+        myagent.resume()
+
+# position/trade test        
+        myagent.positions['cu1412'].pos_yday.long  = 0
+        myagent.positions['cu1412'].pos_yday.short = 0
+        myagent.positions['cu1411'].pos_yday.long  = 0
+        myagent.positions['cu1411'].pos_yday.short = 0
+        
+        #myagent.positions['IF1409'].re_calc()
+        #myagent.positions['IF1412'].re_calc()        
+        
+        valid_time = myagent.tick_id + 100
+        etrade =  order.ETrade( ['cu1412'], [1], [ApiStruct.OPT_AnyPrice], 47340, [0], valid_time, test_strat.name, myagent.name)
+        myagent.submit_trade(etrade)
+        myagent.process_trade_list() 
+        
+        #myagent.tick_id = valid_time - 10
+        #for o in myagent.positions['ag1506'].orders:
+        #    o.on_trade(2000,o.volume,141558400)
+            #o.on_trade(2010,1,141558500)
+        #myagent.process_trade_list() 
+        myagent.positions['cu1411'].re_calc()
+        myagent.positions['cu1412'].re_calc()
+        #orders = [iorder for iorder in myagent.positions['ag1412'].orders]
+        #myagent.tick_id = valid_time + 10
+        #myagent.process_trade_list()
+        #for o in orders: 
+        #    o.on_cancel()
+        myagent.process_trade_list()
+        print myagent.etrades
+
+# order test
+#         iorder = order.Order(myagent.positions['ag1412'], 
+#                              4100, 1, myagent.tick_id, 
+#                              ApiStruct.OF_Open, 
+#                              ApiStruct.D_Buy, 
+#                              ApiStruct.OPT_LimitPrice, {} )
+#         myagent.send_order(iorder)
+#         myagent.ref2order[iorder.order_ref] = iorder
+#         myagent.cancel_order(iorder)
+#         print iorder.status        
+        #测试报单
+#         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=1)
+#         myagent.open_position(morder)
+#         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=20)
+#         
+#         #平仓
+#         corder = agent.BaseObject(instrument='IF1103',direction='1',order_ref=myagent.inc_order_ref(),price=3220,volume=1)
+#         myagent.close_position(corder)
+#         
+#         cref = myagent.inc_order_ref()
+#         morder = agent.BaseObject(instrument='IF1104',direction='0',order_ref=cref,price=3180,volume=1)
+#         myagent.open_position(morder)
+#         
+#         rorder = agent.BaseObject(instrument='IF1103',order_ref=cref)
+#         myagent.cancel_command(rorder)
+        
+#        while 1: time.sleep(1)
+    except KeyboardInterrupt:
+        myagent.mdapis = [] 
+        myagent.trader = None    
+
 
 if __name__=="__main__":
     test_main()

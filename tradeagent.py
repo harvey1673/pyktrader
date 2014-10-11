@@ -118,9 +118,10 @@ class MdSpiDelegate(MdApi):
         try:
             if dp.LastPrice > 999999 or dp.LastPrice < 0.1:
                 self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
+                return
             if dp.InstrumentID not in self.instruments:
                 self.logger.warning(u'MD:收到未订阅的行情:%s' %(dp.InstrumentID,))
-                
+                return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
             if len(dp.TradingDay.strip()) > 0:
                 timestr = str(dp.TradingDay) + ' ' + timestr
@@ -789,19 +790,21 @@ class Agent(AbsAgent):
             return False
         
         if self.scur_day < tick.timestamp.date():
-            self.day_finalize(self.instruments.keys())
             self.scur_day = tick.timestamp.date()
+            self.day_finalize(self.instruments.keys())
+            
         
         if (curr_tick < self.instruments[inst].start_tick_id-5):
             return False
         if (curr_tick > self.instruments[inst].last_tick_id+5):
             return False
         
-        update_tick = get_tick_id(self.instruments[inst].last_update)    
-        if (self.instruments[inst].last_update.date() > tick.timestamp.date() or update_tick > curr_tick):
+        update_tick = get_tick_id(self.instruments[inst].last_update)
+        if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
+                ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick > curr_tick))):
             self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
             return False
-        
+                
         if self.tick_id < curr_tick:
             self.tick_id = curr_tick
         self.instruments[tick.instID].last_update = tick.timestamp
@@ -831,7 +834,7 @@ class Agent(AbsAgent):
             return False
         
         if self.cur_day[inst]['date'] != tick_dt.date():
-            self.logger.warning('the daily data date is not same as tick data')
+            self.logger.warning('the daily data date is not same as tick data, daily data=%s, tick data-%s' % (self.cur_day[inst]['date'], tick_dt.date()))
             return False
         
         if (tick_id - self.instruments[inst].start_tick_id < 10) and (self.cur_day[inst]['open']==0.0):
@@ -902,6 +905,7 @@ class Agent(AbsAgent):
             mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
         
     def day_finalize(self, insts):
+        self.logger.info('finalizing the day for data and save positions')
         for inst in insts:
             if (len(self.tick_data[inst]) > 0) :
                 last_tick = self.tick_data[inst][-1]
@@ -935,6 +939,7 @@ class Agent(AbsAgent):
         strat.initialize()
          
     def day_switch(self,scur_day):  #重新初始化opener
+        self.logging.info('switching the trading day from %s to %s' % (self.scur_day, scur_day))
         self.scur_day = scur_day
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
