@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import backtest as sim
 import datetime
+import openpyxl
+import os
 
 def simtrade2dict(simtrade):
     trade = {}
@@ -19,8 +21,9 @@ def simtrade2dict(simtrade):
     trade['is_closed'] = simtrade.is_closed
     return trade
     
-def turtle_sim( assets, start_date, end_date, nearby=1 ):
+def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals = [20,10] ):
     NN = 2
+    histdays = '-' + str(signals[0]+5) + 'd'
     NO_OPEN_POS_PROTECT = 30
     start_idx = 0
     ddata = {}
@@ -29,8 +32,8 @@ def turtle_sim( assets, start_date, end_date, nearby=1 ):
     trades = {}
     atr_dict = {}
     for pc in assets:
-        ddata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, '-20b', 'd', '-25b')
-        mdata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, '-20b', 'm', '-1b')
+        ddata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, rollrule, 'd', histdays)
+        mdata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, rollrule, 'm', '-1b')
         res = {}
         all_trades = {}
         for i in range(len(ddata[pc])):
@@ -38,20 +41,20 @@ def turtle_sim( assets, start_date, end_date, nearby=1 ):
             mdf = mdata[pc][i]['data']
             cont = ddata[pc][i]['contract']
             res[cont] = {}
-            ts = dh.ATR(ddf, n=20)
-            ddf = ddf.join(ts)
-            ts = dh.DONCH_H(ddf, 20)
-            ddf = ddf.join(ts)
-            ts = dh.DONCH_L(ddf, 20)
-            ddf = ddf.join(ts)
-            ts = dh.DONCH_H(ddf, 10)
-            ddf = ddf.join(ts)
-            ts = dh.DONCH_L(ddf, 10)
+#             ts = dh.ATR(ddf, n=20)
+#             ddf = ddf.join(ts)
+#             ts = dh.DONCH_H(ddf, 55)
+#             ddf = ddf.join(ts)
+#             ts = dh.DONCH_L(ddf, 55)
+#             ddf = ddf.join(ts)
+#             ts = dh.DONCH_H(ddf, 20)
+#             ddf = ddf.join(ts)
+#             ts = dh.DONCH_L(ddf, 20)
             ddf['ATR_20'] = pd.Series(dh.ATR(ddf, n=20).shift(1))
-            ddf['OL_1'] = pd.Series(dh.DONCH_H(ddf, 20).shift(1))
-            ddf['OS_1'] = pd.Series(dh.DONCH_L(ddf, 20).shift(1))
-            ddf['CL_1'] = pd.Series(dh.DONCH_L(ddf, 10).shift(1))
-            ddf['CS_1'] = pd.Series(dh.DONCH_H(ddf, 10).shift(1))
+            ddf['OL_1'] = pd.Series(dh.DONCH_H(ddf, signals[0]).shift(1))
+            ddf['OS_1'] = pd.Series(dh.DONCH_L(ddf, signals[0]).shift(1))
+            ddf['CL_1'] = pd.Series(dh.DONCH_L(ddf, signals[1]).shift(1))
+            ddf['CS_1'] = pd.Series(dh.DONCH_H(ddf, signals[1]).shift(1))
             #df['OL_2'] = pd.concat([df.DONCH_H55.shift(1), df.open], join='outer', axis=1).max(axis=1)
             #df['OS_2'] = pd.concat([df.DONCH_L55.shift(1), df.open], join='outer', axis=1).min(axis=1)
             #df['CL_2'] = pd.concat([df.DONCH_L20.shift(1), df.open], join='outer', axis=1).min(axis=1)
@@ -144,7 +147,12 @@ def turtle_sim( assets, start_date, end_date, nearby=1 ):
     return (results, trades)
 
 def save_sim_results(filename, res, trades):
-    xlwriter = pd.ExcelWriter(filename)
+    if os.path.isfile(filename):
+        book = openpyxl.load_workbook(filename)
+    xlwriter = pd.ExcelWriter(filename) 
+    if os.path.isfile(filename):
+        xlwriter.book = book
+        xlwriter.sheets = dict((ws.title, ws) for ws in book.worksheets)
     for pc in res:
         df = res[pc]
         df.to_excel(xlwriter, pc+'_stats')
@@ -154,18 +162,18 @@ def save_sim_results(filename, res, trades):
     return
     
 if __name__=="__main__":
-    filename = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle20_20broll.xlsx'
-    (res, trades) = turtle_sim( ['m','y','a','p','v','l','ru','rb','au'], datetime.date(2010,9,1), datetime.date(2014,7,28), 1 )
-    save_sim_results(filename, res, trades)
-    (res, trades) = turtle_sim( ['cu','al','zn'], datetime.date(2011,1,2), datetime.date(2014,7,28), 3 )
-    save_sim_results(filename, res, trades)
-    (res, trades) = turtle_sim( ['pb'], datetime.date(2011,11,1), datetime.date(2014,7,28), 3 )
-    save_sim_results(filename, res, trades)
-    (res, trades) = turtle_sim( ['ag'], datetime.date(2012,7,1), datetime.date(2014,7,28), 1 )
-    save_sim_results(filename, res, trades)
-    (res, trades) = turtle_sim( ['i'], datetime.date(2014,1,2), datetime.date(2014,7,28), 1 )
-    save_sim_results(filename, res, trades)
-    (res, trades) = turtle_sim( ['j'], datetime.date(2011,6,1), datetime.date(2014,7,28), 1 )
-    save_sim_results(filename, res, trades)
-    (res, trades) = turtle_sim( ['jm'], datetime.date(2013,5,1), datetime.date(2014,7,28), 1 )
-    save_sim_results(filename, res, trades)
+    rollrule = '-20b'
+    commod_list= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm']
+    start_dates = [datetime.date(2010,9,1)] * 12 + \
+                [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
+    end_date = datetime.date(2014,7,28)
+    systems = [[20,10],[55,20],[15,5],[40,20]]
+    for sys in systems:
+        filename = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_%s_R20b.xlsx' % sys[0]
+        for cmd,sdate in zip(commod_list, start_dates):
+            nearby = 1
+            if cmd in ['cu','al','zn']:
+                nearby = 2
+            (res, trades) = turtle_sim( [cmd], sdate, end_date, nearby = nearby, rollrule = rollrule, signals = sys )
+            print 'saving results for cmd = %s, sys= %s' % (cmd, sys[0])
+            save_sim_results(filename, res, trades)
