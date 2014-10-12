@@ -6,6 +6,7 @@ import backtest as sim
 import datetime
 import openpyxl
 import os
+import backtest
 
 def simtrade2dict(simtrade):
     trade = {}
@@ -114,16 +115,18 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
                     mdf.ix[dd, 'pos'] = sum( [trade.pos for trade in curr_pos] )    
             mdf['pnl'] = mdf['pos'].shift(1)*(mdf['close'] - mdf['close'].shift(1))
             mdf['cum_pnl'] = mdf['pnl'].cumsum()
-            #drawdown_i = np.argmax(np.maximum.accumulate(mdf['cum_pnl']) - mdf['cum_pnl'])
+            #max_dd, max_dur = backtest.max_drawdown(mdf['cum_pnl'])
             #drawdown_j = np.argmax(mdf['cum_pnl'][:drawdown_i])
             daily_pnl = pd.Series(mdf['pnl']).resample('1d',how='sum')
             daily_pnl.name = 'dailyPNL'
+            cum_pnl = daily_pnl.cumsum()
+            max_dd, max_dur = backtest.max_drawdown(cum_pnl)
             res[cont]['avg_pnl'] = daily_pnl.mean()
             res[cont]['std_pnl'] = daily_pnl.std()
             res[cont]['tot_pnl'] = daily_pnl.sum()
             res[cont]['num_days'] = len(daily_pnl)
-            #res[cont]['drawdown_i'] =  drawdown_i
-            #res[cont]['drawdown_j'] =  drawdown_j
+            #res[cont]['max_drawdown'] =  max_dd
+            #res[cont]['max_dd_period'] =  max_dur
             res[cont]['n_trades'] = len(closed_trades)
             res[cont]['all_profit'] = sum([trade.profit for trade in closed_trades])
             res[cont]['win_profit'] = sum([trade.profit for trade in closed_trades if trade.profit>0])
@@ -162,9 +165,9 @@ def save_sim_results(filename, res, trades):
     return
     
 if __name__=="__main__":
-    rollrule = '-20b'
+    rollrule = '-30b'
     commod_list= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm']
-    start_dates = [datetime.date(2010,9,1)] * 12 + \
+    start_dates = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
     end_date = datetime.date(2014,7,28)
     systems = [[20,10],[55,20],[15,5],[40,20]]

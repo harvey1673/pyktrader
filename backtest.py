@@ -1,5 +1,6 @@
 import datetime
 import pandas as pd
+import numpy as np
 
 class SimTrade(object):
 	def __init__(self, inst='', entry=0, pos=0, pexit=0, start_time=None):
@@ -52,9 +53,16 @@ def create_drawdowns(ts):
 	# Loop over the index range
 	for idx, t in enumerate(ts_idx):
 		if idx > 0:
-			cur_hwm = max(hwm[last_t], ts_idx[t])
+			cur_hwm = max(hwm[last_t], ts_idx[idx])
 			hwm[t] = cur_hwm
 			drawdown[t]= hwm[t] - ts[t]
 			duration[t]= 0 if drawdown[t] == 0 else duration[last_t] + 1
 		last_t = t
 	return drawdown.max(), duration.max()
+
+def max_drawdown(ts):
+	i = np.argmax(np.maximum.accumulate(ts)-ts)
+	j = np.argmax(ts[:i])
+	max_dd = ts[i] - ts[j]
+	max_duration = (i - j).days
+	return max_dd, max_duration
