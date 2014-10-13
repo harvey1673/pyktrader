@@ -474,7 +474,7 @@ class Instrument(object):
         self.bid_vol1 = 0
         self.last_traded = datetime.datetime.now()
         self.max_holding = (10, 10)
-        #self.is_busy = False
+        self.is_busy = False
     
     def get_inst_info(self):
         self.product = misc.inst2product(self.name)
@@ -784,7 +784,7 @@ class Agent(AbsAgent):
         if inst not in self.instruments:
             self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
             return False
-        
+
         curr_tick = get_tick_id(tick.timestamp)
         if self.scur_day > tick.timestamp.date():
             return False
@@ -821,15 +821,13 @@ class Agent(AbsAgent):
             self.instruments[tick.instID].low    = tick.low
             self.instruments[tick.instID].volume = tick.volume
             self.instruments[tick.instID].last_traded = tick.timestamp
-        
         return True
         
     def update_hist_data(self, tick):
+        inst = tick.instID
         tick_dt = tick.timestamp
         tick_id = get_tick_id(tick_dt)
         tick_min = math.ceil(tick_id/1000.0)
-        inst = tick.instID
-
         if ((self.cur_min[tick.instID]['datetime'].date() > tick_dt.date()) or (self.cur_min[tick.instID]['min_id'] > tick_min)):
             return False
         
@@ -837,47 +835,56 @@ class Agent(AbsAgent):
             self.logger.warning('the daily data date is not same as tick data, daily data=%s, tick data-%s' % (self.cur_day[inst]['date'], tick_dt.date()))
             return False
         
-        if (tick_id - self.instruments[inst].start_tick_id < 10) and (self.cur_day[inst]['open']==0.0):
-            self.cur_day[inst]['open']=tick.price
-        
-        self.cur_day[inst]['close'] = tick.price
-        self.cur_day[inst]['high']  = tick.high
-        self.cur_day[inst]['low']   = tick.low
-        self.cur_day[inst]['openInterest'] = tick.openInterest
-        self.cur_day[inst]['volume'] = tick.volume
-        self.cur_day[inst]['date'] = tick.timestamp.date()
-        
-        if (tick_min == self.cur_min[inst]['min_id']):
-            self.tick_data[inst].append(tick)
-            self.cur_min[inst]['close'] = tick.price
-            if self.cur_min[inst]['high'] < tick.price:
-                self.cur_min[inst]['high'] = tick.price
-            if self.cur_min[inst]['low'] > tick.price:
-                self.cur_min[inst]['low'] = tick.price
+
+        if self.instruments[inst].is_busy:
+            return False
         else:
-            if (len(self.tick_data[inst]) > 0) :
-                last_tick = self.tick_data[inst][-1]
-                self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                self.min_switch(inst)                
-                self.cur_min[inst]['volume'] = last_tick.volume                    
-            else:
-                self.cur_min[inst]['volume'] = 0
-            
-            self.tick_data[inst] = []
-            self.cur_min[inst]['open']  = tick.price
-            self.cur_min[inst]['close'] = tick.price
-            self.cur_min[inst]['high']  = tick.price
-            self.cur_min[inst]['low']   = tick.price
-            self.cur_min[inst]['min_id']  = tick_min
-            self.cur_min[inst]['openInterest'] = tick.openInterest
-            self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
-            if ((tick_min>0) and (tick.price>0)): 
-                self.tick_data[inst].append(tick)
+            self.instruments[inst].is_busy = True        
         
-        if tick_id > self.instruments[inst].last_tick_id-5:
-            self.day_finalize([inst])
-                       
+        try:
+            if (tick_id - self.instruments[inst].start_tick_id < 10) and (self.cur_day[inst]['open']==0.0):
+                self.cur_day[inst]['open']=tick.price
+            
+            self.cur_day[inst]['close'] = tick.price
+            self.cur_day[inst]['high']  = tick.high
+            self.cur_day[inst]['low']   = tick.low
+            self.cur_day[inst]['openInterest'] = tick.openInterest
+            self.cur_day[inst]['volume'] = tick.volume
+            self.cur_day[inst]['date'] = tick.timestamp.date()
+            
+            if (tick_min == self.cur_min[inst]['min_id']):
+                self.tick_data[inst].append(tick)
+                self.cur_min[inst]['close'] = tick.price
+                if self.cur_min[inst]['high'] < tick.price:
+                    self.cur_min[inst]['high'] = tick.price
+                if self.cur_min[inst]['low'] > tick.price:
+                    self.cur_min[inst]['low'] = tick.price
+            else:
+                if (len(self.tick_data[inst]) > 0) :
+                    last_tick = self.tick_data[inst][-1]
+                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
+                    self.min_switch(inst)                
+                    self.cur_min[inst]['volume'] = last_tick.volume                    
+                else:
+                    self.cur_min[inst]['volume'] = 0
+                
+                self.tick_data[inst] = []
+                self.cur_min[inst]['open']  = tick.price
+                self.cur_min[inst]['close'] = tick.price
+                self.cur_min[inst]['high']  = tick.price
+                self.cur_min[inst]['low']   = tick.price
+                self.cur_min[inst]['min_id']  = tick_min
+                self.cur_min[inst]['openInterest'] = tick.openInterest
+                self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
+                if ((tick_min>0) and (tick.price>0)): 
+                    self.tick_data[inst].append(tick)
+            
+            if tick_id > self.instruments[inst].last_tick_id-5:
+                self.day_finalize([inst])
+        except:
+            pass
+        self.instruments[inst].is_busy = False               
         return True  
     
     def min_switch(self, inst):
@@ -1489,16 +1496,16 @@ class SaveAgent(Agent):
         
 def make_user(my_agent,hq_user):
     #print my_agent.instruments
-    user = MdSpiDelegate(instruments=my_agent.instruments, 
+    for port in hq_user.ports:
+        user = MdSpiDelegate(instruments=my_agent.instruments, 
                              broker_id=hq_user.broker_id,
                              investor_id= hq_user.investor_id,
                              passwd= hq_user.passwd,
                              agent = my_agent,
                     )
-    user.Create(my_agent.name)
-    user.RegisterFront(hq_user.port)
-    
-    user.Init()
+        user.Create(my_agent.name)
+        user.RegisterFront(port)
+        user.Init()
 
 
 def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.date.today()):

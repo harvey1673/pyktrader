@@ -117,18 +117,26 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
             mdf['cum_pnl'] = mdf['pnl'].cumsum()
             #max_dd, max_dur = backtest.max_drawdown(mdf['cum_pnl'])
             #drawdown_j = np.argmax(mdf['cum_pnl'][:drawdown_i])
-            daily_pnl = pd.Series(mdf['pnl']).resample('1d',how='sum')
+            daily_pnl = pd.Series(mdf['pnl']).resample('1d',how='sum').dropna()
             daily_pnl.name = 'dailyPNL'
             cum_pnl = daily_pnl.cumsum()
-            max_dd, max_dur = backtest.max_drawdown(cum_pnl)
             res[cont]['avg_pnl'] = daily_pnl.mean()
             res[cont]['std_pnl'] = daily_pnl.std()
             res[cont]['tot_pnl'] = daily_pnl.sum()
             res[cont]['num_days'] = len(daily_pnl)
-            #res[cont]['max_drawdown'] =  max_dd
-            #res[cont]['max_dd_period'] =  max_dur
+            if res[cont]['num_days']> 0:
+                res[cont]['sharp_ratio'] = res[cont]['avg_pnl']/res[cont]['std_pnl']*np.sqrt(252.0)
+            else:
+                res[cont]['sharp_ratio'] = 0
+            max_dd, max_dur = backtest.max_drawdown(cum_pnl)
+            res[cont]['max_drawdown'] =  max_dd
+            res[cont]['max_dd_period'] =  max_dur
             res[cont]['n_trades'] = len(closed_trades)
             res[cont]['all_profit'] = sum([trade.profit for trade in closed_trades])
+            if abs(max_dd) > 0:
+                res[cont]['profit_dd_ratio'] = res[cont]['all_profit']/abs(max_dd)
+            else:
+                res[cont]['profit_dd_ratio'] = 0
             res[cont]['win_profit'] = sum([trade.profit for trade in closed_trades if trade.profit>0])
             res[cont]['loss_profit'] = sum([trade.profit for trade in closed_trades if trade.profit<0])
             res[cont]['num_win'] = len([trade.profit for trade in closed_trades if trade.profit>0])
@@ -170,7 +178,7 @@ if __name__=="__main__":
     start_dates = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
     end_date = datetime.date(2014,7,28)
-    systems = [[20,10],[55,20],[15,5],[40,20]]
+    systems = [[20,10],[15,7],[40,20],[55,20]]
     for sys in systems:
         filename = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_%s_R20b.xlsx' % sys[0]
         for cmd,sdate in zip(commod_list, start_dates):

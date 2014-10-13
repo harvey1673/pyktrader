@@ -68,7 +68,12 @@ option_insts=['IO1409-C-2500','IO1409-P-2500','IO1409-C-2450','IO1409-P-2450','I
 prod_user = base.BaseObject( broker_id="8070", 
                              investor_id="*", 
                              passwd="*", 
-                             port="tcp://zjzx-md11.ctp.shcifco.com:41213")
+                             ports=[#"tcp://zjzx-md11.ctp.shcifco.com:41213", 
+									#"tcp://zjzx-md12.ctp.shcifco.com:41213",
+									#"tcp://zjzx-md13.ctp.shcifco.com:41213", 
+									#"tcp://zjzx-md14.ctp.shcifco.com:41213",
+									"tcp://zjzx-md1.ctp.shcifco.com:41213", 
+									"tcp://zjzx-md15.ctp.shcifco.com:41213"])
 prod_trader = base.BaseObject( broker_id="8070", 
                                investor_id="750305", 
                                passwd="801289", 
@@ -76,7 +81,7 @@ prod_trader = base.BaseObject( broker_id="8070",
 test_user = base.BaseObject( broker_id="8000", 
                              investor_id="*", 
                              passwd="*", 
-                             port="tcp://qqfz-md1.ctp.shcifco.com:32313"
+                             ports=["tcp://qqfz-md1.ctp.shcifco.com:32313"]
                              )
 test_trader = base.BaseObject( broker_id="8000", 
                              investor_id="24661668", 
