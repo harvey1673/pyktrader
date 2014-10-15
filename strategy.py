@@ -10,11 +10,11 @@ import logging
 sign = lambda x: math.copysign(1, x)
 
 class Strategy(object):
-	def __init__(self, name, instIDs, scaler=1, agent = None):
+	def __init__(self, name, instIDs, ttype='t', agent = None):
 		self.name = name
 		self.instIDs = instIDs
 		self.agent = agent
-		self.pos_scaling = scaler
+		self.trigger_type = ttype 
 		self.trade_unit = dict([(inst, 1) for inst in instIDs])
 		self.positions  = dict([(inst, []) for inst in instIDs])
 		self.daily_func = []
@@ -47,7 +47,7 @@ class Strategy(object):
 		self.save_state()
 		pass
 		
-	def run(self, ctick):
+	def run(self, inst, ctick=[]):
 		pass
 	
 	def liquidate(self):
@@ -64,8 +64,8 @@ class Strategy(object):
 	
 	
 class TurtleTrader(Strategy):
-	def __init__(self, name, instIDs,  scaler = 1, agent = None):
-		Strategy.__init__(name, instIDs, scaler, agent)
+	def __init__(self, name, instIDs,  capital, ttype = 't', agent = None):
+		Strategy.__init__(name, instIDs, ttype, agent)
 		self.daily_func = [ 
 				BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
 				BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
@@ -74,6 +74,7 @@ class TurtleTrader(Strategy):
 				BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
 				BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
 				BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))]	
+		self.capital = capital 
 		self.min_func = {}
 		self.pos_ratio = 0.01
 		self.stop_loss = 2.0
@@ -88,7 +89,7 @@ class TurtleTrader(Strategy):
 	def load_state(self):
 		pass	
 	
-	def run(self, ctick):
+	def run(self, inst, ctick):
 		inst = ctick.instID
 		df = self.agent.day_data[inst]
 		cur_atr = df.ix[-1,'ATR_20']
@@ -195,4 +196,4 @@ class TurtleTrader(Strategy):
 			if self.positions[inst] == 0: 
 				pinst  = self.agent.instruments[inst]
 				df  = self.agent.day_data[inst]				
-				self.trade_unit = int(self.pos_scaling * 1000000*self.pos_ratio /(pinst.multiple*df.ix[-1,'ATR_20']))
+				self.trade_unit = int(self.capital*self.pos_ratio/(pinst.multiple*df.ix[-1,'ATR_20']))

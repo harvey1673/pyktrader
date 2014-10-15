@@ -907,6 +907,9 @@ class Agent(AbsAgent):
                     fobj.rfunc(df_m)
             if m > 1 and mins % m == 0:
                 print df_m.ix[-1]
+        for strat in self.strategies:
+            if strat.trigger_type == 'm' and inst in strat.instIDs:
+                strat.run(inst)
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
             mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
@@ -1060,7 +1063,8 @@ class Agent(AbsAgent):
         if not self.proc_lock:
             self.proc_lock = True
             for strat in self.strategies:
-                strat.run(ctick)  
+                if strat.trigger_type == 't':
+                    strat.run(ctick.instID, ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1
