@@ -1556,7 +1556,7 @@ def test_main(name='test_trade'):
     prod_user = BaseObject( broker_id="8070", 
                                  investor_id="*", 
                                  passwd="*", 
-                                 port="tcp://zjzx-md11.ctp.shcifco.com:41213")
+                                 ports=["tcp://zjzx-md11.ctp.shcifco.com:41213"])
     prod_trader = BaseObject( broker_id="8070", 
                                    investor_id="750305", 
                                    passwd="801289", 
@@ -1570,51 +1570,50 @@ def test_main(name='test_trade'):
     test_user = BaseObject( broker_id="8000", 
                                  investor_id="*", 
                                  passwd="*", 
-                                 port="tcp://qqfz-md1.ctp.shcifco.com:32313"
+                                 ports=["tcp://qqfz-md1.ctp.shcifco.com:32313"]
                                  )
     test_trader = BaseObject( broker_id="8000", 
                                  investor_id="24661668", 
                                  passwd ="121862", 
-                                 ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305",
-                                           "tcp://qqfz-front2.ctp.shcifco.com:32305",
-                                           "tcp://qqfz-front3.ctp.shcifco.com:32305"])
+                                 ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305"])
     
-    insts = ['cu1411','cu1412']
-    trader_cfg = prod_trader
-    user_cfg = prod_user
+    insts = ['IF1411','IF1412']
+    trader_cfg = test_trader
+    user_cfg = test_user
     agent_name = name
-    tday = datetime.date(2014,10,8)
+    tday = datetime.date(2014,10,21)
     strategies = []
     test_strat = strat.Strategy('TestStrat', insts)
-    test_strat.daily_func = [ 
-                BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
-                BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
-                BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
-                BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20)),\
-                BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
-                BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
-                BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))]    
+    test_strat.daily_func = [] 
+                #BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
+                #BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
+                #BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
+                #BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20)),\
+                #BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
+                #BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
+                #BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))
+                #]    
     test_strat.min_func = {}
     strategies.append(test_strat)
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':80, \
-                 'min_data_days':5 }
+                 'daily_data_days':0, \
+                 'min_data_days':0 }
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
     try:
         myagent.resume()
 
 # position/trade test        
-        myagent.positions['cu1412'].pos_yday.long  = 0
-        myagent.positions['cu1412'].pos_yday.short = 0
-        myagent.positions['cu1411'].pos_yday.long  = 0
-        myagent.positions['cu1411'].pos_yday.short = 0
+        myagent.positions['IF1412'].pos_tday.long  = 0
+        myagent.positions['IF1412'].pos_tday.short = 0
+        myagent.positions['IF1411'].pos_tday.long  = 0
+        myagent.positions['IF1411'].pos_tday.short = 0
         
         #myagent.positions['IF1409'].re_calc()
         #myagent.positions['IF1412'].re_calc()        
         
-        valid_time = myagent.tick_id + 100
-        etrade =  order.ETrade( ['cu1412'], [1], [ApiStruct.OPT_AnyPrice], 47340, [0], valid_time, test_strat.name, myagent.name)
+        valid_time = myagent.tick_id + 10000
+        etrade =  order.ETrade( ['IF1412','IF1411'], [-1, 1], [ApiStruct.OPT_AnyPrice, ApiStruct.OPT_AnyPrice], -4, [0, 0], valid_time, test_strat.name, myagent.name)
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
@@ -1623,8 +1622,8 @@ def test_main(name='test_trade'):
         #    o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
         #myagent.process_trade_list() 
-        myagent.positions['cu1411'].re_calc()
-        myagent.positions['cu1412'].re_calc()
+        myagent.positions['IF1411'].re_calc()
+        myagent.positions['IF1412'].re_calc()
         #orders = [iorder for iorder in myagent.positions['ag1412'].orders]
         #myagent.tick_id = valid_time + 10
         #myagent.process_trade_list()
