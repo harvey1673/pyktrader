@@ -445,9 +445,7 @@ class Instrument(object):
         '''
         objs = dict([(name,Instrument(name)) for name in names])
         for name in names:
-            objs[name].get_inst_info()
-            objs[name].get_brokerfee()            
-
+            objs[name].get_inst_info()       
         return objs
     
     def __init__(self,name):
@@ -478,26 +476,17 @@ class Instrument(object):
     
     def get_inst_info(self):
         self.product = misc.inst2product(self.name)
- 
-        for exch in misc.product_code.keys():
-            if self.product in misc.product_code[exch]:
-                self.exchange = exch
-                if exch == 'CFFEX':
-                    self.start_tick_id = 1515000
-                    self.last_tick_id  = 2115000
-                else:
-                    self.last_tick_id = 2100000
-                    if self.product in misc.night_session_markets:
-                        self.start_tick_id = 300000
-                    else:
-                        self.start_tick_id = 1500000                
-     
-                self.multiple = misc.product_lotsize[self.product]
-                self.tick_base = misc.product_ticksize[self.product]
-                return
-        
-    def get_brokerfee(self):
-        self.broker_fee = 0
+        prod_info = mysqlaccess.load_product_info(self.product)
+        self.exchange = prod_info['exch']
+        self.start_tick_id =  prod_info['start_min'] * 1000
+        self.last_tick_id =  prod_info['end_min'] * 1000     
+        self.multiple = prod_info['lot_size']
+        self.tick_base = prod_info['tick_size']
+        self.broker_fee = prod_info['broker_fee']
+        return
+    
+    def get_margin_rate(self):
+        self.marginrate = mysqlaccess.load_product_info(self.name)
 
     def calc_margin_amount(self,price,direction):   
         my_marginrate = self.marginrate[0] if direction == ApiStruct.D_Buy else self.marginrate[1]
@@ -642,9 +631,10 @@ class Agent(AbsAgent):
         ##必须先把持仓初始化成配置值或者0
         #time.sleep(12)
         self.qry_commands.append(self.fetch_trading_account)
+
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         #self.qry_commands.append(self.fetch_order)
-        self.qry_commands.append(fcustom(self.fetch_instruments_by_exchange,exchange_id = ''))
+        #self.qry_commands.append(fcustom(self.fetch_instruments_by_exchange,exchange_id = ''))
         #self.qry_commands.append(self.fetch_trade)
         #time.sleep(1)   #保险起见
         self.check_qry_commands()
@@ -778,6 +768,11 @@ class Agent(AbsAgent):
         order.save_order_list(self.scur_day, self.ref2order, file_prefix)
         order.save_trade_list(self.scur_day, self.etrades, file_prefix)
         return
+    
+    def fetch_inst_data(self):
+        for inst in self.instruments:
+            
+        pass
        
     def update_instrument(self, tick):
         inst = tick.instID    
@@ -908,8 +903,8 @@ class Agent(AbsAgent):
             if m > 1 and mins % m == 0:
                 print df_m.ix[-1]
         for strat in self.strategies:
-            if strat.trigger_type == 'm' and inst in strat.instIDs:
-                strat.run(inst)
+            if inst in strat.instIDs:
+                strat.run_min(inst)
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
             mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
@@ -1063,8 +1058,7 @@ class Agent(AbsAgent):
         if not self.proc_lock:
             self.proc_lock = True
             for strat in self.strategies:
-                if strat.trigger_type == 't':
-                    strat.run(ctick.instID, ctick)  
+                strat.run_tick(ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1
@@ -1541,6 +1535,10 @@ def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = dateti
     make_user(my_agent,usercfg)
     return my_agent
 
+class TestStrat(strat.Strategy):
+    def run_min(self, instID):
+        pass
+    
 def test_main(name='test_trade'):
     '''
     import agent
@@ -1581,7 +1579,7 @@ def test_main(name='test_trade'):
     trader_cfg = test_trader
     user_cfg = test_user
     agent_name = name
-    tday = datetime.date(2014,10,21)
+    tday = datetime.date(2014,10,27)
     strategies = []
     test_strat = strat.Strategy('TestStrat', insts)
     test_strat.daily_func = [] 
@@ -1593,7 +1591,9 @@ def test_main(name='test_trade'):
                 #BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
                 #BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))
                 #]    
-    test_strat.min_func = {}
+    test_strat.min_func = {1:[BaseObject(name = 'EMA_3', sfunc=fcustom(data_handler.EMA, n=3), rfunc=fcustom(data_handler.ema, n=3)),
+                              BaseObject(name = 'EMA_30', sfunc=fcustom(data_handler.EMA, n=30), rfunc=fcustom(data_handler.ema, n=30))]
+                           }
     strategies.append(test_strat)
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
@@ -1613,7 +1613,7 @@ def test_main(name='test_trade'):
         #myagent.positions['IF1412'].re_calc()        
         
         valid_time = myagent.tick_id + 10000
-        etrade =  order.ETrade( ['IF1412','IF1411'], [-1, 1], [ApiStruct.OPT_AnyPrice, ApiStruct.OPT_AnyPrice], -4, [0, 0], valid_time, test_strat.name, myagent.name)
+        etrade =  order.ETrade( ['IF1412','IF1411'], [1, -1], [ApiStruct.OPT_LimitPrice, ApiStruct.OPT_LimitPrice], 6, [0, 0], valid_time, test_strat.name, myagent.name)
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         

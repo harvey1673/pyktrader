@@ -10,11 +10,11 @@ import logging
 sign = lambda x: math.copysign(1, x)
 
 class Strategy(object):
-	def __init__(self, name, instIDs, ttype='t', agent = None):
+	def __init__(self, name, instIDs, agent = None):
 		self.name = name
 		self.instIDs = instIDs
 		self.agent = agent
-		self.trigger_type = ttype 
+		#self.trigger_type = ttype 
 		self.trade_unit = dict([(inst, 1) for inst in instIDs])
 		self.positions  = dict([(inst, []) for inst in instIDs])
 		self.daily_func = []
@@ -36,7 +36,10 @@ class Strategy(object):
 					self.agent.register_data_func('d', fobj)
 		for mfreq in self.min_func:
 			if len(self.min_func[mfreq])>0:
-				curr_fobjs = [ fobj.name for fobj in self.agent.min_data_func[mfreq] ]
+				if mfreq in self.agent.min_data_func:
+					curr_fobjs = [ fobj.name for fobj in self.agent.min_data_func[mfreq] ]
+				else:
+					curr_fobjs = []
 				for fobj in self.min_func[mfreq]:
 					if fobj.name not in curr_fobjs:
 						self.agent.register_data_func( str(mfreq) + 'm', fobj)
@@ -47,7 +50,10 @@ class Strategy(object):
 		self.save_state()
 		pass
 		
-	def run(self, inst, ctick=[]):
+	def run_tick(self, ctick):
+		pass
+	
+	def run_min(self, inst):
 		pass
 	
 	def liquidate(self):
@@ -64,8 +70,8 @@ class Strategy(object):
 	
 	
 class TurtleTrader(Strategy):
-	def __init__(self, name, instIDs,  capital, ttype = 't', agent = None):
-		Strategy.__init__(name, instIDs, ttype, agent)
+	def __init__(self, name, instIDs,  capital, agent = None):
+		Strategy.__init__(name, instIDs, agent)
 		self.daily_func = [ 
 				BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
 				BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
@@ -89,7 +95,7 @@ class TurtleTrader(Strategy):
 	def load_state(self):
 		pass	
 	
-	def run(self, inst, ctick):
+	def run_tick(self, inst, ctick):
 		inst = ctick.instID
 		df = self.agent.day_data[inst]
 		cur_atr = df.ix[-1,'ATR_20']
