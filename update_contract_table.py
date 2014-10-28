@@ -1,4 +1,5 @@
 #-*- coding=utf-8 -*-
+"This is the main demo file"
 from ctp.futures import ApiStruct, TraderApi
 import time
 import traceback
@@ -61,13 +62,13 @@ class MyTraderApi(TraderApi):
         self.ReqQrySettlementInfoConfirm(req,self.requestid)
 
     def OnRspQrySettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
-        '''�����ѯ������Ϣȷ����Ӧ'''
-        print u"TD:���㵥ȷ����Ϣ��ѯ��Ӧ:rspInfo=%s,���㵥ȷ��=%s, reqID=%s, isLast=%s" % (pRspInfo,pSettlementInfoConfirm, nRequestID, bIsLast)
+        '''请求查询结算信息确认响应'''
+        print u"TD:结算单确认信息查询响应:rspInfo=%s,结算单确认=%s, reqID=%s, isLast=%s" % (pRspInfo,pSettlementInfoConfirm, nRequestID, bIsLast)
         self.query_settlement_info()
 
     def query_settlement_info(self):
-        #�������ڱ�ʾȡ��һ����㵥,������Ӧ������ȷ��
-        print u'TD:ȡ��һ�ս��㵥��Ϣ��ȷ��,BrokerID=%s,investorID=%s' % (self.broker_id,self.investor_id)
+        #不填日期表示取上一天结算单,并在响应函数中确认
+        print u'TD:取上一日结算单信息并确认,BrokerID=%s,investorID=%s' % (self.broker_id,self.investor_id)
         req = ApiStruct.QrySettlementInfo(BrokerID=self.broker_id,InvestorID=self.investor_id,TradingDay=u'')
         #print req.BrokerID,req.InvestorID,req.TradingDay
         #time.sleep(0.5)
@@ -75,48 +76,48 @@ class MyTraderApi(TraderApi):
         self.ReqQrySettlementInfo(req,self.requestid)
 
     def OnRspQrySettlementInfo(self, pSettlementInfo, pRspInfo, nRequestID, bIsLast):
-        '''�����ѯͶ���߽�����Ϣ��Ӧ'''
-        print u'Rsp ���㵥��ѯ'
-        if(self.resp_common(pRspInfo,bIsLast,u'���㵥��ѯ')>0):
-            print u'���㵥��ѯ���,׼��ȷ��'
+        '''请求查询投资者结算信息响应'''
+        print u'Rsp 结算单查询'
+        if(self.resp_common(pRspInfo,bIsLast,u'结算单查询')>0):
+            print u'结算单查询完成,准备确认'
             try:
-                print u'TD:���㵥����:%s' % pSettlementInfo.Content
+                print u'TD:结算单内容:%s' % pSettlementInfo.Content
             except Exception,inst:
-                print u'TD-ORQSI-A ���㵥���ݴ���:%s' % str(inst)
+                print u'TD-ORQSI-A 结算单内容错误:%s' % str(inst)
             self.confirm_settlement_info()
-        else:  #������δ��ɷ�֧,��Ҫֱ�Ӻ���
+        else:  #这里是未完成分支,需要直接忽略
             try:
-                print u'TD:���㵥������...:%s' % pSettlementInfo.Content
+                print u'TD:结算单接收中...:%s' % pSettlementInfo.Content
             except Exception,inst:
-                print u'TD-ORQSI-B ���㵥���ݴ���:%s' % str(inst)
+                print u'TD-ORQSI-B 结算单内容错误:%s' % str(inst)
             #self.agent.initialize()
             pass
         
     def confirm_settlement_info(self):
-        print u'TD-CSI:׼��ȷ�Ͻ��㵥'
+        print u'TD-CSI:准备确认结算单'
         req = ApiStruct.SettlementInfoConfirm(BrokerID=self.broker_id,InvestorID=self.investor_id)
         self.requestid += 1
         self.ReqSettlementInfoConfirm(req,self.requestid)
     
     def OnRspSettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
-        '''Ͷ���߽�����ȷ����Ӧ'''
-        if(self.resp_common(pRspInfo,bIsLast,u'���㵥ȷ��')>0):
-            print u'TD:���㵥ȷ��ʱ��: %s-%s' %(pSettlementInfoConfirm.ConfirmDate,pSettlementInfoConfirm.ConfirmTime)
+        '''投资者结算结果确认响应'''
+        if(self.resp_common(pRspInfo,bIsLast,u'结算单确认')>0):
+            print u'TD:结算单确认时间: %s-%s' %(pSettlementInfoConfirm.ConfirmDate,pSettlementInfoConfirm.ConfirmTime)
         print "start initialized"
             
     def isRspSuccess(self,RspInfo):
         return RspInfo == None or RspInfo.ErrorID == 0
     
-    def resp_common(self,rsp_info,bIsLast,name='Ĭ��'):
+    def resp_common(self,rsp_info,bIsLast,name='默认'):
         #self.logger.debug("resp: %s" % str(rsp_info))
         if not self.isRspSuccess(rsp_info):
-            print u"TD:%sʧ��" % name
+            print u"TD:%s失败" % name
             return -1
         elif bIsLast and self.isRspSuccess(rsp_info):
-            print u"TD:%s�ɹ�" % name
+            print u"TD:%s成功" % name
             return 1
         else:
-            print u"TD:%s���: �ȴ���ݽ�����ȫ..." % name
+            print u"TD:%s结果: 等待数据接收完全..." % name
             return 0
 
     def queryDepthMarketData(self, instrument):
@@ -142,11 +143,11 @@ class MyTraderApi(TraderApi):
                 )
         self.requestid += 1
         r = self.ReqQryInstrumentMarginRate(req,self.requestid)
-        print u'A:��ѯ��֤����%s, ���������ֵ:%s' % (instrument_id, r)
+        print u'A:查询保证金率%s, 函数发出返回值:%s' % (instrument_id, r)
 
     def OnRspQryInstrumentMarginRate(self, pInstrumentMarginRate, pRspInfo, nRequestID, bIsLast):
         '''
-            ��֤���ʻر������صı�Ȼ�Ǿ��ֵ
+            保证金率回报。返回的必然是绝对值
         '''
         if bIsLast and self.isRspSuccess(pRspInfo):
             print pInstrumentMarginRate
@@ -160,69 +161,72 @@ class MyTraderApi(TraderApi):
                 )
         self.requestid += 1
         r = self.ReqQryInstrument(req,self.requestid)
-        print u'A:��ѯ��Լ, ���������ֵ:%s' % r
+        print u'A:查询合约, 函数发出返回值:%s' % r
         
     def OnRspQryInstrument(self, pInst, pRspInfo, nRequestID, bIsLast):
         '''
-            ��Լ�ر���
+            合约回报。
         '''
         if bIsLast and self.isRspSuccess(pRspInfo):
             if (pInst.ExchangeID in self.instruments) and (pInst.ProductClass=='1'):
-                self.instruments[pInst.ExchangeID].append(pInst)
-                #print pInst
-            #print self.instruments
-            #print pInstrument
+                cont = {}
+                cont['instID'] = pInst.InstrumentID
+                cont['margin_l'] = pInst.LongMarginRatio
+                cont['margin_s'] = pInst.ShortMarginRatio
+                cont['start_date'] = datetime.datetime.strptime(pInst.OpenDate,'%Y%M%d').date()
+                cont['expiry'] = datetime.datetime.strptime(pInst.ExpireDate,'%Y%M%d').date()
+                cont['product_code'] = pInst.ProductID
+                self.instruments[pInst.ExchangeID].append(cont)
         else:
-            if (pInst.ExchangeID in self.instruments) and (pInst.ProductClass=='1'):
-                self.instruments[pInst.ExchangeID].append(pInst)
-                #print pInst
-            #print pInstrument, pRspInfo, bIsLast  #ģ���ѯ�Ľ��,����˶����Լ����ݣ�ֻ�����һ����bLast��True
- 
+            if (str(pInst.ExchangeID) in self.instruments) and (pInst.ProductClass=='1'):
+                cont = {}
+                cont['instID'] = pInst.InstrumentID
+                cont['margin_l'] = pInst.LongMarginRatio
+                cont['margin_s'] = pInst.ShortMarginRatio
+                cont['start_date'] = datetime.datetime.strptime(pInst.OpenDate,'%Y%m%d').date()
+                cont['expiry'] = datetime.datetime.strptime(pInst.ExpireDate,'%Y%m%d').date()
+                cont['product_code'] = pInst.ProductID
+                self.instruments[pInst.ExchangeID].append(cont)
+
     def OnRtnOrder(self, pOrder):
         print pOrder
         
     def fetch_trading_account(self):
-        #��ȡ�ʽ��ʻ�
+        #获取资金帐户
         
-        print u'A:��ȡ�ʽ��ʻ�..'
+        print u'A:获取资金帐户..'
         req = ApiStruct.QryTradingAccount(BrokerID=self.broker_id, InvestorID=self.investor_id)
         self.requestid += 1
         r=self.ReqQryTradingAccount(req,self.requestid)
-        #logging.info(u'A:��ѯ�ʽ��˻�, ���������ֵ:%s' % r)
+        #logging.info(u'A:查询资金账户, 函数发出返回值:%s' % r)
 
     def fetch_investor_position(self,instrument_id):
-        #��ȡ��Լ�ĵ�ǰ�ֲ�
-        print u'A:��ȡ��Լ%s�ĵ�ǰ�ֲ�..' % (instrument_id,)
+        #获取合约的当前持仓
+        print u'A:获取合约%s的当前持仓..' % (instrument_id,)
         req = ApiStruct.QryInvestorPosition(BrokerID=self.broker_id, InvestorID=self.investor_id,InstrumentID=instrument_id)
         self.requestid += 1
         r=self.ReqQryInvestorPosition(req,self.requestid)
-        #logging.info(u'A:��ѯ�ֲ�, ���������ֵ:%s' % rP)
+        #logging.info(u'A:查询持仓, 函数发出返回值:%s' % rP)
     
     def fetch_investor_position_detail(self,instrument_id):
         '''
-            ��ȡ��Լ�ĵ�ǰ�ֲ���ϸ��Ŀǰû��
+            获取合约的当前持仓明细，目前没用
         '''
         
-        print u'A:��ȡ��Լ%s�ĵ�ǰ�ֲ�..' % (instrument_id,)
+        print u'A:获取合约%s的当前持仓..' % (instrument_id,)
         req = ApiStruct.QryInvestorPositionDetail(BrokerID=self.broker_id, InvestorID=self.investor_id,InstrumentID=instrument_id)
         self.requestid += 1
         r=self.ReqQryInvestorPositionDetail(req,self.requestid)
-        #logging.info(u'A:��ѯ�ֲ�, ���������ֵ:%s' % r)
-    #def OnRspSubMarketData(self, spec_instrument, info, requestid, islast):
-    #    print "OnRspSubMarketData"
-
-    #def OnRspUnSubMarketData(self, spec_instrument, info, requestid, islast):
-    #    print "OnRspUnSubMarketData"
 
     def fetch_order(self, t_start='09:00:00', t_end='15:15:00'):
         req = ApiStruct.QryOrder(
                         BrokerID=self.broker_id, 
                         InvestorID=self.investor_id,
                         InstrumentID='',
-                        ExchangeID = '', #���������, char[9]
-                        #OrderSysID = '', #�������, char[21]
-                        InsertTimeStart = '', #��ʼʱ��, char[9]
-                        InsertTimeEnd = '', #����ʱ��, char[9]
+                        ExchangeID = '', #交易所代码, char[9]
+                        #OrderSysID = '', #报单编号, char[21]
+                        InsertTimeStart = '', #开始时间, char[9]
+                        InsertTimeEnd = '', #结束时间, char[9]
                 )
         self.requestid += 1
         r = self.ReqQryOrder(req, self.requestid)
@@ -232,19 +236,19 @@ class MyTraderApi(TraderApi):
                         BrokerID=self.broker_id, 
                         InvestorID=self.investor_id,
                         InstrumentID='',
-                        ExchangeID ='', #���������, char[9]
-                        #TradeID = '', #�������, char[21]
-                        TradeTimeStart = '', #��ʼʱ��, char[9]
-                        TradeTimeEnd = '', #����ʱ��, char[9]
+                        ExchangeID ='', #交易所代码, char[9]
+                        #TradeID = '', #报单编号, char[21]
+                        TradeTimeStart = '', #开始时间, char[9]
+                        TradeTimeEnd = '', #结束时间, char[9]
                 )
         self.requestid += 1
         r = self.ReqQryTrade(req, self.requestid)
         
     def OnRspQryTradingAccount(self, pTradingAccount, pRspInfo, nRequestID, bIsLast):
         '''
-            �����ѯ�ʽ��˻���Ӧ
+            请求查询资金账户响应
         '''
-        print u'��ѯ�ʽ��˻���Ӧ', pTradingAccount
+        print u'查询资金账户响应', pTradingAccount
         if bIsLast and self.isRspSuccess(pRspInfo):
             print pTradingAccount
         else:
@@ -252,9 +256,9 @@ class MyTraderApi(TraderApi):
             pass
 
     def OnRspQryInvestorPosition(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
-        '''�����ѯͶ���ֲ߳���Ӧ'''
+        '''请求查询投资者持仓响应'''
         self.event.set()
-        if self.isRspSuccess(pRspInfo): #ÿ��һ����������ݱ�
+        if self.isRspSuccess(pRspInfo): #每次一个单独的数据报
             print pInvestorPosition, "True"
         else:
             #logging
@@ -262,43 +266,43 @@ class MyTraderApi(TraderApi):
             pass
 
     def OnRspQryInvestorPositionDetail(self, pInvestorPositionDetail, pRspInfo, nRequestID, bIsLast):
-        print u'�����ѯͶ���ֲ߳���ϸ��Ӧ'
+        print u'请求查询投资者持仓明细响应'
         self.event.set()
-        if self.isRspSuccess(pRspInfo): #ÿ��һ����������ݱ�
+        if self.isRspSuccess(pRspInfo): #每次一个单独的数据报
             print pInvestorPositionDetail
         else:
             #logging
             pass
 
     def OnRspQryOrder(self, pOrder, pRspInfo, nRequestID, bIsLast):
-        '''�����ѯ������Ӧ'''
+        '''请求查询报单响应'''
         if bIsLast and self.isRspSuccess(pRspInfo):
             print 'last:%s' % pOrder
         else:
             print 'first: %s' % pOrder
 
     def OnRspQryTrade(self, pTrade, pRspInfo, nRequestID, bIsLast):
-        '''�����ѯ�ɽ���Ӧ'''
+        '''请求查询成交响应'''
         if bIsLast and self.isRspSuccess(pRspInfo):
             print 'last:%s' % pTrade
         else:
             print 'first: %s' % pTrade
 
     def fetch_instruments_by_exchange(self,exchange_id):
-        '''���ܵ�����exchange_id,���û������
+        '''不能单独用exchange_id,因此没有意义
         '''
         req = ApiStruct.QryInstrument(
                         ExchangeID=exchange_id,
                 )
         self.requestid += 1
         r = self.ReqQryInstrument(req,self.requestid)
-        print u'A:��ѯ��Լ, ���������ֵ:%s' % r
+        print u'A:查询合约, 函数发出返回值:%s' % r
         
     def OnRtnDepthMarketData(self, depth_market_data):
         print "OnRtnDepthMarketData"
         print depth_market_data.BidPrice1,depth_market_data.BidVolume1,depth_market_data.AskPrice1,depth_market_data.AskVolume1,depth_market_data.LastPrice,depth_market_data.Volume,depth_market_data.UpdateTime,depth_market_data.UpdateMillisec,depth_market_data.InstrumentID
 
-#inst=[u'al1008', u'al1009', u'al1010', u'al1011', u'al1012', u'al1101', u'al1102', u'al1103', u'al1104', u'al1105', u'al1106', u'al1107', u'au1008', u'au1009', u'au1010', u'au1011', u'au1012', u'au1101', u'au1102', u'au1103', u'au1104', u'au1105', u'au1106', u'au1107', u'cu1008', u'cu1009', u'cu1010', u'cu1011', u'cu1012', u'cu1101', u'cu1102', u'cu1103', u'cu1104', u'cu1105', u'cu1106', u'cu1107', u'fu1009', u'fu1010', u'fu1011', u'fu1012', u'fu1101', u'fu1103', u'fu1104', u'fu1105', u'fu1106', u'fu1107', u'fu1108', u'rb1008', u'rb1009', u'rb1010', u'rb1011', u'rb1012', u'rb1101', u'rb1102', u'rb1103', u'rb1104', u'rb1105', u'rb1106', u'rb1107', u'ru1008', u'ru1009', u'ru1010', u'ru1011', u'ru1101', u'ru1103', u'ru1104', u'ru1105', u'ru1106', u'ru1107', u'wr1008', u'wr1009', u'wr1010', u'wr1011', u'wr1012', u'wr1101', u'wr1102', u'wr1103', u'wr1104', u'wr1105', u'wr1106', u'wr1107', u'zn1008', u'zn1009', u'zn1010', u'zn1011', u'zn1012', u'zn1101', u'zn1102', u'zn1103', u'zn1104', u'zn1105', u'zn1106']
+
 def main():
     
     #user = MyTraderApi(broker_id="8000",investor_id="24661668",passwd="121862")
@@ -306,8 +310,6 @@ def main():
     user.Create("trader")
     user.SubscribePublicTopic(THOST_TERT_QUICK)
     user.SubscribePrivateTopic(THOST_TERT_QUICK)
-    #user.RegisterFront("tcp://qqfz-front1.ctp.shcifco.com:32305")
-    #user.RegisterFront("tcp://zjzx-front20.ctp.shcifco.com:41205")
     user.RegisterFront("tcp://zjzx-front12.ctp.shcifco.com:41205")
     user.Init()
 
@@ -316,15 +318,8 @@ def main():
     time.sleep(20)
     for exch in user.instruments:
         for inst in user.instruments[exch]:
-            if inst.ExchangeID in ['CZCE','DCE','SHFE','CFFEX']:
-                print inst
-                cont = {}
-                cont['instID'] = inst.InstrumentID
-                cont['margin_l'] = inst.LongMarginRatio
-                cont['margin_s'] = inst.ShortMarginRatio
-                cont['start_date'] = datetime.datetime.strptime(inst.OpenDate,'%Y%M%d').date()
-                cont['expiry'] = datetime.datetime.strptime(inst.ExpireDate,'%Y%M%d').date()
-                cont['product_code'] = inst.ProductID
-                mysqlaccess.insert_cont_data(cont)
+            mysqlaccess.insert_cont_data(inst)
+            
+    #print user.instruments['CFFEX']+user.instruments['CZCE']+user.instruments['DCE']+user.instruments['SHFE']
 
 if __name__=="__main__": main()

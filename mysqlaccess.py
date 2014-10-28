@@ -132,7 +132,7 @@ def load_inst_marginrate(instID):
     cursor.execute(stmt)
     out = (0,0)
     for (margin_l, margin_s) in cursor:
-        out = (margin_l, margin_s)
+        out = (float(margin_l), float(margin_s))
     cnx.close()
     return out
         

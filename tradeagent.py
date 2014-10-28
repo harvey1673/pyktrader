@@ -445,7 +445,8 @@ class Instrument(object):
         '''
         objs = dict([(name,Instrument(name)) for name in names])
         for name in names:
-            objs[name].get_inst_info()       
+            objs[name].get_inst_info()
+            objs[name].get_margin_rate()
         return objs
     
     def __init__(self,name):
@@ -486,7 +487,7 @@ class Instrument(object):
         return
     
     def get_margin_rate(self):
-        self.marginrate = mysqlaccess.load_product_info(self.name)
+        self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
 
     def calc_margin_amount(self,price,direction):   
         my_marginrate = self.marginrate[0] if direction == ApiStruct.D_Buy else self.marginrate[1]
@@ -629,14 +630,13 @@ class Agent(AbsAgent):
             初始化，如保证金率，账户资金等
         '''
         ##必须先把持仓初始化成配置值或者0
-        #time.sleep(12)
+        for inst in self.instruments:
+            inst.get_margin_rate()
         self.qry_commands.append(self.fetch_trading_account)
-
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
-        #self.qry_commands.append(self.fetch_order)
-        #self.qry_commands.append(fcustom(self.fetch_instruments_by_exchange,exchange_id = ''))
-        #self.qry_commands.append(self.fetch_trade)
-        #time.sleep(1)   #保险起见
+        self.qry_commands.append(self.fetch_order)
+        self.qry_commands.append(self.fetch_trade)
+        time.sleep(1)   #保险起见
         self.check_qry_commands()
         self.initialized = True #避免因为断开后自动重连造成的重复访问
 
