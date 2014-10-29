@@ -768,11 +768,6 @@ class Agent(AbsAgent):
         order.save_order_list(self.scur_day, self.ref2order, file_prefix)
         order.save_trade_list(self.scur_day, self.etrades, file_prefix)
         return
-    
-    def fetch_inst_data(self):
-        for inst in self.instruments:
-            
-        pass
        
     def update_instrument(self, tick):
         inst = tick.instID    

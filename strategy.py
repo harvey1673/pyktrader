@@ -14,7 +14,6 @@ class Strategy(object):
 		self.name = name
 		self.instIDs = instIDs
 		self.agent = agent
-		#self.trigger_type = ttype 
 		self.trade_unit = dict([(inst, 1) for inst in instIDs])
 		self.positions  = dict([(inst, []) for inst in instIDs])
 		self.daily_func = []
