@@ -2,6 +2,9 @@ import newagent as agent
 import base
 import time
 import logging
+import mysqlaccess
+import datetime
+import misc
 
 save_insts = ['IF1411','IF1412','IF1501','IF1502','IF1503','IF1506',
 			  'TF1411','TF1412','TF1501','TF1502','TF1503','TF1506',
@@ -71,13 +74,27 @@ def save_main(user, insts):
 
 def create_agent(usercfg, tradercfg, insts):
     agent_name = 'TradeAgent'
-    trader, my_agent = newagent.create_trader(tradercfg, insts)
-    newagent.make_user(my_agent,usercfg,agent_name)
+    trader, my_agent = agent.create_trader(tradercfg, insts)
+    agent.make_user(my_agent,usercfg,agent_name)
     return my_agent
 
+def filter_main_cont(sdate):
+    insts, prods  = mysqlaccess.load_alive_cont(sdate)
+    main_cont = {}
+    for pc in prods:
+        main_cont[pc], exch = mysqlaccess.prod_main_cont_exch(pc)
+    main_insts = []
+    for inst in insts:
+        pc = misc.inst2product(inst)
+        mth = int(inst[-2:])
+        if mth in main_cont[pc]:
+            main_insts.append(inst)
+    return main_insts
         
 def save_all():
     logging.basicConfig(filename="save_all_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    save_insts = filter_main_cont(datetime.date.today())
+    print save_insts
     save_main(prod_user,save_insts)
     pass
 

@@ -108,6 +108,18 @@ def insert_cont_data(cont):
     cnx.close()
     pass
 
+def prod_main_cont_exch(prodcode):
+    cnx = mysql.connector.connect(**misc.mysqlaccess.dbconfig)
+    cursor = cnx.cursor()
+    stmt = "select exchange, contract from trade_products where product_code='{prod}' ".format(prod=prodcode)
+    cursor.execute(stmt)
+    out = [(exchange, contract) for (exchange, contract) in cursor]
+    exch = str(out[0][0])
+    cont = str(out[0][1])
+    cnx.close()  
+    cont_mth = [misc.month_code_map[c] for c in cont]
+    return cont_mth, exch
+    
 def load_product_info(prod):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
@@ -124,6 +136,22 @@ def load_product_info(prod):
                }
     cnx.close()
     return out
+
+def load_alive_cont(sdate):
+    cnx = mysql.connector.connect(**dbconfig)
+    cursor = cnx.cursor()
+    stmt = "select instID, product_code from contract_list where expiry>=%s"
+    args = tuple([sdate])    
+    cursor.execute(stmt, args)
+    cont = []
+    pc = []
+    for line in cursor:
+        cont.append(str(line[0]))
+        prod = str(line[1])
+        if prod not in pc:
+            pc.append(prod)
+    cnx.close()
+    return cont, pc
 
 def load_inst_marginrate(instID):
     cnx = mysql.connector.connect(**dbconfig)

@@ -10,12 +10,12 @@ import logging
 sign = lambda x: math.copysign(1, x)
 
 class Strategy(object):
-	def __init__(self, name, instIDs, agent = None):
+	def __init__(self, name, underliers, agent = None):
 		self.name = name
-		self.instIDs = instIDs
+		self.underliers = underliers
 		self.agent = agent
-		self.trade_unit = dict([(inst, 1) for inst in instIDs])
-		self.positions  = dict([(inst, []) for inst in instIDs])
+		self.trade_unit = dict([(inst, 1) for inst in underliers])
+		self.positions  = dict([(inst, []) for inst in underliers])
 		self.daily_func = []
 		self.min_func = {}
 		if agent == None:
@@ -69,8 +69,8 @@ class Strategy(object):
 	
 	
 class TurtleTrader(Strategy):
-	def __init__(self, name, instIDs,  capital, agent = None):
-		Strategy.__init__(name, instIDs, agent)
+	def __init__(self, name, underliers,  capital, agent = None):
+		Strategy.__init__(name, underliers, agent)
 		self.daily_func = [ 
 				BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
 				BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
@@ -83,9 +83,9 @@ class TurtleTrader(Strategy):
 		self.min_func = {}
 		self.pos_ratio = 0.01
 		self.stop_loss = 2.0
-		self.breakout_signals   = dict([(inst, 0) for inst in instIDs])
-		self.submitted_pos = dict([(inst, None) for inst in instIDs])
-		self.last_flag = dict([(inst, True) for inst in instIDs])
+		self.breakout_signals   = dict([(inst, 0) for inst in underliers])
+		self.submitted_pos = dict([(inst, None) for inst in underliers])
+		self.last_flag = dict([(inst, True) for inst in underliers])
 	
 	def save_state(self):
 		

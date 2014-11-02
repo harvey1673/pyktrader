@@ -179,15 +179,7 @@ def inst_to_exch(inst):
 def nearby(prodcode, n, start_date, end_date, roll_rule, freq, need_shift=False):
     if start_date > end_date: 
         return None
-    cnx = mysql.connector.connect(**mysqlaccess.dbconfig)
-    cursor = cnx.cursor()
-    stmt = "select exchange, contract from trade_products where product_code='{prod}' ".format(prod=prodcode)
-    cursor.execute(stmt)
-    out = [(exchange, contract) for (exchange, contract) in cursor]
-    exch = str(out[0][0])
-    cont = str(out[0][1])
-    cont_mth = [month_code_map[c] for c in cont]
-    cnx.close()  
+    cont_mth, exch = mysqlaccess.prod_main_cont_exch(prodcode)
     contlist = contract_range(prodcode, exch, cont_mth, start_date, end_date)
     exp_dates = [day_shift(contract_expiry(cont), roll_rule) for cont in contlist]
     #print contlist, exp_dates
