@@ -10,14 +10,17 @@ import logging
 sign = lambda x: math.copysign(1, x)
 
 class Strategy(object):
-	def __init__(self, name, underliers, agent = None):
+	def __init__(self, name, underliers, agent = None, daily_func = [], min_func = {} ):
 		self.name = name
 		self.underliers = underliers
 		self.agent = agent
-		self.trade_unit = dict([(inst, 1) for inst in underliers])
-		self.positions  = dict([(inst, []) for inst in underliers])
-		self.daily_func = []
-		self.min_func = {}
+		self.logger = None
+		if self.agent != None:
+			self.logger = self.agent.logger 
+		self.trade_unit = dict([(under, 1) for under in underliers])
+		self.positions  = dict([(under, []) for under in underliers])
+		self.daily_func = daily_func
+		self.min_func = min_func
 		if agent == None:
 			self.folder = ''
 		else:
@@ -28,6 +31,7 @@ class Strategy(object):
 			self.folder = ''
 		else:
 			self.folder = self.agent.folder + self.name + '\\'
+			self.logger = self.agent.logger
 		if len(self.daily_func)>0:
 			curr_fobjs = [ fobj.name for fobj in self.agent.day_data_func ]
 			for fobj in self.daily_func:
