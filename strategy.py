@@ -10,17 +10,19 @@ import logging
 sign = lambda x: math.copysign(1, x)
 
 class Strategy(object):
-	def __init__(self, name, underliers, agent = None, daily_func = [], min_func = {} ):
+	def __init__(self, name, underliers, agent = None, data_func = {}, trade_unit = [] ):
 		self.name = name
 		self.underliers = underliers
 		self.agent = agent
 		self.logger = None
 		if self.agent != None:
 			self.logger = self.agent.logger 
-		self.trade_unit = dict([(under, 1) for under in underliers])
-		self.positions  = dict([(under, []) for under in underliers])
-		self.daily_func = daily_func
-		self.min_func = min_func
+		if len(trade_unit) > 0: 
+			self.trade_unit = trade_unit
+		else:
+			self.trade_unit = [ [1]*len(under) for under in underliers ]
+		self.positions  = [[] for under in underliers]
+		self.data_func = data_func
 		if agent == None:
 			self.folder = ''
 		else:
@@ -32,20 +34,9 @@ class Strategy(object):
 		else:
 			self.folder = self.agent.folder + self.name + '\\'
 			self.logger = self.agent.logger
-		if len(self.daily_func)>0:
-			curr_fobjs = [ fobj.name for fobj in self.agent.day_data_func ]
-			for fobj in self.daily_func:
-				if fobj.name not in curr_fobjs:
-					self.agent.register_data_func('d', fobj)
-		for mfreq in self.min_func:
-			if len(self.min_func[mfreq])>0:
-				if mfreq in self.agent.min_data_func:
-					curr_fobjs = [ fobj.name for fobj in self.agent.min_data_func[mfreq] ]
-				else:
-					curr_fobjs = []
-				for fobj in self.min_func[mfreq]:
-					if fobj.name not in curr_fobjs:
-						self.agent.register_data_func( str(mfreq) + 'm', fobj)
+		if len(self.data_func)>0:
+			for (freq, fobj) in self.data_func:
+				self.agent.register_data_func(freq,fobj)
 		self.update_trade_unit()
 	
 	def day_finalize(self):	
@@ -75,21 +66,20 @@ class Strategy(object):
 class TurtleTrader(Strategy):
 	def __init__(self, name, underliers,  capital, agent = None):
 		Strategy.__init__(name, underliers, agent)
-		self.daily_func = [ 
-				BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
-				BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
-				BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
-				BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20)),\
-				BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
-				BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
-				BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))]	
+		self.data_func = [ 
+				('d', BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20))), \
+				('d', BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10))),\
+				('d', BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10))),\
+				('d', BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20))),\
+				('d', BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10))),\
+				('d', BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10))),\
+				('d', BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55)))]	
 		self.capital = capital 
-		self.min_func = {}
 		self.pos_ratio = 0.01
 		self.stop_loss = 2.0
-		self.breakout_signals   = dict([(inst, 0) for inst in underliers])
-		self.submitted_pos = dict([(inst, None) for inst in underliers])
-		self.last_flag = dict([(inst, True) for inst in underliers])
+		self.breakout_signals   = dict([(inst[0], 0) for inst in underliers])
+		self.submitted_pos = dict([(inst[0], None) for inst in underliers])
+		self.last_flag = dict([(inst[0], True) for inst in underliers])
 	
 	def save_state(self):
 		

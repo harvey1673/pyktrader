@@ -642,13 +642,21 @@ class Agent(AbsAgent):
 
     def register_data_func(self, freq, fobj):
         if 'd' in freq:
+            for func in self.day_data_func:
+                if fobj.name == func.name:
+                    return False
             self.day_data_func.append(fobj)
+            return True
         else:
             mins = int(freq[:-1])
             if mins not in self.min_data_func:
                 self.min_data_func[mins] = []
+            for func in self.min_data_func[mins]:
+                if fobj.name == func.name:
+                    return False            
             self.min_data_func[mins].append(fobj)
-            
+            return True
+        
     def prepare_data_env(self): 
         if self.daily_data_days > 0:
             self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
