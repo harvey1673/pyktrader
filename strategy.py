@@ -9,6 +9,33 @@ import logging
 
 sign = lambda x: math.copysign(1, x)
 
+class PosRecord(object):
+	def __init__(self, insts, vols, target):
+		self.instIDs = insts
+		self.volumes = vols
+		self.entry_target = entry_target
+		self.entry_price = None
+		self.entry_time = None
+		self.entry_tradeid = None
+		self.exit_price = None
+		self.exit_price = None
+		self.exit_tradeid = None
+		self.is_closed = False
+	
+	def open(self, price, pos, pexit, start_time):
+		self.pos = pos
+		self.direction = 1 if pos > 0 else -1
+		self.price_in = price
+		self.exit = pexit
+		self.start_time = start_time
+		self.is_closed = False
+		
+	def close(self, price, end_time):
+		self.end_time = end_time
+		self.price_out = price
+		self.profit = (self.price_out - self.price_in) * self.pos
+		self.is_closed = True
+		
 class Strategy(object):
 	def __init__(self, name, underliers, agent = None, data_func = {}, trade_unit = [] ):
 		self.name = name
@@ -22,6 +49,7 @@ class Strategy(object):
 		else:
 			self.trade_unit = [ [1]*len(under) for under in underliers ]
 		self.positions  = [[] for under in underliers]
+		self.submitted_pos = [ [] for under in underliers ]
 		self.data_func = data_func
 		if agent == None:
 			self.folder = ''
@@ -38,6 +66,18 @@ class Strategy(object):
 			for (freq, fobj) in self.data_func:
 				self.agent.register_data_func(freq,fobj)
 		self.update_trade_unit()
+	
+	def resume(self):
+		pass
+	
+	def add_submitted_pos(self, etrade):
+		is_added = False
+		for under, sub_pos in zip(self.underliers, self.submitted_pos):
+			if set(under) == set(etrade.instIDs):
+				sub_pos.append(etrade)
+				is_added = True
+				break
+		return is_added
 	
 	def day_finalize(self):	
 		self.update_trade_unit()
@@ -77,9 +117,8 @@ class TurtleTrader(Strategy):
 		self.capital = capital 
 		self.pos_ratio = 0.01
 		self.stop_loss = 2.0
-		self.breakout_signals   = dict([(inst[0], 0) for inst in underliers])
-		self.submitted_pos = dict([(inst[0], None) for inst in underliers])
-		self.last_flag = dict([(inst[0], True) for inst in underliers])
+		self.breakout_signals = [0] * len(underliers)
+		self.last_flag = [True] * len(underliers)
 	
 	def save_state(self):
 		
@@ -88,14 +127,21 @@ class TurtleTrader(Strategy):
 	def load_state(self):
 		pass	
 	
-	def run_tick(self, inst, ctick):
+	def run_tick(self, ctick):
 		inst = ctick.instID
+		under = [inst]
 		df = self.agent.day_data[inst]
 		cur_atr = df.ix[-1,'ATR_20']
 		hh = [df.ix[-1,'DONCH_H55'],df.ix[-1,'DONCH_H20'],df.ix[-1,'DONCH_H10']]
 		ll  = [df.ix[-1,'DONCH_L55'],df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_H10']]
-		pos = self.submitted_pos[inst]
-		if pos!= None:
+		idx = 0
+		for i, under in enumerate(self.underliers):
+			if inst == under[0]:
+				idx = i
+				break
+		sub_pos = self.submitted_pos[idx]
+		if len(sub_pos) > 0:
+			
 			if pos['trade'].status == order.ETradeStatus.Done:
 				traded_price = pos['trade'].filled_price[0]
 				traded_vol = pos['trade'].volumes[0]
@@ -191,8 +237,9 @@ class TurtleTrader(Strategy):
 					return 1
 		
 	def update_trade_unit(self):
-		for inst in self.instIDs:
-			if self.positions[inst] == 0: 
+		for under, pos in zip(self.underliers,self.positions):
+			if self.pos == 0: 
+				inst = under[0]
 				pinst  = self.agent.instruments[inst]
 				df  = self.agent.day_data[inst]				
 				self.trade_unit = int(self.capital*self.pos_ratio/(pinst.multiple*df.ix[-1,'ATR_20']))
