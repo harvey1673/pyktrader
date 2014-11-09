@@ -110,15 +110,14 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
             #drawdown_j = np.argmax(mdf['cum_pnl'][:drawdown_i])
             daily_pnl = pd.Series(mdf['pnl']).resample('1d',how='sum').dropna()
             daily_pnl.name = 'dailyPNL'
+            if len(daily_pnl) < 5:
+                continue
             cum_pnl = daily_pnl.cumsum()
             res[cont]['avg_pnl'] = daily_pnl.mean()
             res[cont]['std_pnl'] = daily_pnl.std()
             res[cont]['tot_pnl'] = daily_pnl.sum()
             res[cont]['num_days'] = len(daily_pnl)
-            if res[cont]['num_days']> 0:
-                res[cont]['sharp_ratio'] = res[cont]['avg_pnl']/res[cont]['std_pnl']*np.sqrt(252.0)
-            else:
-                res[cont]['sharp_ratio'] = 0
+            res[cont]['sharp_ratio'] = res[cont]['avg_pnl']/res[cont]['std_pnl']*np.sqrt(252.0)
             max_dd, max_dur = backtest.max_drawdown(cum_pnl)
             res[cont]['max_drawdown'] =  max_dd
             res[cont]['max_dd_period'] =  max_dur
@@ -148,34 +147,29 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
         trades[pc] = pd.DataFrame.from_dict(all_trades).T    
     return (results, trades)
 
-def save_sim_results(filename, res, trades):
-    if os.path.isfile(filename):
-        book = openpyxl.load_workbook(filename)
-    xlwriter = pd.ExcelWriter(filename) 
-    if os.path.isfile(filename):
-        xlwriter.book = book
-        xlwriter.sheets = dict((ws.title, ws) for ws in book.worksheets)
+def save_sim_results(file_prefix, res, trades):
     for pc in res:
         df = res[pc]
-        df.to_excel(xlwriter, pc+'_stats')
+        fname = file_prefix+'_'+ pc +'_stats.csv'
+        df.to_csv(fname)
         df = trades[pc]
-        df.to_excel(xlwriter, pc+'_trades')
-    xlwriter.save()
+        fname = file_prefix+'_'+ pc +'_trades.csv'
+        df.to_csv(fname)
     return
     
 if __name__=="__main__":
     rollrule = '-30b'
-    commod_list= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm']
-    start_dates = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
+    commod_list= ['a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #'m','y',
+    start_dates = [datetime.date(2010,9,1)] * 7 + [datetime.date(2010,10,1)] * 3 + \
                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
     end_date = datetime.date(2014,11,7)
     systems = [[20,10],[15,7],[40,20],[55,20]]
     for sys in systems:
-        filename = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_%s_R20b.xlsx' % sys[0]
+        file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_R20b_%s' % sys[0]
         for cmd,sdate in zip(commod_list, start_dates):
             nearby = 1
             if cmd in ['cu','al','zn']:
                 nearby = 2
             (res, trades) = turtle_sim( [cmd], sdate, end_date, nearby = nearby, rollrule = rollrule, signals = sys )
             print 'saving results for cmd = %s, sys= %s' % (cmd, sys[0])
-            save_sim_results(filename, res, trades)
+            save_sim_results(file_prefix, res, trades)
