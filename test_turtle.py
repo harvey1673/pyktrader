@@ -2,26 +2,12 @@ import misc
 import data_handler as dh
 import pandas as pd
 import numpy as np
-import backtest as sim
+import strategy as strat
 import datetime
 import openpyxl
 import os
 import backtest
 
-def simtrade2dict(simtrade):
-    trade = {}
-    trade['instID'] = simtrade.inst
-    trade['pos'] = simtrade.pos
-    trade['direction'] = simtrade.direction
-    trade['price_in'] = simtrade.price_in
-    trade['exit'] = simtrade.exit
-    trade['start_time'] = simtrade.start_time
-    trade['profit'] = simtrade.profit
-    trade['end_time'] = simtrade.end_time
-    trade['price_out'] = simtrade.price_out
-    trade['is_closed'] = simtrade.is_closed
-    return trade
-    
 def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals = [20,10] ):
     NN = 2
     histdays = '-' + str(signals[0]+5) + 'd'
@@ -32,6 +18,7 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
     results = {}
     trades = {}
     atr_dict = {}
+    tradeid = 0
     for pc in assets:
         ddata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, rollrule, 'd', histdays)
         mdata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, rollrule, 'm', '-1b')
@@ -80,13 +67,15 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
                         direction = -1
                     mdf.ix[dd, 'pos'] = direction
                     if direction != 0:
-                        trade = sim.SimTrade(cont, mslice.close, direction, mslice.close- direction * dslice.ATR_20 * NN, dd)
+                        trade = strat.TradePos([cont], [1], direction, mslice.close, mslice.close- direction * dslice.ATR_20 * NN)
+                        tradeid += 1
+                        trade.open(mslice.close, dd, tradeid)
                         curr_pos.append(trade)
                         atr_dict[cont] = dslice.ATR_20
                 elif (idx >= len(mdf.index)-NO_OPEN_POS_PROTECT):
                     if len(curr_pos)>0:
                         for trade in curr_pos:
-                            trade.close( mslice.close, dd )
+                            trade.close( mslice.close, dd, trade.entry_tradeid)
                             closed_trades.append(trade)
                         curr_pos = []
                 else:
@@ -96,21 +85,23 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
                     if (direction == 1 and mslice.close < dslice.CL_1) or \
                             (direction == -1 and mslice.close > dslice.CS_1):
                         for trade in curr_pos:
-                            trade.close( mslice.close, dd )
+                            trade.close( mslice.close, dd, trade.entry_tradeid )
                             closed_trades.append(trade)
                         curr_pos = []
                     #stop loss position partially
-                    elif (curr_pos[-1].exit - mslice.close) * direction >= 0:
+                    elif (curr_pos[-1].exit_target - mslice.close) * direction >= 0:
                         for trade in curr_pos:
-                            if (trade.exit - mslice.close) * direction > 0:
-                                trade.close(mslice.close, dd)
+                            if (trade.exit_target - mslice.close) * direction > 0:
+                                trade.close(mslice.close, dd, trade.entry_tradeid)
                                 closed_trades.append(trade)
                         curr_pos = [trade for trade in curr_pos if not trade.is_closed]
                     #add positions
-                    elif (tot_pos < 4) and (mslice.close - curr_pos[-1].price_in)*direction > atr_dict[cont]/2.0:
+                    elif (tot_pos < 4) and (mslice.close - curr_pos[-1].entry_price)*direction > atr_dict[cont]/2.0:
                         for trade in curr_pos:
-                            trade.exit += atr_dict[cont]/2.0*direction
-                        trade = sim.SimTrade(cont, mslice.close, direction, mslice.close - direction * atr_dict[cont] * NN, dd)
+                            trade.exit_target += atr_dict[cont]/2.0*direction
+                        trade = strat.TradePos([cont], [1], direction, mslice.close, mslice.close - direction * atr_dict[cont] * NN)
+                        tradeid += 1
+                        trade.open(mslice.close, dd, tradeid)
                         curr_pos.append(trade)
                     mdf.ix[dd, 'pos'] = sum( [trade.pos for trade in curr_pos] )    
             mdf['pnl'] = mdf['pos'].shift(1)*(mdf['close'] - mdf['close'].shift(1))
@@ -151,8 +142,8 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
             if res[cont]['num_loss'] > 0:    
                 res[cont]['profit_per_loss'] = res[cont]['loss_profit']/float(res[cont]['num_loss'])
             ntrades = len(all_trades)
-            for i, simtrade in enumerate(closed_trades):
-                all_trades[ntrades+i] = simtrade2dict(simtrade)
+            for i, tradepos in enumerate(closed_trades):
+                all_trades[ntrades+i] = strat.tradepos2dict(tradepos)
         results[pc] = pd.DataFrame.from_dict(res)
         trades[pc] = pd.DataFrame.from_dict(all_trades).T    
     return (results, trades)
@@ -177,7 +168,7 @@ if __name__=="__main__":
     commod_list= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm']
     start_dates = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    end_date = datetime.date(2014,7,28)
+    end_date = datetime.date(2014,11,7)
     systems = [[20,10],[15,7],[40,20],[55,20]]
     for sys in systems:
         filename = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_%s_R20b.xlsx' % sys[0]

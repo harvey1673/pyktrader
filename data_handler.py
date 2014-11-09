@@ -60,13 +60,13 @@ def ROC(df, n):
 
 #Bollinger Bandsy
 def BBANDS(df, n):
-    MA = pd.Series(pd.rolling_mean(df['close'], n))
+    MA = pd.Series(pd.rolling_mean(df['close'], n), name ='MA_'+str(n))
     MSD = pd.Series(pd.rolling_std(df['close'], n))
     b1 = 4 * MSD / MA
-    B1 = pd.Series(b1, name = 'BollingerB_' + str(n))
-    b2 = (df['close'] - MA + 2 * MSD) / (4 * MSD)
-    B2 = pd.Series(b2, name = 'Bollingerb_' + str(n))
-    return pd.concat([B1,B2], join='outer', axis=1)
+    B1 = pd.Series(MA + 2*MSD, name = 'BollUp_' + str(n))
+    #b2 = (df['close'] - MA + 2 * MSD) / (4 * MSD)
+    B2 = pd.Series(MA - 2*MSD, name = 'BollLow_' + str(n))
+    return pd.concat([B1,MA,B2], join='outer', axis=1)
 
 #Pivot Points, Supports and Resistances
 def PPSR(df):

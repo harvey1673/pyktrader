@@ -8,7 +8,7 @@ import csv
 import os.path
 
 class ETradeStatus:
-    Pending, Processed, PFilled, Done, Cancelled = range(5)
+    Pending, Processed, PFilled, Done, Cancelled, StratConfirm = range(6)
 
 class OrderStatus:
     Waiting, Ready, Sent, Done, Cancelled = range(5)
