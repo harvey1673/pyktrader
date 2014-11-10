@@ -705,7 +705,13 @@ class Agent(AbsAgent):
             orderdict = etrade.order_dict
             for inst in orderdict:
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
-                
+        
+        for strat in self.strategies:
+            strat.load_state()
+            strat_trades = [ etrade for etrade in self.etrades if etrade.strategy == strat.name ]
+            for trade in strat_trades:
+                strat.add_submitted_pos(trade)
+            
         for inst in self.positions:
             self.positions[inst].re_calc()        
         self.calc_margin()
@@ -1156,7 +1162,7 @@ class Agent(AbsAgent):
         
     def process_trade_list(self):
         Is_Set = False
-        #self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.Cancelled ] 
+        self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.StratConfirm ] 
         for exec_trade in self.etrades:
             if exec_trade.status == order.ETradeStatus.Pending:
                 if (exec_trade.valid_time < self.tick_id):

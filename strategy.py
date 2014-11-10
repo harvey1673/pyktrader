@@ -6,11 +6,14 @@ import order as order
 from ctp.futures import ApiStruct
 import math
 import logging
+import datetime
+import csv
+import os
 
 sign = lambda x: math.copysign(1, x)
 tradepos_header = ['insts', 'vols', 'pos', 'direction', 'entry_price', 'entry_time', 'entry_target', 'entry_tradeid',
-								  'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed']
-								  
+                                  'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed']
+                                  
 class TradePos(object):
     def __init__(self, insts, vols, pos, entry_target, exit_target):
         self.insts = insts
@@ -44,28 +47,28 @@ class TradePos(object):
 def tradepos2dict(tradepos):
     trade = {}
     trade['insts'] = ' '.join(tradepos.insts)
-	trade['vols'] = ' '.join([str(v) for v in tradepos.volumes])
+    trade['vols'] = ' '.join([str(v) for v in tradepos.volumes])
     trade['pos'] = tradepos.pos
     trade['direction'] = tradepos.direction
-	trade['entry_target'] = tradepos.entry_target
+    trade['entry_target'] = tradepos.entry_target
     trade['exit_target'] = tradepos.exit_target
     if tradepos.entry_time == None:
-		trade['entry_time'] = ''
-		trade['entry_price'] = 0.0
-		trade['entry_tradeid'] = 0
-	else:
-		trade['entry_time'] = tradepos.entry_time.strftime('%Y%m%d %H:%M:%S %f')
-		trade['entry_price'] = tradepos.entry_price
-		trade['entry_tradeid'] = tradepos.entry_tradeid
-	
-	if tradepos.exit_time == None:
-		trade['exit_time'] = ''
-		trade['exit_price'] = 0.0
-		trade['exit_tradeid'] = 0
-	else:
-		trade['exit_time'] = tradepos.exit_time.strftime('%Y%m%d %H:%M:%S %f')
-		trade['exit_price'] = tradepos.exit_price
-		trade['exit_tradeid'] = tradepos.exit_tradeid
+        trade['entry_time'] = ''
+        trade['entry_price'] = 0.0
+        trade['entry_tradeid'] = 0
+    else:
+        trade['entry_time'] = tradepos.entry_time.strftime('%Y%m%d %H:%M:%S %f')
+        trade['entry_price'] = tradepos.entry_price
+        trade['entry_tradeid'] = tradepos.entry_tradeid
+    
+    if tradepos.exit_time == None:
+        trade['exit_time'] = ''
+        trade['exit_price'] = 0.0
+        trade['exit_tradeid'] = 0
+    else:
+        trade['exit_time'] = tradepos.exit_time.strftime('%Y%m%d %H:%M:%S %f')
+        trade['exit_price'] = tradepos.exit_price
+        trade['exit_tradeid'] = tradepos.exit_tradeid
 
     trade['profit'] = tradepos.profit
     trade['is_closed'] = 1 if tradepos.is_closed else 0
@@ -132,59 +135,67 @@ class Strategy(object):
         pass
     
     def save_state(self):
-		filename = self.folder + 'strat_status.csv'
-		with open(filename,'wb') as log_file:
-			file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-			file_writer.writerow(tradepos_header)
-			for under, tplist in zip(self.underliers, self.positions):
-				for tradepos in tplist:
-					tradedict = tradepos2dict(tradepos)
-					file_writer.writerow([tradedict[itm] for itm in tradepos_heaader])
-		pass
+        filename = self.folder + 'strat_status.csv'
+        with open(filename,'wb') as log_file:
+            file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            file_writer.writerow(tradepos_header)
+            for tplist in self.positions:
+                for tradepos in tplist:
+                    tradedict = tradepos2dict(tradepos)
+                    file_writer.writerow([tradedict[itm] for itm in tradepos_header])
+        return
 
     def load_state(self):
-		filename = self.folder + 'strat_status.csv'
-		positions  = [[] for under in underliers]
-		if not os.path.isfile(logfile):
-			self.positions  = positions
-			return 
-		with open(logfile, 'rb') as f:
-			reader = csv.reader(f)
-			for idx, row in enumerate(reader):
-				if idx > 0:
-					insts = row[0].split(' ')
-					vols = [ int(n) for n in row[1].split(' ')]
-					pos = int(row[2])
-					direction = int(row[3])
-					entry_target = float(row[6])
-					exit_target = float(row[10])
-					tradepos = TradePos(insts, vols, pos, entry_target, exit_target)
-					if row[5] == '':
-						entry_time = None
-						entry_price = None
-						entry_tradeid = None
-					else:
-						entry_time = datetime.datetime.strptime(row[5], '%Y%m%d %H:%M:%S %f')
-						entry_price = float(row[4])
-						entry_tradeid = int(row[7])
-						tradepos.open(entry_price,entry_time,entry_tradeid)
-						
-					if row[9] == '':
-						exit_time = None
-						exit_price = None
-						entry_tradeid = None
-					else:					
-						exit_time = datetime.datetime.strptime(row[9], '%Y%m%d %H:%M:%S %f')
-						exit_price = float(row[8])
-						exit_tradeid = int(row[11])
-						tradepos.open(exit_price, exit_time, exit_tradeid)
-					
-					under_idx = self.underliers.index(insts)
-					self.positions[under_idx].append(tradepos)
-		return	
-		
-	def save_closed_pos(self, tradepos):
-		pass
+        logfile = self.folder + 'strat_status.csv'
+        positions  = [[] for under in self.underliers]
+        if not os.path.isfile(logfile):
+            self.positions  = positions
+            return 
+        with open(logfile, 'rb') as f:
+            reader = csv.reader(f)
+            for idx, row in enumerate(reader):
+                if idx > 0:
+                    insts = row[0].split(' ')
+                    vols = [ int(n) for n in row[1].split(' ')]
+                    pos = int(row[2])
+                    #direction = int(row[3])
+                    entry_target = float(row[6])
+                    exit_target = float(row[10])
+                    tradepos = TradePos(insts, vols, pos, entry_target, exit_target)
+                    if row[5] == '':
+                        entry_time = None
+                        entry_price = None
+                        entry_tradeid = None
+                    else:
+                        entry_time = datetime.datetime.strptime(row[5], '%Y%m%d %H:%M:%S %f')
+                        entry_price = float(row[4])
+                        entry_tradeid = int(row[7])
+                        tradepos.open(entry_price,entry_time,entry_tradeid)
+                        
+                    if row[9] == '':
+                        exit_time = None
+                        exit_price = None
+                        entry_tradeid = None
+                    else:                    
+                        exit_time = datetime.datetime.strptime(row[9], '%Y%m%d %H:%M:%S %f')
+                        exit_price = float(row[8])
+                        exit_tradeid = int(row[11])
+                        tradepos.close(exit_price, exit_time, exit_tradeid)
+                    
+                    is_added = False
+                    for under, tplist in zip(self.underliers, self.positions):
+                        if set(under) == set(insts):
+                            tplist.append(tradepos)
+                            is_added = True
+                            break
+                    if is_added == False:
+                        self.underliers.append(insts)
+                        self.positions.append([tradepos])
+                        self.logger.warning('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
+        return    
+        
+    def save_closed_pos(self, tradepos):
+        pass
 
    
 class TurtleTrader(Strategy):

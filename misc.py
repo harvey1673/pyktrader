@@ -300,7 +300,7 @@ def contract_range(product, exch, cont_mth, start_date, end_date):
         for mth in range(1,13):
             if (mth in cont_mth):
                 if (datetime.date(yr,mth,28) > start_date) and (datetime.date(yr-1,mth,1) <= end_date):
-                    if exch == 'ZCE' and datetime.date(yr,mth,1) < datetime.date(2014,9,30):
+                    if exch == 'ZCE' and datetime.date(yr,mth,1) > datetime.date(2014,12,31):
                         contLabel = product + "%01d" %(yr%10) + "%02d" % mth
                     else:
                         contLabel = product + "%02d" %(yr%100) + "%02d" % mth
