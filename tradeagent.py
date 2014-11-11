@@ -912,8 +912,10 @@ class Agent(AbsAgent):
             if m > 1 and mins % m == 0:
                 print df_m.ix[-1]
         for strat in self.strategies:
+            self.proc_lock = True
             if inst in strat.instIDs:
                 strat.run_min(inst)
+            self.proc_lock = False
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
             mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
@@ -940,12 +942,18 @@ class Agent(AbsAgent):
             self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
             self.cur_day[inst]['date'] = self.scur_day
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+
+    def run_eod(self):
         if self.trader != None:
+            for etrade in self.etrades:
+                etrade.update()
+                if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
+                    etrade.status = order.ETradeStatus.Cancelled
+            for strat in self.strategies:
+                strat.day_finalize()
             self.save_eod_positions()
             self.etrades = []
             self.ref2order = {}
-        for strat in self.strategies:
-            strat.day_finalize()
 
     def add_strategy(self, strat):
         self.append(strat)
