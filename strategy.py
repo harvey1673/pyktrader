@@ -144,7 +144,7 @@ class Strategy(object):
                     tradedict = tradepos2dict(tradepos)
                     file_writer.writerow([tradedict[itm] for itm in tradepos_header])
         return
-
+    
     def load_state(self):
         logfile = self.folder + 'strat_status.csv'
         positions  = [[] for under in self.underliers]
@@ -195,8 +195,12 @@ class Strategy(object):
         return    
         
     def save_closed_pos(self, tradepos):
-        pass
-
+        logfile = self.folder + 'hist_tradepos.csv'
+        with open(logfile,'a') as log_file:
+            file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            tradedict = tradepos2dict(tradepos)
+            file_writer.writerow([tradedict[itm] for itm in tradepos_header])
+        return        
    
 class TurtleTrader(Strategy):
     def __init__(self, name, underliers,  capital, agent = None):
@@ -213,14 +217,7 @@ class TurtleTrader(Strategy):
         self.pos_ratio = 0.01
         self.stop_loss = 2.0
         self.breakout_signals = [0] * len(underliers)
-        self.last_flag = [True] * len(underliers)
-    
-    def save_state(self):
-        
-        pass
-    
-    def load_state(self):
-        pass    
+        self.last_flag = [True] * len(underliers) 
     
     def run_tick(self, ctick):
         inst = ctick.instID
@@ -236,12 +233,14 @@ class TurtleTrader(Strategy):
                 break
         sub_pos = self.submitted_pos[idx]
         if len(sub_pos) > 0:
-            
-            if pos['trade'].status == order.ETradeStatus.Done:
-                traded_price = pos['trade'].filled_price[0]
-                traded_vol = pos['trade'].volumes[0]
-                pos.pop('trade', None)
-                if pos['serialno'] >= len(self.positions[inst]):
+            etrade= sub_pos[0]
+            if etrade.status == order.ETradeStatus.Done:
+                traded_price = etrade.filled_price[0]
+                traded_vol = etrade.volumes[0]
+                for tradepos in reversed(self.positions[idx]):
+                    if tradepos.entry_tradeid == etrade.id:
+                        
+                if pos['serialno'] >= len(self.positions[idx]):
                     pexit = pos['exit']
                     for p in self.positions[inst]:
                         p['exit'] = pexit
