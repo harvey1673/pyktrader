@@ -31,13 +31,21 @@ class TradePos(object):
         self.is_closed = False
         self.profit = 0.0
     
-    def open(self, price, start_time, tradeid):
+	def set_tradeid(self, tradeid, pos):
+		direction = 1 if pos > 0 else -1
+		if direction == self.direction:
+			self.entry_tradeid = tradeid
+		else:
+			self.exit_tradeid = tradeid
+		return 
+
+    def open(self, price, start_time):
         self.entry_price = price
         self.entry_time = start_time
         self.entry_tradeid = tradeid
         self.is_closed = False
         
-    def close(self, price, end_time, tradeid):
+    def close(self, price, end_time):
         self.exit_time = end_time
         self.exit_price = price
         self.exit_tradeid = tradeid
@@ -52,23 +60,29 @@ def tradepos2dict(tradepos):
     trade['direction'] = tradepos.direction
     trade['entry_target'] = tradepos.entry_target
     trade['exit_target'] = tradepos.exit_target
-    if tradepos.entry_time == None:
+	if tradepos.entry_tradeid == None:
+	    trade['entry_tradeid'] = 0
+	else:
+		trade['entry_tradeid'] = tradepos.entry_tradeid
+
+	if tradepos.exit_tradeid == None:
+	    trade['exit_tradeid'] = 0
+	else:
+		trade['exit_tradeid'] = tradepos.exit_tradeid
+		
+	if tradepos.entry_time == None:
         trade['entry_time'] = ''
         trade['entry_price'] = 0.0
-        trade['entry_tradeid'] = 0
     else:
         trade['entry_time'] = tradepos.entry_time.strftime('%Y%m%d %H:%M:%S %f')
         trade['entry_price'] = tradepos.entry_price
-        trade['entry_tradeid'] = tradepos.entry_tradeid
     
     if tradepos.exit_time == None:
         trade['exit_time'] = ''
         trade['exit_price'] = 0.0
-        trade['exit_tradeid'] = 0
     else:
         trade['exit_time'] = tradepos.exit_time.strftime('%Y%m%d %H:%M:%S %f')
         trade['exit_price'] = tradepos.exit_price
-        trade['exit_tradeid'] = tradepos.exit_tradeid
 
     trade['profit'] = tradepos.profit
     trade['is_closed'] = 1 if tradepos.is_closed else 0
@@ -169,18 +183,27 @@ class Strategy(object):
                     else:
                         entry_time = datetime.datetime.strptime(row[5], '%Y%m%d %H:%M:%S %f')
                         entry_price = float(row[4])
-                        entry_tradeid = int(row[7])
-                        tradepos.open(entry_price,entry_time,entry_tradeid)
-                        
-                    if row[9] == '':
+                        tradepos.open(entry_price,entry_time)
+						
+                    if row[7] == '':
+						entry_tradeid = None
+					else:
+						entry_tradeid = int(row[7])
+						tradepos.set_tradeid(entry_tradeid, tradepos.direction)
+						
+                    if row[11] == '':
+						exit_tradeid = None
+					else:
+						exit_tradeid = int(row[11])		
+						tradepos.set_tradeid(exit_tradeid, -tradepos.direction)
+                    
+					if row[9] == '':
                         exit_time = None
                         exit_price = None
-                        entry_tradeid = None
                     else:                    
                         exit_time = datetime.datetime.strptime(row[9], '%Y%m%d %H:%M:%S %f')
                         exit_price = float(row[8])
-                        exit_tradeid = int(row[11])
-                        tradepos.close(exit_price, exit_time, exit_tradeid)
+                        tradepos.close(exit_price, exit_time)
                     
                     is_added = False
                     for under, tplist in zip(self.underliers, self.positions):
@@ -239,7 +262,15 @@ class TurtleTrader(Strategy):
                 traded_vol = etrade.volumes[0]
                 for tradepos in reversed(self.positions[idx]):
                     if tradepos.entry_tradeid == etrade.id:
-                        
+                        tradepos.open( traded_price, datetime.datetime.now())
+						etrade.status = order.ETradeStatus.StratConfirm
+						break
+					elif tradepos.exit_tradeid == etrade.id:
+                        tradepos.close( traded_price, datetime.datetime.now())
+						self.save_closed_pos(trade_pos)
+						etrade.status = order.ETradeStatus.StratConfirm
+						break
+
                 if pos['serialno'] >= len(self.positions[idx]):
                     pexit = pos['exit']
                     for p in self.positions[inst]:
