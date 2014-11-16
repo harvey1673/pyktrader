@@ -1,5 +1,10 @@
 #-*- coding:utf-8 -*-
 import tradeagent as agent
+import time
+import logging
+import base 
+import mysqlaccess as mdb
+import datetime
 from ctp.futures import ApiStruct
 
 class TraderMock(object):
@@ -23,16 +28,12 @@ class TraderMock(object):
                     OrderLocalID = oid,
                     TradeTime = time.strftime('%H%M%S'),
                 )
+        inst = self.myagent.instruments[order.InstrumentID]
         if order.CombOffsetFlag == ApiStruct.OF_Open:
-            self.available -= order.LimitPrice * 300 * 0.17
+            self.available -= order.LimitPrice * inst.multiple * inst.marginrate[0]
         else:
-            self.available += order.LimitPrice * 300 * 0.17
-        fl_open = strategy.MAX_OPEN_OVERFLOW * 0.2
-        fl_close = strategy.MAX_CLOSE_OVERFLOW * 0.2
-        if order.CombOffsetFlag == ApiStruct.OF_Open:
-            trade.Price += -fl_open if order.Direction == ApiStruct.D_Buy else fl_open
-        else:
-            trade.Price += -fl_close if order.Direction == ApiStruct.D_Buy else fl_close
+            self.available += order.LimitPrice * inst.multiple * inst.marginrate[0]
+
         self.myagent.rtn_trade(trade)
 
     def ReqOrderAction(self, corder, request_id):
@@ -48,17 +49,21 @@ class TraderMock(object):
 
     def ReqQryTradingAccount(self,req,req_id=0):
         logging.info(u'查询帐户余额')
-        account = BaseObject(Available=self.available) 
+        account = base.BaseObject(Available=self.available) 
         self.myagent.rsp_qry_trading_account(account)
 
     def ReqQryInstrument(self,req,req_id=0):#只有唯一一个合约
         logging.info(u'查询合约')
-        ins = BaseObject(InstrumentID = req.InstrumentID,VolumeMultiple = 300,PriceTick=0.2)
+        instID = req.InstrumentID
+        inst = self.myagent.instruments[instID]
+        ins = base.BaseObject(InstrumentID = instID, VolumeMultiple = inst.multiple, PriceTick=inst.tick_base)
         self.myagent.rsp_qry_instrument(ins)
 
     def ReqQryInstrumentMarginRate(self,req,req_id=0):
         logging.info(u'查询保证金')
-        mgr = BaseObject(InstrumentID = req.InstrumentID,LongMarginRatioByMoney=0.17,ShortMarginRatioByMoney=0.17)
+        instID = req.InstrumentID
+        inst = self.myagent.instruments[instID]
+        mgr = base.BaseObject(InstrumentID = instID,LongMarginRatioByMoney=inst.marginrate[0],ShortMarginRatioByMoney=inst.marginrate[0])
         self.myagent.rsp_qry_instrument_marginrate(mgr)
 
     def ReqQryInvestorPosition(self,req,req_id=0):
@@ -72,15 +77,32 @@ class TraderMock(object):
 class MarketDataMock(object):
     '''简单起见，只模拟一个合约，用于功能测试
     '''
-    def __init__(self,instruments, agent):
-        self.instIDs = instruments
-		self.data_freq = 'tick'
-        self.agent = agent.Agent(None,None,instruments,{})
+    def __init__(self,agent):
+        self.instIDs = agent.instruments.keys()
+        self.data_freq = 'tick'
+        self.agent = agent
 
-    def play(self,tday=0):
-        ticks = hreader.read_ticks(self.instrument,tday)
-        for tick in ticks:
-            self.agent.RtnTick(tick)
+    def play(self, tday=0):
+        tick_data = {}
+        start_time = {}
+        start_idx = {}
+        end_time = {}
+        for inst in self.instIDs:
+            tick_data[inst] = mdb.load_tick_data('fut_tick', inst, tday, tday)
+            start_time[inst] = tick_data[inst][0]['timestamp']
+            start_time[inst] = tick_data[inst][-1]['timestamp']
+            start_idx[inst] =  0
+        start_t = min(start_time.values())
+
+        dt_list = [start_t + datetime.timedelta(seconds=n*0.5) for n in range(45000)]
+        while start_t <= end_t:
+            for inst in self.instIDs:
+                if start_t > start_time[inst]:
+                    idx = start_idx[inst]
+                    self.agent.RtnTick(tick_data[inst][idx])
+                    start_idx[inst] += 1
+                    start_time[inst] =  
+                self.agent.RtnTick(tick)
             #self.agent.RtnTick(tick)
 
 def create_agent_with_mocktrader(instrument,tday,sname='strategy_mock.ini'):

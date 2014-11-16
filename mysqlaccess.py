@@ -17,7 +17,7 @@ dbconfig = {'user': 'harvey',
           'host':'localhost',
           'database': 'blueshale',
           }
-
+tick_columns = ['date','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
 min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
 daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
@@ -186,6 +186,22 @@ def load_daily_data_to_df(dbtable, inst, d_start, d_end):
     cnx.close()
     return df
 
+def load_tick_data(dbtable, inst, d_start, d_end):
+    cnx = mysql.connector.connect(**dbconfig)
+    cursor = cnx.cursor()
+    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(tick_columns), table= dbtable, instID = inst)
+    stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
+    stmt = stmt + "and date <= '%s' " % d_end.strftime('%Y-%m-%d')
+    stmt = stmt + "order by date, hour, min, sec, msec" 
+    cursor.execute(stmt)
+    all_ticks = []
+    for line in cursor:
+        tick = dict([(key,val) for (key, val) in zip(tick_columns, line)])
+        tick['timestamp'] = datetime.datetime.combine(tick['date'], datetime.time(hour=tick['hour'], minute=tick['min'], second=tick['sec'], microsecond=tick['msec']*1000))
+        all_ticks.append(tick)     
+    cnx.close()
+    return all_ticks
+    
 def insert_min_data_to_df(df, min_data):
     new_data = { key: min_data[key] for key in min_columns[1:] }
     df.loc[min_data['datetime']] = pd.Series(new_data)
