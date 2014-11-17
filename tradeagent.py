@@ -186,7 +186,7 @@ class TraderSpiDelegate(TraderApi):
 
     def OnFrontDisconnected(self, nReason):
         TraderSpiDelegate.logger.info(u'TD:trader front disconnected,reason=%s' % (nReason,))
-		self.agent.on_trading_conn_close()
+        self.agent.on_trading_conn_close()
 
     def user_login(self, broker_id, investor_id, passwd):
         req = ApiStruct.ReqUserLogin(BrokerID=broker_id, UserID=investor_id, Password=passwd)
@@ -631,9 +631,9 @@ class Agent(AbsAgent):
             初始化，如保证金率，账户资金等
         '''
         ##必须先把持仓初始化成配置值或者0
-		self.get_eod_positions()
+        self.get_eod_positions()
         for inst in self.instruments:
-            inst.get_margin_rate()
+            self.instruments[inst].get_margin_rate()
         for inst in self.positions:
             self.positions[inst].re_calc() 
         self.qry_commands.append(self.fetch_trading_account)
@@ -688,11 +688,11 @@ class Agent(AbsAgent):
                         df[ts.name]= pd.Series(ts, index=df.index)  
   
     def resume(self):
-        self.proc_lock = True
-        time.sleep(1)
         #self.fetch_order()   
         #self.fetch_trade()     
-        self.get_eod_positions()
+        self.proc_lock = True
+        time.sleep(1)
+        #self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
@@ -755,17 +755,17 @@ class Agent(AbsAgent):
         logfile = file_prefix + 'EOD_Pos_' + self.scur_day.strftime('%y%m%d')+'.csv'
         self.logger.info('EOD process: saving EOD position for %s' % self.scur_day.strftime('%y%m%d'))
         if os.path.isfile(logfile):
-			self.logger.info('EOD position file for %s already exists' % self.scur_day.strftime('%y%m%d'))
+            self.logger.info('EOD position file for %s already exists' % self.scur_day.strftime('%y%m%d'))
             return True
-		else:
-			with open(logfile,'wb') as log_file:
-				file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
-				file_writer.writerow(['instID', 'long', 'short'])
-				for inst in self.positions:
-					pos = self.positions[inst]
-					pos.re_calc()
-					file_writer.writerow([inst, pos.pos_tday.long, pos.pos_tday.short])
-			return True
+        else:
+            with open(logfile,'wb') as log_file:
+                file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
+                file_writer.writerow(['instID', 'long', 'short'])
+                for inst in self.positions:
+                    pos = self.positions[inst]
+                    pos.re_calc()
+                    file_writer.writerow([inst, pos.pos_tday.long, pos.pos_tday.short])
+            return True
 
     def calc_margin(self):
         locked_margin = 0
@@ -952,9 +952,10 @@ class Agent(AbsAgent):
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
 
     def on_trading_conn_close(self):
-		now = datetime.datetime.now()
-		tday = now.date()
-		if get_tick_id(now) >= 2116000 and (tday.isoweekday()<6) and (tday not in misc.CHN_Holidays):
+        print 'on trading connection close'
+        now = datetime.datetime.now()
+        tday = now.date()
+        if get_tick_id(now) >= 2116000 and (tday.isoweekday()<6) and (tday not in misc.CHN_Holidays):
             for etrade in self.etrades:
                 etrade.update()
                 if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
@@ -1640,8 +1641,8 @@ def test_main(name='test_trade'):
         #myagent.positions['IF1412'].re_calc()        
         
         valid_time = myagent.tick_id + 10000
-        etrade =  order.ETrade( ['IF1412','IF1411'], [1, -1], [ApiStruct.OPT_LimitPrice, ApiStruct.OPT_LimitPrice], 6, [0, 0], valid_time, test_strat.name, myagent.name)
-        myagent.submit_trade(etrade)
+        #etrade =  order.ETrade( ['IF1412','IF1411'], [1, -1], [ApiStruct.OPT_LimitPrice, ApiStruct.OPT_LimitPrice], 6, [0, 0], valid_time, test_strat.name, myagent.name)
+        #myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
         #myagent.tick_id = valid_time - 10
