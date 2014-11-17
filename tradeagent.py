@@ -186,6 +186,7 @@ class TraderSpiDelegate(TraderApi):
 
     def OnFrontDisconnected(self, nReason):
         TraderSpiDelegate.logger.info(u'TD:trader front disconnected,reason=%s' % (nReason,))
+		self.agent.on_trading_conn_close()
 
     def user_login(self, broker_id, investor_id, passwd):
         req = ApiStruct.ReqUserLogin(BrokerID=broker_id, UserID=investor_id, Password=passwd)
@@ -630,8 +631,11 @@ class Agent(AbsAgent):
             初始化，如保证金率，账户资金等
         '''
         ##必须先把持仓初始化成配置值或者0
+		self.get_eod_positions()
         for inst in self.instruments:
             inst.get_margin_rate()
+        for inst in self.positions:
+            self.positions[inst].re_calc() 
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
@@ -750,14 +754,18 @@ class Agent(AbsAgent):
         file_prefix = self.folder
         logfile = file_prefix + 'EOD_Pos_' + self.scur_day.strftime('%y%m%d')+'.csv'
         self.logger.info('EOD process: saving EOD position for %s' % self.scur_day.strftime('%y%m%d'))
-        with open(logfile,'wb') as log_file:
-            file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
-            file_writer.writerow(['instID', 'long', 'short'])
-            for inst in self.positions:
-                pos = self.positions[inst]
-                pos.re_calc()
-                file_writer.writerow([inst, pos.pos_tday.long, pos.pos_tday.short])
-        return True
+        if os.path.isfile(logfile):
+			self.logger.info('EOD position file for %s already exists' % self.scur_day.strftime('%y%m%d'))
+            return True
+		else:
+			with open(logfile,'wb') as log_file:
+				file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
+				file_writer.writerow(['instID', 'long', 'short'])
+				for inst in self.positions:
+					pos = self.positions[inst]
+					pos.re_calc()
+					file_writer.writerow([inst, pos.pos_tday.long, pos.pos_tday.short])
+			return True
 
     def calc_margin(self):
         locked_margin = 0
@@ -943,8 +951,10 @@ class Agent(AbsAgent):
             self.cur_day[inst]['date'] = self.scur_day
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
 
-    def run_eod(self):
-        if self.trader != None:
+    def on_trading_conn_close(self):
+		now = datetime.datetime.now()
+		tday = now.date()
+		if get_tick_id(now) >= 2116000 and (tday.isoweekday()<6) and (tday not in misc.CHN_Holidays):
             for etrade in self.etrades:
                 etrade.update()
                 if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
