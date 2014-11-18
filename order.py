@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import logging
 from base import *
-from ctp.futures import ApiStruct as utype
+from misc import * 
 import itertools
 import datetime
 import csv
@@ -209,9 +209,9 @@ class Order(object):
         ##衍生
         self.instrument = position.instrument
         self.sys_id = ''
-        self.direction = direction # D_Buy, D_Sell
+        self.direction = direction # ORDER_BUY, ORDER_SELL
         ##操作类型
-        self.action_type = action_type # utype.OF_CloseToday, utype.OF_Close, utype.OF_Open
+        self.action_type = action_type # OF_CLOSE_TDAY, OF_CLOSE, OF_OPEN
         self.price_type = price_type
         ##
         self.volume = vol #目标成交手数,锁定总数
@@ -268,7 +268,7 @@ class Order(object):
 
     def __str__(self):
         return u'Order_A: 合约=%s,方向=%s,目标数=%s,开仓数=%s,状态=%s' % (self.instrument.name,
-                u'多' if self.direction==utype.D_Buy else u'空',
+                u'多' if self.direction==ORDER_BUY else u'空',
                 self.volume,
                 self.filled_volume,
                 self.status,
@@ -302,22 +302,22 @@ class Position(object):
         
         for mo in self.orders:
             logging.info(str(mo))
-            if mo.action_type == utype.OF_Open:
-                if mo.direction == utype.D_Buy:
+            if mo.action_type == OF_OPEN:
+                if mo.direction == ORDER_BUY:
                     tday_opened.long += mo.filled_volume
                     tday_o_locked.long += mo.volume
                 else:
                     tday_opened.short += mo.filled_volume
                     tday_o_locked.short += mo.volume            
-            elif (mo.action_type == utype.OF_Close) or (mo.action_type == utype.OF_CloseToday):
-                if mo.direction == utype.D_Buy:
+            elif (mo.action_type == OF_CLOSE) or (mo.action_type == OF_CLOSE_TDAY):
+                if mo.direction == ORDER_BUY:
                     tday_closed.long  += mo.filled_volume
                     tday_c_locked.long += mo.volume
                 else: 
                     tday_closed.short += mo.filled_volume
                     tday_c_locked.short += mo.volume
-            elif mo.action_type == utype.OF_CloseYesterday:
-                if mo.direction == utype.D_Buy:
+            elif mo.action_type == OF_CLOSE_YDAY:
+                if mo.direction == ORDER_BUY:
                     yday_closed.long  += mo.filled_volume
                     yday_c_locked.long += mo.volume
                 else:
