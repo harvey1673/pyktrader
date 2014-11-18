@@ -1,9 +1,9 @@
 #-*- coding:utf-8 -*-
 import pandas as pd
 from base import *
+from misc import *
 import data_handler
 import order as order
-from ctp.futures import ApiStruct
 import math
 import logging
 import datetime
@@ -299,7 +299,7 @@ class TurtleTrader(Strategy):
                 if buysell !=0:
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                           [ApiStruct.OPT_LimitPrice], cur_price, [5],  \
+                                           [OPT_LIMIT_ORDER], cur_price, [5],  \
                                            valid_time, self.name, self.agent.name)
                     tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
                                         cur_price, cur_price - cur_atr*self.stop_loss*buysell)
@@ -318,7 +318,7 @@ class TurtleTrader(Strategy):
                         or ((cur_price - tradepos.exit_target)*buysell < 0):
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
-                                               [ApiStruct.OPT_LimitPrice], cur_price, [5], \
+                                               [OPT_LIMIT_ORDER], cur_price, [5], \
                                                valid_time, self.name, self.agent.name)
                         tradepos.set_tradeid(etrade.id, -buysell)
                         self.submitted_pos[idx].append(etrade)
@@ -326,7 +326,7 @@ class TurtleTrader(Strategy):
                     elif  units < 4 and (cur_price - self.positions[idx][-1].entry_price)*buysell >= cur_atr/2.0:
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                               [ApiStruct.OPT_LimitPrice], cur_price, [5],  \
+                                               [OPT_LIMIT_ORDER], cur_price, [5],  \
                                                valid_time, self.name, self.agent.name)
                         tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
                                             cur_price, cur_price - cur_atr*self.stop_loss*buysell)
