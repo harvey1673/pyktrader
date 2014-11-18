@@ -167,7 +167,7 @@ class TraderSpiDelegate(TraderApi):
         self.agent = agent
         self.agent.set_spi(self)
         self.is_logged = False
-		self.ctp_orders = {}
+        self.ctp_orders = {}
         self.ctp_trades = {}
                 
     def isRspSuccess(self,RspInfo):
@@ -203,7 +203,7 @@ class TraderSpiDelegate(TraderApi):
             return
         self.is_logged = True
         TraderSpiDelegate.logger.info(u'TD:trader login success')
-		self.front_id = pRspUserLogin.FrontID
+        self.front_id = pRspUserLogin.FrontID
         self.session_id = pRspUserLogin.SessionID
         self.agent.login_success(pRspUserLogin.FrontID,pRspUserLogin.SessionID,pRspUserLogin.MaxOrderRef)
         #self.settlementInfoConfirm()
@@ -362,29 +362,29 @@ class TraderSpiDelegate(TraderApi):
         '''
         TraderSpiDelegate.logger.error(u'TD:requestID:%s,IsLast:%s,info:%s' % (RequestId,IsLast,str(info)))
 
-    def OnRspQryOrder(self, pOrder, pRspInfo, nRequestID, bIsLast):
+    def OnRspQryOrder(self, porder, pRspInfo, nRequestID, bIsLast):
         '''请求查询报单响应'''
-        print pOrder
+        print porder
         if (porder!= None) and (porder.InstrumentID in self.agent.instruments):
             self.ctp_orders[int(porder.OrderRef)] = porder
         if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_order(pOrder)
+            self.agent.rsp_qry_order(porder)
         else:
-            self.agent.rsp_qry_order(pOrder) 
+            self.agent.rsp_qry_order(porder) 
 
-    def OnRspQryTrade(self, pTrade, pRspInfo, nRequestID, bIsLast):
+    def OnRspQryTrade(self, ptrade, pRspInfo, nRequestID, bIsLast):
         '''请求查询成交响应'''
-        print pTrade, pRspInfo
+        print ptrade, pRspInfo
         if (ptrade != None) and (ptrade.InstrumentID in self.agent.instruments):
             self.ctp_trades[ptrade.OrderRef] = ptrade
-			
+            
         if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_trade(pTrade)
+            self.agent.rsp_qry_trade(ptrade)
         else:
-            self.agent.rsp_qry_trade(pTrade)
-	
-	def check_order_status(self):
-		Is_Set = False
+            self.agent.rsp_qry_trade(ptrade)
+    
+    def check_order_status(self):
+        Is_Set = False
         if len(self.ctp_orders)>0:
             order_list = []
             for order_ref in self.ctp_orders:
@@ -406,10 +406,10 @@ class TraderSpiDelegate(TraderApi):
                 else:
                     order_list.append(order_ref)
             self.ctp_orders = {} #{ o: self.ctp_orders[o] for o in order_list}
-		return Is_Set
+        return Is_Set
 
     ###交易操作
-	def send_order(self, iorder):
+    def send_order(self, iorder):
         req = ApiStruct.InputOrder(
                 InstrumentID = iorder.instrument.name,
                 Direction = iorder.direction,
@@ -436,9 +436,9 @@ class TraderSpiDelegate(TraderApi):
                           iorder.limit_price, 
                           iorder.price_type))
         r = self.ReqOrderInsert(req,self.agent.inc_request_id())
-		return r
-	
-	def cancel_order(self, iorder):
+        return r
+    
+    def cancel_order(self, iorder):
         inst = iorder.instrument
         TraderSpiDelegate.logger.info(u'A_CC:取消命令: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
                 % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
@@ -463,7 +463,7 @@ class TraderSpiDelegate(TraderApi):
                 #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
             )
         r = self.ReqOrderAction(req,self.agent.inc_request_id())
-		return r
+        return r
 
     def OnRspOrderInsert(self, pInputOrder, pRspInfo, nRequestID, bIsLast):
         '''
@@ -486,13 +486,13 @@ class TraderSpiDelegate(TraderApi):
         TraderSpiDelegate.logger.warning(u'TD:交易所报单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
         self.agent.err_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
     
-    def OnRtnOrder(self, pOrder):
+    def OnRtnOrder(self, porder):
         ''' 报单通知
             CTP、交易所接受报单(CTP接受的已经被过滤)
             Agent中不区分，所得信息只用于撤单,暂时只处理撤单的回报.
         '''
-        print repr(pOrder)
-        TraderSpiDelegate.logger.info(u'成交/撤单回报,Order=%s' % str(pOrder))
+        print repr(porder)
+        TraderSpiDelegate.logger.info(u'成交/撤单回报,Order=%s' % str(porder))
         order_ref = int(porder.OrderRef)
         order_sysid = porder.OrderSysID
         sysid_list = [o.sys_id for o in self.agent.ref2order.values()]
@@ -503,30 +503,30 @@ class TraderSpiDelegate(TraderApi):
         if myorder.sys_id != porder.OrderSysID:
             myorder.sys_id = porder.OrderSysID
 
-        if pOrder.OrderStatus == 'a':
+        if porder.OrderStatus == 'a':
             #CTP接受，但未发到交易所
             #print u'CTP接受Order，但未发到交易所, BrokerID=%s,BrokerOrderSeq = %s,TraderID=%s, OrderLocalID=%s' % (pOrder.BrokerID,pOrder.BrokerOrderSeq,pOrder.TraderID,pOrder.OrderLocalID)
-            TraderSpiDelegate.logger.info(u'TD:CTP接受Order，但未发到交易所, BrokerID=%s,BrokerOrderSeq = %s,TraderID=%s, OrderLocalID=%s' % (pOrder.BrokerID,pOrder.BrokerOrderSeq,pOrder.TraderID,pOrder.OrderLocalID))
+            TraderSpiDelegate.logger.info(u'TD:CTP接受Order，但未发到交易所, BrokerID=%s,BrokerOrderSeq = %s,TraderID=%s, OrderLocalID=%s' % (porder.BrokerID,porder.BrokerOrderSeq,porder.TraderID,porder.OrderLocalID))
         else:
             #print u'交易所接受Order,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' % (pOrder.ExchangeID,pOrder.OrderSysID,pOrder.TraderID,pOrder.OrderLocalID)
-            TraderSpiDelegate.logger.info(u'TD:交易所接受Order,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' % (pOrder.ExchangeID,pOrder.OrderSysID,pOrder.TraderID,pOrder.OrderLocalID))
-			
+            TraderSpiDelegate.logger.info(u'TD:交易所接受Order,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' % (porder.ExchangeID,porder.OrderSysID,porder.TraderID,porder.OrderLocalID))
+            
         if porder.OrderStatus == ApiStruct.OST_Canceled or porder.OrderStatus == ApiStruct.OST_PartTradedNotQueueing:   #完整撤单或部成部撤
             TraderSpiDelegate.logger.info(u'撤单, 撤销开/平仓单')
             ##处理相关Order
             myorder.on_cancel()
-			self.agent.rtn_order(pOrder)
+            self.agent.rtn_order(porder)
         return
 
-    def OnRtnTrade(self, pTrade):
+    def OnRtnTrade(self, ptrade):
         '''
             成交回报
             #TODO: 必须考虑出现平仓信号时，position还没完全成交的情况
                    在OnTrade中进行position的细致处理 
             #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''
-        TraderSpiDelegate.logger.info(u'TD:成交通知,BrokerID=%s,BrokerOrderSeq = %s,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' %(pTrade.BrokerID,pTrade.BrokerOrderSeq,pTrade.ExchangeID,pTrade.OrderSysID,pTrade.TraderID,pTrade.OrderLocalID))
-        TraderSpiDelegate.logger.info(u'TD:成交回报,Trade=%s' % repr(pTrade))
+        TraderSpiDelegate.logger.info(u'TD:成交通知,BrokerID=%s,BrokerOrderSeq = %s,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' %(ptrade.BrokerID,ptrade.BrokerOrderSeq,ptrade.ExchangeID,ptrade.OrderSysID,ptrade.TraderID,ptrade.OrderLocalID))
+        TraderSpiDelegate.logger.info(u'TD:成交回报,Trade=%s' % repr(ptrade))
         print ptrade
         TraderSpiDelegate.logger.info(u'A_RT1:成交回报,%s:OrderRef=%s,OrderSysID=%s,price=%s' % (ptrade.InstrumentID,ptrade.OrderRef,ptrade.OrderSysID,ptrade.Price))
         if int(ptrade.OrderRef) not in self.agent.ref2order or ptrade.InstrumentID not in self.agent.instruments:
@@ -539,8 +539,8 @@ class TraderSpiDelegate(TraderApi):
         else:
             myorder.on_trade(price=ptrade.Price,volume=ptrade.Volume,trade_time=ptrade.TradeTime)
             TraderSpiDelegate.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (ptrade.Price,ptrade.TradeTime));
-		self.agent.rtn_trade(pTrade)
-		
+        self.agent.rtn_trade(ptrade)
+        
     def OnRspOrderAction(self, pInputOrderAction, pRspInfo, nRequestID, bIsLast):
         '''
             ctp撤单校验错误
@@ -710,11 +710,11 @@ class Agent(AbsAgent):
         ###交易
         self.ref2order = {}    #orderref==>order
         #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
-		
-		self.cancelled_protect_period = 200
+        
+        self.cancelled_protect_period = 200
         self.market_order_tick_multiple = 3
-		
-		#当前资金/持仓
+        
+        #当前资金/持仓
         self.available = 0  #可用资金
         self.locked_margin = 0
         self.used_margin = 0
@@ -1109,7 +1109,7 @@ class Agent(AbsAgent):
 
     def login_success(self,frontID,sessionID,max_order_ref):
         #self.order_ref = int(max_order_ref)
-		pass
+        pass
 
     ##内务处理
     def fetch_trading_account(self):
@@ -1355,7 +1355,7 @@ class Agent(AbsAgent):
             self.save_state()
         
     def check_order_list(self):
-		Is_Set = self.trader.check_order_status()
+        Is_Set = self.trader.check_order_status()
         for iorder in self.ref2order.values():                                                        
             if iorder.status == order.OrderStatus.Ready:
                 self.send_order(iorder)
@@ -1381,14 +1381,14 @@ class Agent(AbsAgent):
             else:
                 iorder.limit_price = 0.0
 
-		self.trader.send_order(iorder)
+        self.trader.send_order(iorder)
         iorder.status = order.OrderStatus.Sent
 
     def cancel_order(self,iorder):
         '''
             发出撤单指令  
         '''
-		self.trader.cancel_order(iorder)
+        self.trader.cancel_order(iorder)
     
     def submit_trade(self, etrade):
         self.etrades.append(etrade)
@@ -1402,7 +1402,7 @@ class Agent(AbsAgent):
             #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''
         self.save_state()
-		return
+        return
         ##查询可用资金
         #print 'fetch_trading_account'
         #if myorder.action_type == OF_CLOSE or is_completed:#平仓或者开仓完全成交
@@ -1611,46 +1611,43 @@ def test_main(name='test_trade'):
                                  passwd ="121862", 
                                  ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305"])
     
-    insts = ['IF1411','IF1412']
+    insts = ['cu1501','cu1502']
     trader_cfg = test_trader
     user_cfg = test_user
     agent_name = name
-    tday = datetime.date(2014,10,27)
+    tday = datetime.date(2014,11,18)
+    data_func = [ 
+            ('d', BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20))), \
+            ('d', BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10))),\
+            ('d', BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10))),\
+            ('d', BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20))),\
+            ('d', BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=20))),\
+            ('1m',BaseObject(name = 'EMA_3',     sfunc=fcustom(data_handler.EMA, n=3),      rfunc=fcustom(data_handler.ema, n=3))), \
+            ('1m',BaseObject(name = 'EMA_30',    sfunc=fcustom(data_handler.EMA, n=30),     rfunc=fcustom(data_handler.ema, n=30))) \
+        ]
     strategies = []
-    test_strat = strat.Strategy('TestStrat', insts)
-    test_strat.daily_func = [] 
-                #BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20)), \
-                #BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10)),\
-                #BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10)),\
-                #BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20)),\
-                #BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=10)),\
-                #BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=10)),\
-                #BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))
-                #]    
-    test_strat.min_func = {1:[BaseObject(name = 'EMA_3', sfunc=fcustom(data_handler.EMA, n=3), rfunc=fcustom(data_handler.ema, n=3)),
-                              BaseObject(name = 'EMA_30', sfunc=fcustom(data_handler.EMA, n=30), rfunc=fcustom(data_handler.ema, n=30))]
-                           }
+    test_strat = strat.Strategy('TestStrat', [insts], None, data_func, [[1,-1]])
     strategies.append(test_strat)
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':0, \
-                 'min_data_days':0 }
+                 'daily_data_days':25, \
+                 'min_data_days':2 }
     myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
     try:
         myagent.resume()
 
 # position/trade test        
-        myagent.positions['IF1412'].pos_tday.long  = 0
-        myagent.positions['IF1412'].pos_tday.short = 0
-        myagent.positions['IF1411'].pos_tday.long  = 0
-        myagent.positions['IF1411'].pos_tday.short = 0
+        myagent.positions['cu1501'].pos_tday.long  = 0
+        myagent.positions['cu1501'].pos_tday.short = 0
+        myagent.positions['cu1502'].pos_tday.long  = 0
+        myagent.positions['cu1502'].pos_tday.short = 0
         
-        #myagent.positions['IF1409'].re_calc()
-        #myagent.positions['IF1412'].re_calc()        
+        myagent.positions['cu1501'].re_calc()
+        myagent.positions['cu1502'].re_calc()        
         
         valid_time = myagent.tick_id + 10000
-        #etrade =  order.ETrade( ['IF1412','IF1411'], [1, -1], [OPT_LIMIT_ORDER, OPT_LIMIT_ORDER], 6, [0, 0], valid_time, test_strat.name, myagent.name)
-        #myagent.submit_trade(etrade)
+        etrade =  order.ETrade( ['cu1501','cu1502'], [1, -1], [OPT_LIMIT_ORDER, OPT_LIMIT_ORDER], 320, [0, 0], valid_time, test_strat.name, myagent.name)
+        myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
         #myagent.tick_id = valid_time - 10
@@ -1658,8 +1655,8 @@ def test_main(name='test_trade'):
         #    o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
         #myagent.process_trade_list() 
-        myagent.positions['IF1411'].re_calc()
-        myagent.positions['IF1412'].re_calc()
+        myagent.positions['cu1501'].re_calc()
+        myagent.positions['cu1502'].re_calc()
         #orders = [iorder for iorder in myagent.positions['ag1412'].orders]
         #myagent.tick_id = valid_time + 10
         #myagent.process_trade_list()

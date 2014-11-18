@@ -94,7 +94,7 @@ def filter_main_cont(sdate):
 def save_all():
     logging.basicConfig(filename="save_all_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     save_insts = filter_main_cont(datetime.date.today())
-    print save_insts
+    #print save_insts
     save_main(prod_user,save_insts)
     pass
 

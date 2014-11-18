@@ -1,3 +1,4 @@
+#-*- coding:utf-8 -*-
 import mysql.connector
 import mysqlaccess
 import workdays
@@ -21,8 +22,7 @@ OST_NOTRADE_NOQUE = '4' #未成交不在队列中
 OST_CANCELED = '5' #撤单
 OST_UNKNOWN = 'a' #未知
 OST_NOTOUCH = 'b' #尚未触发
-OST_TOUCHED = 'c' #已触发
-
+OST_TOUCHED = 'c' #已触
 
 month_code_map = {'f': 1,
                   'g': 2,
@@ -36,6 +36,7 @@ month_code_map = {'f': 1,
                   'v': 10,
                   'x': 11,
                   'z': 12}
+
 CHN_Holidays = [datetime.date(2014,1,1),  datetime.date(2014,1,2), datetime.date(2014,1,3), 
                 datetime.date(2014,1,31), datetime.date(2014,2,3), datetime.date(2014,2,4),
                 datetime.date(2014,2,5),  datetime.date(2014,2,6), datetime.date(2014,4,7),
@@ -69,7 +70,7 @@ product_code = {'SHFE':['cu', 'al', 'zn', 'pb', 'wr', 'rb', 'fu', 'ru', 'bu', 'h
                 'DCE': ['c', 'j', 'jd', 'a', 'b', 'm', 'y', 'p', 'l', 'v', 'jm', 'i', 'fb', 'bb', 'pp'],
                 'ZCE': ['WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'ME', 'FG', 'RS', 'RM', 'TC', 'JR', 'LR', 'MA', 'SM', 'SF'] }
 
-night_session_markets = [] #['cu', 'al', 'zn', 'pb', 'ag','au']
+night_session_markets = ['cu'] #['cu', 'al', 'zn', 'pb', 'ag','au']
 
 product_lotsize = {'zn': 5, 
                    'cu': 5,
