@@ -5,6 +5,25 @@ import datetime
 import dateutil
 import pandas as pd
 
+ORDER_BUY  = '0'
+ORDER_SELL = '1'
+OPT_MARKET_ORDER = '1'
+OPT_LIMIT_ORDER  = '2'
+OF_OPEN = '0'
+OF_CLOSE = '1'
+OF_CLOSE_TDAY = '3'
+OF_CLOSE_YDAY = '4'
+OST_ALL_TRADED = '0' #全部成交
+OST_PF_QUEUE = '1' #部分成交还在队列中
+OST_PF_NOQUE = '2' #部分成交不在队列中
+OST_NOTRADE_QUEUE = '3' #未成交还在队列中
+OST_NOTRADE_NOQUE = '4' #未成交不在队列中
+OST_CANCELED = '5' #撤单
+OST_UNKNOWN = 'a' #未知
+OST_NOTOUCH = 'b' #尚未触发
+OST_TOUCHED = 'c' #已触发
+
+
 month_code_map = {'f': 1,
                   'g': 2,
                   'h': 3,
