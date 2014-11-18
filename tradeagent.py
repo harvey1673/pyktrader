@@ -7,7 +7,7 @@ import logging
 import threading
 import bisect
 import mysqlaccess
-import misc
+from misc import *
 import order as order
 import math
 import os
@@ -17,9 +17,6 @@ import data_handler
 import strategy as strat
 from base import *
 from ctp.futures import ApiStruct, MdApi, TraderApi
-
-CANCEL_PROTECT_PERIOD = 200
-MO_MULTIPLIER = 3
 
 #数据定义中唯一一个enum
 THOST_TERT_RESTART  = ApiStruct.TERT_RESTART
@@ -72,6 +69,8 @@ class MdSpiDelegate(MdApi):
         self.broker_id =broker_id
         self.investor_id = investor_id
         self.passwd = passwd
+        self.front_id = None
+        self.session_id = None
         self.agent = agent
         ##必须在每日重新连接时初始化它. 这一点用到了生产行情服务器收盘后关闭的特点(模拟的不关闭)
         self.last_day = 0
@@ -168,7 +167,9 @@ class TraderSpiDelegate(TraderApi):
         self.agent = agent
         self.agent.set_spi(self)
         self.is_logged = False
- 
+		self.ctp_orders = {}
+        self.ctp_trades = {}
+                
     def isRspSuccess(self,RspInfo):
         return RspInfo == None or RspInfo.ErrorID == 0
 
@@ -202,6 +203,8 @@ class TraderSpiDelegate(TraderApi):
             return
         self.is_logged = True
         TraderSpiDelegate.logger.info(u'TD:trader login success')
+		self.front_id = pRspUserLogin.FrontID
+        self.session_id = pRspUserLogin.SessionID
         self.agent.login_success(pRspUserLogin.FrontID,pRspUserLogin.SessionID,pRspUserLogin.MaxOrderRef)
         #self.settlementInfoConfirm()
         #self.agent.set_trading_day(self.GetTradingDay())
@@ -362,6 +365,8 @@ class TraderSpiDelegate(TraderApi):
     def OnRspQryOrder(self, pOrder, pRspInfo, nRequestID, bIsLast):
         '''请求查询报单响应'''
         print pOrder
+        if (porder!= None) and (porder.InstrumentID in self.agent.instruments):
+            self.ctp_orders[int(porder.OrderRef)] = porder
         if bIsLast and self.isRspSuccess(pRspInfo):
             self.agent.rsp_qry_order(pOrder)
         else:
@@ -370,12 +375,96 @@ class TraderSpiDelegate(TraderApi):
     def OnRspQryTrade(self, pTrade, pRspInfo, nRequestID, bIsLast):
         '''请求查询成交响应'''
         print pTrade, pRspInfo
+        if (ptrade != None) and (ptrade.InstrumentID in self.agent.instruments):
+            self.ctp_trades[ptrade.OrderRef] = ptrade
+			
         if bIsLast and self.isRspSuccess(pRspInfo):
             self.agent.rsp_qry_trade(pTrade)
         else:
             self.agent.rsp_qry_trade(pTrade)
+	
+	def check_order_status(self):
+		Is_Set = False
+        if len(self.ctp_orders)>0:
+            order_list = []
+            for order_ref in self.ctp_orders:
+                if order_ref in self.agent.ref2order:
+                    iorder = self.agent.ref2order[order_ref]
+                    sorder = self.ctp_orders[order_ref]
+                    iorder.sys_id = sorder.OrderSysID
+                    if sorder.OrderStatus in [OST_NOTRADE_QUEUE, OST_PF_QUEUE, OST_UNKNOWN]:
+                        if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
+                            TraderSpiDelegate.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
+                            iorder.status = order.OrderStatus.Sent
+                            iorder.conditionals = {}
+                            Is_Set = True
+                    elif sorder.OrderStatus in [OST_CANCELED, OST_PF_NOQUE, OST_NOTRADE_NOQUE]:
+                        if iorder.status != order.OrderStatus.Cancelled:
+                            TraderSpiDelegate.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
+                            iorder.on_cancel()
+                            Is_Set = True 
+                else:
+                    order_list.append(order_ref)
+            self.ctp_orders = {} #{ o: self.ctp_orders[o] for o in order_list}
+		return Is_Set
 
     ###交易操作
+	def send_order(self, iorder):
+        req = ApiStruct.InputOrder(
+                InstrumentID = iorder.instrument.name,
+                Direction = iorder.direction,
+                OrderRef = str(iorder.order_ref),
+                LimitPrice = iorder.limit_price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
+                VolumeTotalOriginal = iorder.volume,
+                OrderPriceType = iorder.price_type,
+                BrokerID = self.broker_id,
+                InvestorID = self.investor_id,
+                CombOffsetFlag = iorder.action_type,         #开仓 5位字符,但是只用到第0位
+                CombHedgeFlag = ApiStruct.HF_Speculation,   #投机 5位字符,但是只用到第0位
+                VolumeCondition = ApiStruct.VC_AV,
+                MinVolume = 1,  #这个作用有点不确定,有的文档设成0了
+                ForceCloseReason = ApiStruct.FCC_NotForceClose,
+                IsAutoSuspend = 1,
+                UserForceClose = 0,
+                TimeCondition = ApiStruct.TC_GFD,
+                )
+        TraderSpiDelegate.logger.info(u'下单: instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % 
+                         (iorder.instrument.name,
+                          'open' if iorder.action_type == OF_OPEN else 'close',
+                          u'多' if iorder.direction==ORDER_BUY else u'空',
+                          iorder.volume,
+                          iorder.limit_price, 
+                          iorder.price_type))
+        r = self.ReqOrderInsert(req,self.agent.inc_request_id())
+		return r
+	
+	def cancel_order(self, iorder):
+        inst = iorder.instrument
+        TraderSpiDelegate.logger.info(u'A_CC:取消命令: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
+                % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
+        if len(iorder.sys_id) >0:
+            req = ApiStruct.InputOrderAction(
+                InstrumentID = inst.name,
+                ExchangeID = inst.exchange,
+                OrderSysID = iorder.sys_id,
+                ActionFlag = ApiStruct.AF_Delete,
+                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
+            )
+        else:
+            TraderSpiDelegate.logger.warning('order=%s has no OrderSysID, using Order_ref to cancel' % (iorder.order_ref)) 
+            req = ApiStruct.InputOrderAction(
+                InstrumentID = inst.name,
+                OrderRef = str(iorder.order_ref),
+                BrokerID = self.broker_id,
+                InvestorID = self.investor_id,
+                FrontID = self.front_id,
+                SessionID = self.session_id,
+                ActionFlag = ApiStruct.AF_Delete,
+                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
+            )
+        r = self.ReqOrderAction(req,self.agent.inc_request_id())
+		return r
+
     def OnRspOrderInsert(self, pInputOrder, pRspInfo, nRequestID, bIsLast):
         '''
             报单未通过参数校验,被CTP拒绝
@@ -399,28 +488,59 @@ class TraderSpiDelegate(TraderApi):
     
     def OnRtnOrder(self, pOrder):
         ''' 报单通知
-            CTP、交易所接受报单
-            Agent中不区分，所得信息只用于撤单
+            CTP、交易所接受报单(CTP接受的已经被过滤)
+            Agent中不区分，所得信息只用于撤单,暂时只处理撤单的回报.
         '''
         print repr(pOrder)
-        TraderSpiDelegate.logger.info(u'报单响应,Order=%s' % str(pOrder))
+        TraderSpiDelegate.logger.info(u'成交/撤单回报,Order=%s' % str(pOrder))
+        order_ref = int(porder.OrderRef)
+        order_sysid = porder.OrderSysID
+        sysid_list = [o.sys_id for o in self.agent.ref2order.values()]
+        if (order_sysid not in sysid_list) and (order_ref not in self.agent.ref2order):
+            TraderSpiDelegate.logger.info('receive order update from other agents, OrderSysID=%s' % order_sysid)
+            return
+        myorder = self.agent.ref2order[order_ref]
+        if myorder.sys_id != porder.OrderSysID:
+            myorder.sys_id = porder.OrderSysID
+
         if pOrder.OrderStatus == 'a':
             #CTP接受，但未发到交易所
             #print u'CTP接受Order，但未发到交易所, BrokerID=%s,BrokerOrderSeq = %s,TraderID=%s, OrderLocalID=%s' % (pOrder.BrokerID,pOrder.BrokerOrderSeq,pOrder.TraderID,pOrder.OrderLocalID)
             TraderSpiDelegate.logger.info(u'TD:CTP接受Order，但未发到交易所, BrokerID=%s,BrokerOrderSeq = %s,TraderID=%s, OrderLocalID=%s' % (pOrder.BrokerID,pOrder.BrokerOrderSeq,pOrder.TraderID,pOrder.OrderLocalID))
-            self.agent.rtn_order(pOrder)
         else:
             #print u'交易所接受Order,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' % (pOrder.ExchangeID,pOrder.OrderSysID,pOrder.TraderID,pOrder.OrderLocalID)
             TraderSpiDelegate.logger.info(u'TD:交易所接受Order,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' % (pOrder.ExchangeID,pOrder.OrderSysID,pOrder.TraderID,pOrder.OrderLocalID))
-            #self.agent.rtn_order_exchange(pOrder)
-            self.agent.rtn_order(pOrder)
+			
+        if porder.OrderStatus == ApiStruct.OST_Canceled or porder.OrderStatus == ApiStruct.OST_PartTradedNotQueueing:   #完整撤单或部成部撤
+            TraderSpiDelegate.logger.info(u'撤单, 撤销开/平仓单')
+            ##处理相关Order
+            myorder.on_cancel()
+			self.agent.rtn_order(pOrder)
+        return
 
     def OnRtnTrade(self, pTrade):
-        '''成交通知'''
+        '''
+            成交回报
+            #TODO: 必须考虑出现平仓信号时，position还没完全成交的情况
+                   在OnTrade中进行position的细致处理 
+            #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
+        '''
         TraderSpiDelegate.logger.info(u'TD:成交通知,BrokerID=%s,BrokerOrderSeq = %s,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' %(pTrade.BrokerID,pTrade.BrokerOrderSeq,pTrade.ExchangeID,pTrade.OrderSysID,pTrade.TraderID,pTrade.OrderLocalID))
         TraderSpiDelegate.logger.info(u'TD:成交回报,Trade=%s' % repr(pTrade))
-        self.agent.rtn_trade(pTrade)
-
+        print ptrade
+        TraderSpiDelegate.logger.info(u'A_RT1:成交回报,%s:OrderRef=%s,OrderSysID=%s,price=%s' % (ptrade.InstrumentID,ptrade.OrderRef,ptrade.OrderSysID,ptrade.Price))
+        if int(ptrade.OrderRef) not in self.agent.ref2order or ptrade.InstrumentID not in self.agent.instruments:
+            TraderSpiDelegate.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))
+            return 
+        myorder = self.agent.ref2order[int(ptrade.OrderRef)]
+        if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
+            myorder.on_trade(price=ptrade.Price,volume=ptrade.Volume,trade_time=ptrade.TradeTime)
+            TraderSpiDelegate.logger.info(u'A_RT31,开仓回报,price=%s,time=%s' % (ptrade.Price,ptrade.TradeTime));
+        else:
+            myorder.on_trade(price=ptrade.Price,volume=ptrade.Volume,trade_time=ptrade.TradeTime)
+            TraderSpiDelegate.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (ptrade.Price,ptrade.TradeTime));
+		self.agent.rtn_trade(pTrade)
+		
     def OnRspOrderAction(self, pInputOrderAction, pRspInfo, nRequestID, bIsLast):
         '''
             ctp撤单校验错误
@@ -477,7 +597,7 @@ class Instrument(object):
         self.is_busy = False
     
     def get_inst_info(self):
-        self.product = misc.inst2product(self.name)
+        self.product = inst2product(self.name)
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
         self.start_tick_id =  prod_info['start_min'] * 1000
@@ -491,7 +611,7 @@ class Instrument(object):
         self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
 
     def calc_margin_amount(self,price,direction):   
-        my_marginrate = self.marginrate[0] if direction == ApiStruct.D_Buy else self.marginrate[1]
+        my_marginrate = self.marginrate[0] if direction == ORDER_BUY else self.marginrate[1]
         #print 'self.name=%s,price=%s,multiple=%s,my_marginrate=%s' % (self.name,price,self.multiple,my_marginrate)
         return price * self.multiple * my_marginrate * 1.05
      
@@ -553,9 +673,6 @@ class Agent(AbsAgent):
         self.instruments = Instrument.create_instruments(instruments)
         self.request_id = 1
         self.initialized = False
-
-        self.front_id = None
-        self.session_id = None
         self.scur_day = tday
 
         # market data
@@ -593,8 +710,11 @@ class Agent(AbsAgent):
         ###交易
         self.ref2order = {}    #orderref==>order
         #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
-
-        #当前资金/持仓
+		
+		self.cancelled_protect_period = 200
+        self.market_order_tick_multiple = 3
+		
+		#当前资金/持仓
         self.available = 0  #可用资金
         self.locked_margin = 0
         self.used_margin = 0
@@ -615,9 +735,6 @@ class Agent(AbsAgent):
 
         #actions
         self.etrades = []
-        self.ctp_orders = {}
-        self.ctp_trades = {}
-
         self.init_init()    #init中的init,用于子类的处理
 
         #结算单
@@ -664,8 +781,8 @@ class Agent(AbsAgent):
     def prepare_data_env(self): 
         if self.daily_data_days > 0:
             self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
-            daily_start = workdays.workday(self.scur_day, -self.daily_data_days, misc.CHN_Holidays)
-            daily_end = workdays.workday(self.scur_day, 1, misc.CHN_Holidays)
+            daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
+            daily_end = workdays.workday(self.scur_day, 1, CHN_Holidays)
             for inst in self.instruments:  
                 self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
                 df = self.day_data[inst]
@@ -675,8 +792,8 @@ class Agent(AbsAgent):
 
         if self.min_data_days > 0:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
-            min_start = workdays.workday(self.scur_day, -self.min_data_days, misc.CHN_Holidays)
-            min_end   = workdays.workday(self.scur_day, 1, misc.CHN_Holidays)
+            min_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
+            min_end   = workdays.workday(self.scur_day, 1, CHN_Holidays)
             for inst in self.instruments:
                 self.min_data[inst][1] = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
                 for m in self.min_data_func:
@@ -731,7 +848,7 @@ class Agent(AbsAgent):
         
     def get_eod_positions(self):
         file_prefix = self.folder
-        last_bday = workdays.workday(self.scur_day, -1, misc.CHN_Holidays)
+        last_bday = workdays.workday(self.scur_day, -1, CHN_Holidays)
         self.logger.info('Starting; getting EOD position for %s' % last_bday.strftime('%y%m%d'))
         logfile = file_prefix + 'EOD_Pos_' + last_bday.strftime('%y%m%d')+'.csv'
         if not os.path.isfile(logfile):
@@ -773,10 +890,10 @@ class Agent(AbsAgent):
         for instID in self.instruments:
             inst = self.instruments[instID]
             pos = self.positions[instID]
-            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(inst.price,ApiStruct.D_Buy)
-            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ApiStruct.D_Sell) 
-            used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ApiStruct.D_Buy)
-            used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ApiStruct.D_Sell) 
+            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
+            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
+            used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
+            used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
             
         self.locked_margin = locked_margin
         self.used_margin = used_margin
@@ -955,7 +1072,7 @@ class Agent(AbsAgent):
         print 'on trading connection close'
         now = datetime.datetime.now()
         tday = now.date()
-        if get_tick_id(now) >= 2116000 and (tday.isoweekday()<6) and (tday not in misc.CHN_Holidays):
+        if get_tick_id(now) >= 2116000 and (tday.isoweekday()<6) and (tday not in CHN_Holidays):
             for etrade in self.etrades:
                 etrade.update()
                 if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
@@ -991,9 +1108,8 @@ class Agent(AbsAgent):
         return self.request_id
 
     def login_success(self,frontID,sessionID,max_order_ref):
-        self.front_id = frontID
-        self.session_id = sessionID
         #self.order_ref = int(max_order_ref)
+		pass
 
     ##内务处理
     def fetch_trading_account(self):
@@ -1114,49 +1230,49 @@ class Agent(AbsAgent):
                     return False
 
                 if v>0:
-                    direction = ApiStruct.D_Buy
+                    direction = ORDER_BUY
                     vol = max(min(v, pos.can_close.long),0)
                     remained = v - vol
                 else:
-                    direction = ApiStruct.D_Sell
+                    direction = ORDER_SELL
                     vol = max(min(-v,pos.can_close.short),0)
                     remained = v + vol
                     
                 if vol > 0:
                     cond = {}
-                    if (idx>0) and (exec_trade.order_types[idx-1] == ApiStruct.OPT_LimitPrice):
+                    if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, ApiStruct.OF_CloseToday, direction, otype, cond )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_TDAY, direction, otype, cond )
                     orders.append(iorder)
                   
                 if (self.instruments[inst].exchange == "SHFE") and (abs(remained)>0) and (pos.can_yclose.short+pos.can_yclose.long>0):
                     if remained>0:
-                        direction = ApiStruct.D_Buy
+                        direction = ORDER_BUY
                         vol = max(min(remained, pos.can_yclose.long),0)
                         remained -= vol
                     else:
-                        direction = ApiStruct.D_Sell
+                        direction = ORDER_SELL
                         vol = max(min(-remained,pos.can_yclose.short),0)
                         remained += vol
                         
                     if vol > 0:
                         cond = {}
-                        if (idx>0) and (exec_trade.order_types[idx-1] == ApiStruct.OPT_LimitPrice):
+                        if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                             cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, ApiStruct.OF_CloseYesterday, direction, otype, cond )
+                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond )
                         orders.append(iorder)
                 
                 vol = abs(remained)
                 if vol > 0:                   
                     if remained >0:
-                        direction = ApiStruct.D_Buy
+                        direction = ORDER_BUY
                     else:
-                        direction = ApiStruct.D_Sell
+                        direction = ORDER_SELL
                     required_margin += vol * self.instruments[inst].calc_margin_amount(order_prices[idx],direction)
                     cond = {}
-                    if (idx>0) and (exec_trade.order_types[idx-1] == ApiStruct.OPT_LimitPrice):
+                    if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, ApiStruct.OF_Open, direction, otype, cond )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond )
                     orders.append(iorder)
                 all_orders[inst] = orders
                 
@@ -1202,7 +1318,7 @@ class Agent(AbsAgent):
                     else:
                         # cancel first, if PFilled, market order the unfilled.
                         Is_Set= True
-                        exec_trade.valid_time = self.tick_id + CANCEL_PROTECT_PERIOD
+                        exec_trade.valid_time = self.tick_id + self.cancel_protect_period
                         new_orders = {}
                         for inst in exec_trade.instIDs:
                             orders = []
@@ -1222,7 +1338,7 @@ class Agent(AbsAgent):
                                                      self.tick_id, 
                                                      iorder.action_type, 
                                                      iorder.direction, 
-                                                     ApiStruct.OPT_AnyPrice, 
+                                                     OPT_MARKET_ORDER, 
                                                      cond )
                                         orders.append(norder)
                             if len(orders)>0:
@@ -1239,35 +1355,11 @@ class Agent(AbsAgent):
             self.save_state()
         
     def check_order_list(self):
-        Is_Set = False
-        if len(self.ctp_orders)>0:
-            order_list = []
-            for order_ref in self.ctp_orders:
-                if order_ref in self.ref2order:
-                    iorder = self.ref2order[order_ref]
-                    sorder = self.ctp_orders[order_ref]
-                    iorder.sys_id = sorder.OrderSysID
-                    if sorder.OrderStatus in [ApiStruct.OST_NoTradeQueueing, ApiStruct.OST_PartTradedQueueing, ApiStruct.OST_Unknown]:
-                        if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
-                            self.logger.waning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
-                            iorder.status = order.OrderStatus.Sent
-                            iorder.conditionals = {}
-                            Is_Set = True
-                    elif sorder.OrderStatus in [ApiStruct.OST_Canceled, ApiStruct.OST_PartTradedNotQueueing, ApiStruct.OST_NoTradeNotQueueing]:
-                        if iorder.status != order.OrderStatus.Cancelled:
-                            self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status)) 
-                            iorder.on_cancel()
-                            Is_Set = True 
-                else:
-                    order_list.append(order_ref)
-            self.ctp_orders = { o: self.ctp_orders[o] for o in order_list}
-                
-        
+		Is_Set = self.trader.check_order_status()
         for iorder in self.ref2order.values():                                                        
             if iorder.status == order.OrderStatus.Ready:
                 self.send_order(iorder)
-                Is_Set = True
-        
+                Is_Set = True        
         return Is_Set
     
     def send_order(self,iorder):
@@ -1277,78 +1369,26 @@ class Agent(AbsAgent):
         self.logger.info(u'A_CC:开仓平仓命令')
         inst = iorder.instrument
         # 上期所不支持市价单
-        if (iorder.price_type == ApiStruct.OPT_AnyPrice):
+        if (iorder.price_type == OPT_MARKET_ORDER):
             if (inst.exchange == 'SHFE' or inst.exchange == 'CFFEX'):
                 self.logger.info('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, iorder.instrument.name))
-                iorder.price_type = ApiStruct.OPT_LimitPrice
+                iorder.price_type = OPT_LIMIT_ORDER
                 # 以后可以改成涨停,跌停价
-                if iorder.direction == ApiStruct.D_Buy:
-                    iorder.limit_price = inst.ask_price1 + inst.tick_base * MO_MULTIPLIER
+                if iorder.direction == ORDER_BUY:
+                    iorder.limit_price = inst.ask_price1 + inst.tick_base * self.market_order_tick_multiple
                 else:
-                    iorder.limit_price = inst.bid_price1 - inst.tick_base * MO_MULTIPLIER
+                    iorder.limit_price = inst.bid_price1 - inst.tick_base * self.market_order_tick_multiple
             else:
                 iorder.limit_price = 0.0
-            
-        req = ApiStruct.InputOrder(
-                InstrumentID = iorder.instrument.name,
-                Direction = iorder.direction,
-                OrderRef = str(iorder.order_ref),
-                LimitPrice = iorder.limit_price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
-                VolumeTotalOriginal = iorder.volume,
-                OrderPriceType = iorder.price_type,
-                
-                BrokerID = self.trader.broker_id,
-                InvestorID = self.trader.investor_id,
-                CombOffsetFlag = iorder.action_type,         #开仓 5位字符,但是只用到第0位
-                CombHedgeFlag = ApiStruct.HF_Speculation,   #投机 5位字符,但是只用到第0位
 
-                VolumeCondition = ApiStruct.VC_AV,
-                MinVolume = 1,  #这个作用有点不确定,有的文档设成0了
-                ForceCloseReason = ApiStruct.FCC_NotForceClose,
-                IsAutoSuspend = 1,
-                UserForceClose = 0,
-                TimeCondition = ApiStruct.TC_GFD,
-                )
-        self.logger.info(u'下单: instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % 
-                         (iorder.instrument.name,
-                          'open' if iorder.action_type == ApiStruct.OF_Open else 'close',
-                          u'多' if iorder.direction==ApiStruct.D_Buy else u'空',
-                          iorder.volume,
-                          iorder.limit_price, 
-                          iorder.price_type))
-        r = self.trader.ReqOrderInsert(req,self.inc_request_id())
+		self.trader.send_order(iorder)
         iorder.status = order.OrderStatus.Sent
 
     def cancel_order(self,iorder):
         '''
             发出撤单指令  
         '''
-        inst = iorder.instrument
-        print 'cancel order %s, SysID=%s, instID=%s, volume=%s, filled=%s, OrderPrice=%s, bidprice=%s, askprice=%s' \
-                % (iorder.order_ref, iorder.sys_id, inst.name, iorder.volume, iorder.filled_volume, iorder.limit_price, inst.bid_price1, inst.ask_price1)
-        self.logger.info(u'A_CC:取消命令: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
-                % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
-        if len(iorder.sys_id) >0:
-            req = ApiStruct.InputOrderAction(
-                InstrumentID = inst.name,
-                ExchangeID = inst.exchange,
-                OrderSysID = iorder.sys_id,
-                ActionFlag = ApiStruct.AF_Delete,
-                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
-            )
-        else:
-            self.logger.warning('order=%s has no OrderSysID, using Order_ref to cancel' % (iorder.order_ref)) 
-            req = ApiStruct.InputOrderAction(
-                InstrumentID = inst.name,
-                OrderRef = str(iorder.order_ref),
-                BrokerID = self.trader.broker_id,
-                InvestorID = self.trader.investor_id,
-                FrontID = self.front_id,
-                SessionID = self.session_id,
-                ActionFlag = ApiStruct.AF_Delete,
-                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
-            )
-        r = self.trader.ReqOrderAction(req,self.inc_request_id())
+		self.trader.cancel_order(iorder)
     
     def submit_trade(self, etrade):
         self.etrades.append(etrade)
@@ -1361,22 +1401,11 @@ class Agent(AbsAgent):
                    在OnTrade中进行position的细致处理 
             #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''
-        print strade
-        self.logger.info(u'A_RT1:成交回报,%s:OrderRef=%s,OrderSysID=%s,price=%s' % (strade.InstrumentID,strade.OrderRef,strade.OrderSysID,strade.Price))
-        if int(strade.OrderRef) not in self.ref2order or strade.InstrumentID not in self.instruments:
-            self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (strade.InstrumentID,strade.OrderRef))
-            return 
-        myorder = self.ref2order[int(strade.OrderRef)]
-        if myorder.action_type == ApiStruct.OF_Open:#开仓, 也可用pTrade.OffsetFlag判断
-            myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
-            self.logger.info(u'A_RT31,开仓回报,price=%s,time=%s' % (strade.Price,strade.TradeTime));
-        else:
-            myorder.on_trade(price=strade.Price,volume=strade.Volume,trade_time=strade.TradeTime)
-            self.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (strade.Price,strade.TradeTime));
         self.save_state()
+		return
         ##查询可用资金
         #print 'fetch_trading_account'
-        #if myorder.action_type == XCLOSE or is_completed:#平仓或者开仓完全成交
+        #if myorder.action_type == OF_CLOSE or is_completed:#平仓或者开仓完全成交
         #    self.put_command(self.get_tick()+1,self.fetch_trading_account)
         #self.put_command(self.get_tick()+1,self.fetch_trading_account)  #不完全成交也可以，也就是多查询几次。有可能被抑制
 
@@ -1386,26 +1415,9 @@ class Agent(AbsAgent):
             交易所接受下单回报(CTP接受的已经被过滤)
             暂时只处理撤单的回报. 
         '''
-        self.logger.info(u'成交/撤单回报:%s' % (str(sorder,)))
-        order_ref = int(sorder.OrderRef)
-        order_sysid = sorder.OrderSysID
-        sysid_list = [o.sys_id for o in self.ref2order.values()]
-        if (order_sysid not in sysid_list) and (order_ref not in self.ref2order):
-            self.logger.info('receive order update from other agents, OrderSysID=%s' % order_sysid)
-            return
-        myorder = self.ref2order[order_ref]
-        if myorder.sys_id != sorder.OrderSysID:
-            myorder.sys_id = sorder.OrderSysID
-        if sorder.OrderStatus == ApiStruct.OST_Canceled or sorder.OrderStatus == ApiStruct.OST_PartTradedNotQueueing:   #完整撤单或部成部撤
-            self.logger.info(u'撤单, 撤销开/平仓单')
-            ##查询可用资金
-            #self.put_command(self.tick_id+5,self.fetch_trading_account)
-            ##处理相关Order
-            self.logger.info(u'撤销开仓单')
-            myorder.on_cancel()
-            self.save_state()
-            #self.process_trade_list()
-            return
+        self.save_state()
+        #self.process_trade_list()
+        return
             
     def err_order_insert(self,order_ref,instrument_id,error_id,error_msg):
         '''
@@ -1500,8 +1512,6 @@ class Agent(AbsAgent):
             查询报单
             可以忽略
         '''
-        if (sorder!= None) and (sorder.InstrumentID in self.instruments):
-            self.ctp_orders[int(sorder.OrderRef)] = sorder
         self.check_qry_commands()
 
     def rsp_qry_trade(self,strade):
@@ -1509,8 +1519,6 @@ class Agent(AbsAgent):
             查询成交
             可以忽略
         '''
-        if (strade != None) and (strade.InstrumentID in self.instruments):
-            self.ctp_trades[strade.OrderRef] = strade
         self.check_qry_commands()
         
 
@@ -1641,7 +1649,7 @@ def test_main(name='test_trade'):
         #myagent.positions['IF1412'].re_calc()        
         
         valid_time = myagent.tick_id + 10000
-        #etrade =  order.ETrade( ['IF1412','IF1411'], [1, -1], [ApiStruct.OPT_LimitPrice, ApiStruct.OPT_LimitPrice], 6, [0, 0], valid_time, test_strat.name, myagent.name)
+        #etrade =  order.ETrade( ['IF1412','IF1411'], [1, -1], [OPT_LIMIT_ORDER, OPT_LIMIT_ORDER], 6, [0, 0], valid_time, test_strat.name, myagent.name)
         #myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
@@ -1663,9 +1671,9 @@ def test_main(name='test_trade'):
 # order test
 #         iorder = order.Order(myagent.positions['ag1412'], 
 #                              4100, 1, myagent.tick_id, 
-#                              ApiStruct.OF_Open, 
-#                              ApiStruct.D_Buy, 
-#                              ApiStruct.OPT_LimitPrice, {} )
+#                              OF_OPEN, 
+#                              ORDER_BUY, 
+#                              OPT_LIMIT_ORDER, {} )
 #         myagent.send_order(iorder)
 #         myagent.ref2order[iorder.order_ref] = iorder
 #         myagent.cancel_order(iorder)
