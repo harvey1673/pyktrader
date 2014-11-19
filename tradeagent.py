@@ -161,7 +161,7 @@ class TraderSpiDelegate(TraderApi):
             agent,  #实际操作对象
         ):        
         self.instruments = set([name for name in instruments])
-        self.broker_id =broker_id
+        self.broker_id = broker_id
         self.investor_id = investor_id
         self.passwd = passwd
         self.agent = agent
@@ -308,25 +308,59 @@ class TraderSpiDelegate(TraderApi):
 
 
     ###交易准备
-    def OnRspQryInstrumentMarginRate(self, pInstrumentMarginRate, pRspInfo, nRequestID, bIsLast):
+    def OnRspQryInstrumentMarginRate(self, pInstMarginRate, pRspInfo, nRequestID, bIsLast):
         '''
             保证金率回报。返回的必然是绝对值
         '''
         if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_instrument_marginrate(pInstrumentMarginRate)
+			inst = self.agent.instruments[marginRate.InstrumentID]
+			inst.marginrate = (pInstMarginRate.LongMarginRatioByMoney,pInstMarginRate.ShortMarginRatioByMoney)
+			self.agent.rsp_qry_instrument_marginrate(pInstMarginRate)
+        #print marginRate.InstrumentID,self.instruments[marginRate.InstrumentID].marginrate
         else:
             #logging
             pass
-
+			
+	def query_instrument_marginrate(self, instrument_id)
+        req = ApiStruct.QryInstrumentMarginRate(BrokerID=self.broker_id,
+                        InvestorID=self.investor_id,
+                        InstrumentID=instrument_id,
+                        HedgeFlag = ApiStruct.HF_Speculation
+                )
+        r = self.ReqQryInstrumentMarginRate(req,self.agent.inc_request_id())
+		return r
+		
     def OnRspQryInstrument(self, pInstrument, pRspInfo, nRequestID, bIsLast):
         '''
-            合约回报。
+            获得合约数量乘数. 
+            这里的保证金率应该是和期货公司无关，所以不能使用
         '''
+        if pInstrument.InstrumentID not in self.agent.instruments:
+            #self.logger.warning(u'A_RQI:收到未监控的合约查询:%s' % (pInstrument.InstrumentID))
+            return
+		inst = self.agent.instruments[pInstrument.InstrumentID]
+        inst.multiple = pInstrument.VolumeMultiple
+        inst.tick_base = pInstrument.PriceTick
+        inst.marginrate = (pInstrument.LongMarginRatio, pInstrument.ShortMarginRatio)
         if bIsLast and self.isRspSuccess(pRspInfo):
             self.agent.rsp_qry_instrument(pInstrument)
         else:
             self.agent.rsp_qry_instrument(pInstrument)  #模糊查询的结果,获得了多个合约的数据，只有最后一个的bLast是True
-            
+    
+	def query_instrument(self, instrument_id)
+        req = ApiStruct.QryInstrument(
+                        InstrumentID=instrument_id,
+                )
+        r = self.ReqQryInstrument(req, self.agent.inc_request_id())
+		return r
+		
+	def query_instruments_by exch(self, exchange_id)
+        req = ApiStruct.QryInstrument(
+                        ExchangeID=exchange_id,
+                )
+        r = self.ReqQryInstrument(req, self.agent.inc_request_id())
+		return r
+		
     def OnRspQryTradingAccount(self, pTradingAccount, pRspInfo, nRequestID, bIsLast):
         '''
             请求查询资金账户响应
@@ -334,20 +368,46 @@ class TraderSpiDelegate(TraderApi):
         print u'查询资金账户响应'
         TraderSpiDelegate.logger.info(u'TD:资金账户响应:%s' % pTradingAccount)
         if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_trading_account(pTradingAccount)
+            self.agent.rsp_qry_trading_account(pTradingAccount.Available)
         else:
             #logging
             pass
 
+	def query_trading_account(self):	        
+        req = ApiStruct.QryTradingAccount(BrokerID=self.trader.broker_id, InvestorID=self.trader.investor_id)
+        r=self.ReqQryTradingAccount(req,self.agent.inc_request_id())
+        #self.logger.info(u'A:查询资金账户, 函数发出返回值:%s' % r)
+		return r
+		
     def OnRspQryInvestorPosition(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
-        '''请求查询投资者持仓响应'''
+		        '''
+            查询持仓回报, 每个合约最多得到4个持仓回报，历史多/空、今日多/空
+        '''
         print u'查询持仓响应'
         if self.isRspSuccess(pRspInfo): #每次一个单独的数据报
-            self.agent.rsp_qry_position(pInvestorPosition)
+			self.logger.info(u'agent 持仓:%s' % str(pInvestorPosition))
+			if (pInvestorPosition != None) and (pInvestorPosition.InstrumentID in self.agent.positions):    
+				cur_position = self.agent.positions[pInvestorPosition.InstrumentID]
+				if pInvestorPosition.PosiDirection == ApiStruct.PD_Long:
+					if pInvestorPosition.PositionDate == ApiStruct.PSD_Today:
+						cur_position.pos_tday.long = pInvestorPosition.Position  #TodayPosition
+					else:
+						cur_position.pos_yday.long = pInvestorPosition.Position  #YdPosition
+				else:#空头
+					if pInvestorPosition.PositionDate == ApiStruct.PSD_Today:
+						cur_position.pos_tday.short = pInvestorPosition.Position #TodayPosition
+					else:
+						cur_position.pos_yday.short = pInvestorPosition.Position #YdPosition
+				self.agent.rsp_qry_position(pInvestorPosition)    
         else:
             #logging
             pass
-
+	
+	def query_investor_position(self, instrument_id):
+	    req = ApiStruct.QryInvestorPosition(BrokerID=self.broker_id, InvestorID=self.investor_id,InstrumentID=instrument_id)
+        r=self.ReqQryInvestorPosition(req,self.agent.inc_request_id())
+		return r
+		
     def OnRspQryInvestorPositionDetail(self, pInvestorPositionDetail, pRspInfo, nRequestID, bIsLast):
         '''请求查询投资者持仓明细响应'''
         TraderSpiDelegate.logger.info(str(pInvestorPositionDetail))
@@ -356,7 +416,12 @@ class TraderSpiDelegate(TraderApi):
         else:
             #logging
             pass
-
+	
+	def query_investor_position_detail(self, instrument_id)
+        req = ApiStruct.QryInvestorPositionDetail(BrokerID=self.broker_id, InvestorID=self.investor_id, InstrumentID=instrument_id)
+        r=self.ReqQryInvestorPositionDetail(req, self.agent.inc_request_id())
+		return r
+		
     def OnRspError(self, info, RequestId, IsLast):
         ''' 错误应答
         '''
@@ -372,6 +437,18 @@ class TraderSpiDelegate(TraderApi):
         else:
             self.agent.rsp_qry_order(porder) 
 
+	def query_order(self, startTime = '', endTime = '')
+        req = ApiStruct.QryOrder(
+                        BrokerID = self.broker_id, 
+                        InvestorID = self.investor_id,
+                        InstrumentID ='',
+                        ExchangeID = '', #交易所代码, char[9]
+                        InsertTimeStart = startTime, #开始时间, char[9]
+                        InsertTimeEnd = endTime, #结束时间, char[9]
+                )
+        r = self.ReqQryOrder(req, self.agent.inc_request_id())
+		return r
+		
     def OnRspQryTrade(self, ptrade, pRspInfo, nRequestID, bIsLast):
         '''请求查询成交响应'''
         print ptrade, pRspInfo
@@ -383,6 +460,18 @@ class TraderSpiDelegate(TraderApi):
         else:
             self.agent.rsp_qry_trade(ptrade)
     
+	def query_trade( self, startTime = '', endTime = '' )
+        req = ApiStruct.QryTrade(
+                        BrokerID=self.broker_id, 
+                        InvestorID=self.investor_id,
+                        InstrumentID='',
+                        ExchangeID ='', #交易所代码, char[9]
+                        TradeTimeStart = startTime, #开始时间, char[9]
+                        TradeTimeEnd = endTime, #结束时间, char[9]
+                )
+        r = self.ReqQryTrade(req, self.agent.inc_request_id())
+		return r
+		
     def check_order_status(self):
         Is_Set = False
         if len(self.ctp_orders)>0:
@@ -1114,16 +1203,13 @@ class Agent(AbsAgent):
     ##内务处理
     def fetch_trading_account(self):
         #获取资金帐户
-        self.logger.info(u'A:获取资金帐户..')
-        req = ApiStruct.QryTradingAccount(BrokerID=self.trader.broker_id, InvestorID=self.trader.investor_id)
-        r=self.trader.ReqQryTradingAccount(req,self.inc_request_id())
-        #self.logger.info(u'A:查询资金账户, 函数发出返回值:%s' % r)
+		self.logger.info(u'A:获取资金帐户..')
+		r = self.trader.query_trading_account()
 
     def fetch_investor_position(self,instrument_id):
         #获取合约的当前持仓
         self.logger.info(u'A:获取合约%s的当前持仓..' % (instrument_id,))
-        req = ApiStruct.QryInvestorPosition(BrokerID=self.trader.broker_id, InvestorID=self.trader.investor_id,InstrumentID=instrument_id)
-        r=self.trader.ReqQryInvestorPosition(req,self.inc_request_id())
+		r = self.trader.query_investor_position(instrument_id)
         #self.logger.info(u'A:查询持仓, 函数发出返回值:%s' % rP)
     
     def fetch_investor_position_detail(self,instrument_id):
@@ -1131,63 +1217,33 @@ class Agent(AbsAgent):
             获取合约的当前持仓明细，目前没用
         '''
         self.logger.info(u'A:获取合约%s的当前持仓..' % (instrument_id,))
-        req = ApiStruct.QryInvestorPositionDetail(BrokerID=self.trader.broker_id, InvestorID=self.trader.investor_id,InstrumentID=instrument_id)
-        r=self.trader.ReqQryInvestorPositionDetail(req,self.inc_request_id())
-        #self.logger.info(u'A:查询持仓, 函数发出返回值:%s' % r)
+		r = self.trader.query_investor_position_detail(instrument_id)
+        self.logger.info(u'A:查询持仓, 函数发出返回值:%s' % r)
 
     def fetch_instrument_marginrate(self,instrument_id):
-        req = ApiStruct.QryInstrumentMarginRate(BrokerID=self.trader.broker_id,
-                        InvestorID=self.trader.investor_id,
-                        InstrumentID=instrument_id,
-                        HedgeFlag = ApiStruct.HF_Speculation
-                )
-        r = self.trader.ReqQryInstrumentMarginRate(req,self.inc_request_id())
+		r = self.trader.query_instrument_marginrate(instrument_id)
         self.logger.info(u'A:查询保证金率, 函数发出返回值:%s' % r)
 
     def fetch_instrument(self,instrument_id):
-        req = ApiStruct.QryInstrument(
-                        InstrumentID=instrument_id,
-                )
-        time.sleep(1)
-        r = self.trader.ReqQryInstrument(req,self.inc_request_id())
+		r = self.trader.query_instrument(instrument_id)
         self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
 
     def fetch_instruments_by_exchange(self,exchange_id):
         '''不能单独用exchange_id,因此没有意义
         '''
-        req = ApiStruct.QryInstrument(
-                        ExchangeID=exchange_id,
-                )
-        r = self.trader.ReqQryInstrument(req,self.inc_request_id())
+		r = self.trader.query_instruments_by exch(exchange_id)
         self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
         #if r < 0:
-        #    self.qry_commands.append(fcustom(self.fetch_instruments_by_exchange,exchange_id = ''))
-        #    self.check_qry_commands() 
+        #    self.qry_commands.append(self.fetch_instruments_by_exchange)
                     
-    def fetch_order(self):
-        req = ApiStruct.QryOrder(
-                        BrokerID=self.trader.broker_id, 
-                        InvestorID=self.trader.investor_id,
-                        InstrumentID='',
-                        ExchangeID = '', #交易所代码, char[9]
-                        InsertTimeStart = '', #开始时间, char[9]
-                        InsertTimeEnd = '', #结束时间, char[9]
-                )
-        r = self.trader.ReqQryOrder(req, self.inc_request_id())
+    def fetch_order(self, start_time='', end_time=''):
+		r = self.trader.query_order( start_time, end_time )
         self.logger.info(u'A:查询报单, 函数发出返回值:%s' % r)
         #if r < 0:
         #    self.qry_commands.append(self.fetch_order)
 
-    def fetch_trade(self):
-        req = ApiStruct.QryTrade(
-                        BrokerID=self.trader.broker_id, 
-                        InvestorID=self.trader.investor_id,
-                        InstrumentID='',
-                        ExchangeID ='', #交易所代码, char[9]
-                        TradeTimeStart = '', #开始时间, char[9]
-                        TradeTimeEnd = '', #结束时间, char[9]
-                )
-        r = self.trader.ReqQryTrade(req, self.inc_request_id())
+    def fetch_trade(self, start_time='', end_time=''):
+		r = self.trader.query_trade( start_time, end_time )
         self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
         #if r < 0:
         #    self.qry_commands.append(self.fetch_trade)
@@ -1450,53 +1506,22 @@ class Agent(AbsAgent):
     
     ###辅助   
     def rsp_qry_position(self,position):
-        '''
-            查询持仓回报, 每个合约最多得到4个持仓回报，历史多/空、今日多/空
-        '''
-        self.logger.info(u'agent 持仓:%s' % str(position))
-        if (position != None) and (position.InstrumentID in self.positions):    
-            cur_position = self.positions[position.InstrumentID]
-            if position.PosiDirection == ApiStruct.PD_Long:
-                if position.PositionDate == ApiStruct.PSD_Today:
-                    cur_position.pos_tday.long = position.Position  #TodayPosition
-                else:
-                    cur_position.pos_yday.long = position.Position  #YdPosition
-            else:#空头
-                if position.PositionDate == ApiStruct.PSD_Today:
-                    cur_position.pos_tday.short = position.Position #TodayPosition
-                else:
-                    cur_position.pos_yday.short = position.Position #YdPosition
-        else:#无持仓信息，保持默认设置
-            pass
         self.check_qry_commands() 
 
     def rsp_qry_instrument_marginrate(self,marginRate):
         '''
             查询保证金率回报. 
         '''
-        self.instruments[marginRate.InstrumentID].marginrate = (marginRate.LongMarginRatioByMoney,marginRate.ShortMarginRatioByMoney)
-        #print marginRate.InstrumentID,self.instruments[marginRate.InstrumentID].marginrate
         self.check_qry_commands()
 
-    def rsp_qry_trading_account(self,account):
+    def rsp_qry_trading_account(self,avail):
         '''
             查询资金帐户回报
         '''
-        self.available = account.Available
+        self.available = avail
         self.check_qry_commands()        
     
     def rsp_qry_instrument(self,pinstrument):
-        '''
-            获得合约数量乘数. 
-            这里的保证金率应该是和期货公司无关，所以不能使用
-        '''
-        if pinstrument.InstrumentID not in self.instruments:
-            #self.logger.warning(u'A_RQI:收到未监控的合约查询:%s' % (pinstrument.InstrumentID))
-            return
-        self.instruments[pinstrument.InstrumentID].multiple = pinstrument.VolumeMultiple
-        self.instruments[pinstrument.InstrumentID].tick_base = pinstrument.PriceTick
-        self.instruments[pinstrument.InstrumentID].marginrate = (pinstrument.LongMarginRatio, pinstrument.ShortMarginRatio)
-        #print 'tick_base = %s' % (pinstrument.PriceTick,)
         self.check_qry_commands()
 
     def rsp_qry_position_detail(self,position_detail):
