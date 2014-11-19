@@ -1,15 +1,15 @@
 #-*- coding:utf-8 -*-
 import tradeagent as agent
 import time
-import logging
-import base 
+import logging 
 import mysqlaccess as mdb
 import datetime
+from base import * 
 from ctp.futures import ApiStruct
 
 class TraderMock(object):
     def __init__(self,myagent):
-        self.myagent = myagent
+        self.agent = myagent
         self.available = 1000000    #初始100W
         # self.myspi = BaseObject(is_logged=True,confirm_settlement_info=self.confirm_settlement_info)
 
@@ -28,13 +28,13 @@ class TraderMock(object):
                     OrderLocalID = oid,
                     TradeTime = time.strftime('%H%M%S'),
                 )
-        inst = self.myagent.instruments[order.InstrumentID]
+        inst = self.agent.instruments[order.InstrumentID]
         if order.CombOffsetFlag == ApiStruct.OF_Open:
             self.available -= order.LimitPrice * inst.multiple * inst.marginrate[0]
         else:
             self.available += order.LimitPrice * inst.multiple * inst.marginrate[0]
 
-        self.myagent.rtn_trade(trade)
+        self.agent.rtn_trade(trade)
 
     def ReqOrderAction(self, corder, request_id):
         #print u'in cancel'
@@ -44,34 +44,34 @@ class TraderMock(object):
                     OrderRef = corder.OrderRef,
                     OrderStatus = ApiStruct.OST_Canceled,
                 )
-        #self.myagent.rtn_order(rorder)
-        self.myagent.err_order_action(rorder.OrderRef,rorder.InstrumentID,u'26',u'测试撤单--报单已成交')
+        #self.agent.rtn_order(rorder)
+        self.agent.err_order_action(rorder.OrderRef,rorder.InstrumentID,u'26',u'测试撤单--报单已成交')
 
     def ReqQryTradingAccount(self,req,req_id=0):
         logging.info(u'查询帐户余额')
-        account = base.BaseObject(Available=self.available) 
-        self.myagent.rsp_qry_trading_account(account)
+        account = BaseObject(Available=self.available) 
+        self.agent.rsp_qry_trading_account(account)
 
     def ReqQryInstrument(self,req,req_id=0):#只有唯一一个合约
         logging.info(u'查询合约')
         instID = req.InstrumentID
-        inst = self.myagent.instruments[instID]
-        ins = base.BaseObject(InstrumentID = instID, VolumeMultiple = inst.multiple, PriceTick=inst.tick_base)
-        self.myagent.rsp_qry_instrument(ins)
+        inst = self.agent.instruments[instID]
+        ins = BaseObject(InstrumentID = instID, VolumeMultiple = inst.multiple, PriceTick=inst.tick_base)
+        self.agent.rsp_qry_instrument(ins)
 
     def ReqQryInstrumentMarginRate(self,req,req_id=0):
         logging.info(u'查询保证金')
         instID = req.InstrumentID
-        inst = self.myagent.instruments[instID]
-        mgr = base.BaseObject(InstrumentID = instID,LongMarginRatioByMoney=inst.marginrate[0],ShortMarginRatioByMoney=inst.marginrate[0])
-        self.myagent.rsp_qry_instrument_marginrate(mgr)
+        inst = self.agent.instruments[instID]
+        mgr = BaseObject(InstrumentID = instID,LongMarginRatioByMoney=inst.marginrate[0],ShortMarginRatioByMoney=inst.marginrate[0])
+        self.agent.rsp_qry_instrument_marginrate(mgr)
 
     def ReqQryInvestorPosition(self,req,req_id=0):
         #暂默认无持仓
         pass
 
     def confirm_settlement_info(self):
-        self.myagent.isSettlementInfoConfirmed = True
+        self.agent.isSettlementInfoConfirmed = True
 
 
 class MarketDataMock(object):
@@ -90,20 +90,20 @@ class MarketDataMock(object):
         for inst in self.instIDs:
             tick_data[inst] = mdb.load_tick_data('fut_tick', inst, tday, tday)
             start_time[inst] = tick_data[inst][0]['timestamp']
-            start_time[inst] = tick_data[inst][-1]['timestamp']
+            end_time[inst] = tick_data[inst][-1]['timestamp']
             start_idx[inst] =  0
         start_t = min(start_time.values())
-
-        dt_list = [start_t + datetime.timedelta(seconds=n*0.5) for n in range(45000)]
-        while start_t <= end_t:
+        end_t = max(end_time.values())
+        while start_t < end_t:
             for inst in self.instIDs:
-                if start_t > start_time[inst]:
+                if (start_t >= start_time[inst]) and (start_idx[inst]<len(tick_data[inst])):
                     idx = start_idx[inst]
                     self.agent.RtnTick(tick_data[inst][idx])
                     start_idx[inst] += 1
-                    start_time[inst] =  
-                self.agent.RtnTick(tick)
-            #self.agent.RtnTick(tick)
+                    if start_idx[inst]<len(tick_data[inst]):
+                        start_time[inst] = tick_data[inst][start_idx[inst]]['timestamp']
+            start_t = min([start_time[inst] for inst in self.instIDs])
+
 
 def create_agent_with_mocktrader(instrument,tday,sname='strategy_mock.ini'):
     trader = TraderMock(None)
@@ -113,7 +113,7 @@ def create_agent_with_mocktrader(instrument,tday,sname='strategy_mock.ini'):
     ##这里没有考虑现场恢复，state中需注明当日
     cuser = BaseObject(broker_id='test',port=1111,investor_id='test',passwd='test')
     myagent = agent.Agent(trader,cuser,[instrument],strategy_cfg,tday=tday) 
-    trader.myagent = myagent
+    trader.agent = myagent
 
     req = BaseObject(InstrumentID=instrument)
     trader.ReqQryInstrumentMarginRate(req)
