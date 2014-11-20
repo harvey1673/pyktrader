@@ -1619,34 +1619,10 @@ def test_main(name='test_trade'):
     '''
     name='test_trade'
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-
-    prod_user = BaseObject( broker_id="8070", 
-                                 investor_id="*", 
-                                 passwd="*", 
-                                 ports=["tcp://zjzx-md11.ctp.shcifco.com:41213"])
-    prod_trader = BaseObject( broker_id="8070", 
-                                   investor_id="750305", 
-                                   passwd="801289", 
-                                   ports= ["tcp://zjzx-front12.ctp.shcifco.com:41205", 
-                                           "tcp://zjzx-front12.ctp.shcifco.com:41205",
-                                           "tcp://zjzx-front13.ctp.shcifco.com:41205"])
-    wkend_trader = BaseObject( broker_id="8070", 
-                                   investor_id="750305", 
-                                   passwd="801289", 
-                                   ports= ["tcp://zjzx-front20.ctp.shcifco.com:41205"] )
-    test_user = BaseObject( broker_id="8000", 
-                                 investor_id="*", 
-                                 passwd="*", 
-                                 ports=["tcp://qqfz-md1.ctp.shcifco.com:32313"]
-                                 )
-    test_trader = BaseObject( broker_id="8000", 
-                                 investor_id="24661668", 
-                                 passwd ="121862", 
-                                 ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305"])
     
     insts = ['cu1501','cu1502']
-    trader_cfg = test_trader
-    user_cfg = test_user
+    trader_cfg = TEST_TRADER
+    user_cfg = TEST_USER
     agent_name = name
     tday = datetime.date(2014,11,18)
     data_func = [ 

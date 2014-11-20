@@ -82,32 +82,24 @@ class MarketDataMock(object):
         self.data_freq = 'tick'
         self.agent = agent
 
-    def play(self, tday=0):
-        tick_data = {}
-        start_time = {}
-        start_idx = {}
-        end_time = {}
-        for inst in self.instIDs:
-            tick_data[inst] = mdb.load_tick_data('fut_tick', inst, tday, tday)
-            start_time[inst] = tick_data[inst][0]['timestamp']
-            end_time[inst] = tick_data[inst][-1]['timestamp']
-            start_idx[inst] =  0
-        start_t = min(start_time.values())
-        end_t = max(end_time.values())
-        while start_t < end_t:
-            for inst in self.instIDs:
-                if (start_t >= start_time[inst]) and (start_idx[inst]<len(tick_data[inst])):
-                    idx = start_idx[inst]
-                    self.agent.RtnTick(tick_data[inst][idx])
-                    start_idx[inst] += 1
-                    if start_idx[inst]<len(tick_data[inst]):
-                        start_time[inst] = tick_data[inst][start_idx[inst]]['timestamp']
-            start_t = min([start_time[inst] for inst in self.instIDs])
+    def play_tick(self, tday=0):
+        tick_data = mdb.load_tick_data('fut_tick', self.instIDs, tday, tday)
+        for tick in tick_data:
+            ctick = agent.TickData(instID=str(tick['instID']), 
+                           high=float(tick['high']), 
+                           low =float(tick['low']), 
+                           price=float(tick['price']), 
+                           volume=int(tick['volume']), 
+                           openInterest=int(tick['openInterest']), 
+                           bidPrice1=float(tick['bidPrice1']), 
+                           bidVol1=int(tick['bidVol1']), 
+                           askPrice1=float(tick['askPrice1']), 
+                           askVol1=int(tick['askVol1']), 
+                           timestamp=tick['timestamp'])
+            self.agent.RtnTick(ctick)
 
-
-def create_agent_with_mocktrader(instrument,tday,sname='strategy_mock.ini'):
+def create_agent_with_mocktrader(instrument,tday):
     trader = TraderMock(None)
-    print sname
     strategy_cfg = config.parse_strategy(name=sname)
 
     ##这里没有考虑现场恢复，state中需注明当日

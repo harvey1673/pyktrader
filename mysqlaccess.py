@@ -17,7 +17,7 @@ dbconfig = {'user': 'harvey',
           'host':'localhost',
           'database': 'blueshale',
           }
-tick_columns = ['date','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
+tick_columns = ['instID', 'date','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
 min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
 daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
@@ -186,10 +186,10 @@ def load_daily_data_to_df(dbtable, inst, d_start, d_end):
     cnx.close()
     return df
 
-def load_tick_data(dbtable, inst, d_start, d_end):
+def load_tick_data(dbtable, insts, d_start, d_end):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
-    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(tick_columns), table= dbtable, instID = inst)
+    stmt = "select {variables} from {table} where instID in ('{instIDs}') ".format(variables=','.join(tick_columns), table= dbtable, instIDs= "','".join(insts))
     stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
     stmt = stmt + "and date <= '%s' " % d_end.strftime('%Y-%m-%d')
     stmt = stmt + "order by date, hour, min, sec, msec" 

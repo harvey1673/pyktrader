@@ -4,6 +4,7 @@ import mysqlaccess
 import workdays
 import datetime
 import dateutil
+from base import *
 import pandas as pd
 
 ORDER_BUY  = '0'
@@ -23,6 +24,30 @@ OST_CANCELED = '5' #撤单
 OST_UNKNOWN = 'a' #未知
 OST_NOTOUCH = 'b' #尚未触发
 OST_TOUCHED = 'c' #已触
+
+PROD_USER = BaseObject( broker_id="8070", 
+                             investor_id="*", 
+                             passwd="*", 
+                             ports=["tcp://zjzx-md11.ctp.shcifco.com:41213"])
+PROD_TRADER = BaseObject( broker_id="8070", 
+                               investor_id="750305", 
+                               passwd="801289", 
+                               ports= ["tcp://zjzx-front12.ctp.shcifco.com:41205", 
+                                       "tcp://zjzx-front12.ctp.shcifco.com:41205",
+                                       "tcp://zjzx-front13.ctp.shcifco.com:41205"])
+WKEND_TRADER = BaseObject( broker_id="8070", 
+                               investor_id="750305", 
+                               passwd="801289", 
+                               ports= ["tcp://zjzx-front20.ctp.shcifco.com:41205"] )
+TEST_USER = BaseObject( broker_id="8000", 
+                             investor_id="*", 
+                             passwd="*", 
+                             ports=["tcp://qqfz-md1.ctp.shcifco.com:32313"]
+                             )
+TEST_TRADER = BaseObject( broker_id="8000", 
+                             investor_id="24661668", 
+                             passwd ="121862", 
+                             ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305"])
 
 month_code_map = {'f': 1,
                   'g': 2,
