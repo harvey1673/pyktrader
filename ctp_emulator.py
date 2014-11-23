@@ -5,6 +5,10 @@ import logging
 import mysqlaccess as mdb
 import datetime
 from base import * 
+from misc import *
+import strategy as strat
+import data_handler
+import itertools
 from ctp.futures import ApiStruct
 
 class TraderMock(object):
@@ -98,109 +102,86 @@ class MarketDataMock(object):
                            timestamp=tick['timestamp'])
             self.agent.RtnTick(ctick)
 
-def create_agent_with_mocktrader(instrument,tday):
-    trader = TraderMock(None)
-    strategy_cfg = config.parse_strategy(name=sname)
+def create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday):
+    strategies = strat_cfg['strategies']
+    folder = strat_cfg['folder']
+    daily_days = strat_cfg['daily_data_days']
+    min_days = strat_cfg['min_data_days']
+    myagent = agent.Agent(agent_name, None, None, instruments, strategies, tday, folder, daily_days, min_days) 
+    myagent.trader = trader = TraderMock(myagent)
+    return myagent, trader
 
-    ##这里没有考虑现场恢复，state中需注明当日
-    cuser = BaseObject(broker_id='test',port=1111,investor_id='test',passwd='test')
-    myagent = agent.Agent(trader,cuser,[instrument],strategy_cfg,tday=tday) 
-    trader.agent = myagent
+def trade_mock( curr_date, insts = [['IF1412', 'IF1503']]):
+    logging.basicConfig(filename="ctp_trade_mock.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')    
+    instruments = list(set(itertools.chain(*insts)))
+    data_func = [ 
+            ('d', BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20))), \
+            ('d', BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10))),\
+            ('d', BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10))),\
+            ('d', BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20))),\
+            ('d', BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=20))),\
+            ('1m',BaseObject(name = 'EMA_3',     sfunc=fcustom(data_handler.EMA, n=3),      rfunc=fcustom(data_handler.ema, n=3))), \
+            ('1m',BaseObject(name = 'EMA_30',    sfunc=fcustom(data_handler.EMA, n=30),     rfunc=fcustom(data_handler.ema, n=30))) \
+        ]
+    test_strat = strat.Strategy('TestStrat', [insts], None, data_func, [[1,-1]])
+    strat_cfg = {'strategies': [test_strat], \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':25, \
+                 'min_data_days':2 }
 
-    req = BaseObject(InstrumentID=instrument)
-    trader.ReqQryInstrumentMarginRate(req)
-    trader.ReqQryInstrument(req)
-    trader.ReqQryTradingAccount(req)
-    return myagent
+    agent_name = "Test" 
+    tday = curr_date
+    my_agent, my_trader = create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
+    my_user  = MarketDataMock(my_agent)
+    req = BaseObject(InstrumentID='IF1412')
+    my_trader.ReqQryInstrumentMarginRate(req)
+    my_trader.ReqQryInstrument(req)
+    my_trader.ReqQryTradingAccount(req)    
+    
+    my_agent.resume()
+    my_user.play_tick(tday)
 
-def run_ticks(ticks,myagent):
-    for tick in ticks:
-        myagent.inc_tick()
-        #print tick.min1
-
-def trade_mock(instrument='IF1108'):
-    #logging.basicConfig(filename="ctp_trade_mock.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-
-    tday = 20110726
-    myagent = create_agent_with_mocktrader(instrument,-1)    #不需要tday的当日数据
-    myagent.scur_day = tday
-    myagent.save_flag = True
-    ticks = hreader.read_ticks(instrument,tday)    #不加载当日数据
-    #for tick in ticks:myagent.inc_tick(),myagent.RtnTick(tick)
-    #for tick in ticks:
-    #    myagent.inc_tick()
-    #    myagent.RtnTick(tick)
-    run_ticks(ticks,myagent)
-
-def semi_mock(instrument='IF1110',base_name='mybase.ini',base='Base'):
+def semi_mock(curr_date, insts = [['IF1412', 'IF1503']], user_cfg):
     ''' 半模拟
         实际行情，mock交易
     '''
     logging.basicConfig(filename="ctp_semi_mock.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')    
-    tday = int(time.strftime('%Y%m%d'))
-    myagent = create_agent_with_mocktrader(instrument,tday)    #不需要tday的当日数据
+    instruments = list(set(itertools.chain(*insts)))
+    data_func = [ 
+            ('d', BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20))), \
+            ('d', BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10))),\
+            ('d', BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10))),\
+            ('d', BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20))),\
+            ('d', BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=20))),\
+            ('1m',BaseObject(name = 'EMA_3',     sfunc=fcustom(data_handler.EMA, n=3),      rfunc=fcustom(data_handler.ema, n=3))), \
+            ('1m',BaseObject(name = 'EMA_30',    sfunc=fcustom(data_handler.EMA, n=30),     rfunc=fcustom(data_handler.ema, n=30))) \
+        ]
+    test_strat = strat.Strategy('TestStrat', [insts], None, data_func, [[1,-1]])
+    strat_cfg = {'strategies': [test_strat], \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':25, \
+                 'min_data_days':2 }
 
-    myagent.resume()
-
-    base_cfg = config.parse_base(base_name,base)
-    for user in base_cfg.users:
-        agent.make_user(myagent,base_cfg.users[user],user)
+    agent_name = "Test" 
+    tday = curr_date
+    my_agent, my_trader = create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
+    agent.make_user(my_agent,user_cfg)
     
-    return myagent
-
-def comp_mock(base_name='mybase.ini',base='Base',strategy_name='strategy_trader.ini'):
-    ''' 全模拟
-        实际行情，模拟交易
-    '''
-    logging.basicConfig(filename="ctp_comp_mock.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')    
-    #tday = int(time.strftime('%Y%m%d'))
-    #myagent = create_agent_with_mocktrader(instrument,tday)    #不需要tday的当日数据
-    trader,myagent = agent.create_trader(name='mybase.ini',base='Base_Mock',sname=strategy_name)
-
-    myagent.resume()
-
-    #用实际行情
-    base_cfg = config.parse_base(base_name,'Base_Mock')
-    for user in base_cfg.users:
-        agent.make_user(myagent,base_cfg.users[user],user)
+    req = BaseObject(InstrumentID='IF1412')
+    my_trader.ReqQryInstrumentMarginRate(req)
+    my_trader.ReqQryInstrument(req)
+    my_trader.ReqQryTradingAccount(req)    
     
-    return myagent
-
-def comp_real(base_name='mybase.ini',base='Base',strategy_name='strategy_trader.ini'):
-    ''' 实际交易
-    '''
-    logging.basicConfig(filename="ctp_comp_real.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')    
-    #tday = int(time.strftime('%Y%m%d'))
-    #myagent = create_agent_with_mocktrader(instrument,tday)    #不需要tday的当日数据
-    trader,myagent = agent.create_trader(name='mybase.ini',base='BASE_REAL',sname=strategy_name)
-
-    myagent.resume()
-
-    #用实际行情
-    base_cfg = config.parse_base(base_name,'BASE_REAL')
-    for user in base_cfg.users:
-        agent.make_user(myagent,base_cfg.users[user],user)
+    my_agent.resume()
     
-    return myagent
-
-def comp_real2(base_name='mybase.ini',base='Base',strategy_name='strategy_trader.ini',t2order=t2order_if):
-    ''' 实际交易
-    '''
-    logging.basicConfig(filename="ctp_comp_real.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')    
-    #tday = int(time.strftime('%Y%m%d'))
-    #myagent = create_agent_with_mocktrader(instrument,tday)    #不需要tday的当日数据
-    trader,myagent = agent.create_trader(name=base_name,base=base,sname=strategy_name,t2order=t2order)
-
-    myagent.resume()
-
-    #用实际行情
-    base_cfg = config.parse_base(base_name,base)
-    for user in base_cfg.users:
-        agent.make_user(myagent,base_cfg.users[user],user)
+    try:
+        while 1: time.sleep(1)
+    except KeyboardInterrupt:
+        my_agent.mdapis = []; 
+        my_agent.trader = None
+    pass
     
-    return myagent
-
-
 if __name__ == '__main__':
-    log_config()
-    trade_mock()
+    tday = datetime.date(2014,11,21)
+    insts = [['IF1412'], ['IF1503']]
+    trade_mock(tday)
