@@ -676,7 +676,7 @@ class Instrument(object):
         self.price = 0.0
         self.volume = 0
         self.open_interest = 0
-        self.last_update = datetime.datetime.now()
+        self.last_update = datetime.datetime(1900, 1, 1, 0,0,0,0)
         self.ask_price1 = 0.0
         self.ask_vol1 = 0
         self.bid_price1 = 0.0

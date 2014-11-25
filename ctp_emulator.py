@@ -77,6 +77,8 @@ class TraderMock(object):
     def confirm_settlement_info(self):
         self.agent.isSettlementInfoConfirmed = True
 
+    def check_order_status(self):
+        pass
 
 class MarketDataMock(object):
     '''简单起见，只模拟一个合约，用于功能测试
@@ -141,7 +143,7 @@ def trade_mock( curr_date, insts = [['IF1412', 'IF1503']]):
     my_agent.resume()
     my_user.play_tick(tday)
 
-def semi_mock(curr_date, insts = [['IF1412', 'IF1503']], user_cfg):
+def semi_mock(curr_date, user_cfg, insts = [['IF1412', 'IF1503']]):
     ''' 半模拟
         实际行情，mock交易
     '''
