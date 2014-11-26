@@ -840,6 +840,8 @@ class Agent(AbsAgent):
         self.get_eod_positions()
         for inst in self.instruments:
             self.instruments[inst].get_margin_rate()
+		for strat in self.strategies:
+			strat.state_refrsh()
         for inst in self.positions:
             self.positions[inst].re_calc() 
         self.qry_commands.append(self.fetch_trading_account)
