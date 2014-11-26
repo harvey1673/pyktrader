@@ -123,6 +123,9 @@ class Strategy(object):
                 self.agent.register_data_func(freq,fobj)
         self.update_trade_unit()
     
+	def state_refresh(self):
+		self.load_state()
+		
     def resume(self):
         pass
     
