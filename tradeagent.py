@@ -101,11 +101,12 @@ class MdSpiDelegate(MdApi):
     
     def OnRspUserLogin(self, userlogin, info, rid, is_last):
         self.logger.info(u'MD:user login,info:%s,rid:%s,is_last:%s' % (info,rid,is_last))
-        scur_day = datetime.date.today()
-        if scur_day > self.agent.scur_day:    #换日,重新设置volume
-            self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,scur_day))
+		trading_day = datetime.datetime.strptime(self.GetTradingDay(),'%Y%m%d').date()
+		scur_day = datetime.date.today()
+        if trading_day > self.agent.scur_day:    #换日,重新设置volume
+            self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
             #self.agent.scur_day = scur_day
-            self.agent.day_switch(scur_day) 
+            self.agent.day_switch(trading_day) 
         if is_last and not self.checkErrorRspInfo(info):
             self.logger.info(u"MD:get today's trading day:%s" % repr(self.GetTradingDay()))
             self.subscribe_market_data(self.instruments)
@@ -187,7 +188,6 @@ class TraderSpiDelegate(TraderApi):
 
     def OnFrontDisconnected(self, nReason):
         TraderSpiDelegate.logger.info(u'TD:trader front disconnected,reason=%s' % (nReason,))
-        self.agent.on_trading_conn_close()
 
     def user_login(self, broker_id, investor_id, passwd):
         req = ApiStruct.ReqUserLogin(BrokerID=broker_id, UserID=investor_id, Password=passwd)
@@ -674,6 +674,7 @@ class Instrument(object):
         self.last_tick_id = 0
         # market snapshot
         self.price = 0.0
+		self.prev_price = 0.0
         self.volume = 0
         self.open_interest = 0
         self.last_update = datetime.datetime(1900, 1, 1, 0,0,0,0)
@@ -763,6 +764,11 @@ class Agent(AbsAgent):
         self.request_id = 1
         self.initialized = False
         self.scur_day = tday
+		
+		self.mkt_start_tick = min([self.instruments[inst].start_tick_id for inst in instruments])
+		self.mkt_end_tick = max([self.instruments[inst].end_tick_id for inst in instruments])
+		self.trade_start_tick = 1500000
+		self.trade_end_tick = 2115000
 
         # market data
         self.daily_data_days = daily_data_days
@@ -821,6 +827,8 @@ class Agent(AbsAgent):
         self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
+		self.eod_flag = False
+		self.agent_start = datetime.datetime.now()
 
         #actions
         self.etrades = []
@@ -877,6 +885,8 @@ class Agent(AbsAgent):
             for inst in self.instruments:  
                 self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
                 df = self.day_data[inst]
+				if len(df) > 0:
+					self.instruments[inst].prev_price = df['close'][-1]
                 for fobj in self.day_data_func:
                     ts = fobj.sfunc(df)
                     df[ts.name]= pd.Series(ts, index=df.index)  
@@ -972,7 +982,7 @@ class Agent(AbsAgent):
                 for inst in self.positions:
                     pos = self.positions[inst]
                     pos.re_calc()
-                    file_writer.writerow([inst, pos.pos_tday.long, pos.pos_tday.short])
+                    file_writer.writerow([inst, pos.curr_pos.long, pos.curr_pos.short])
             return True
 
     def calc_margin(self):
@@ -1012,11 +1022,17 @@ class Agent(AbsAgent):
         if self.scur_day < tick.timestamp.date():
             self.scur_day = tick.timestamp.date()
             self.day_finalize(self.instruments.keys())
-            
+			if not self.eod_flag:
+				self.run_eod()
+			self.eod_flag = False
         
         if (curr_tick < self.instruments[inst].start_tick_id-5):
             return False
+		
         if (curr_tick > self.instruments[inst].last_tick_id+5):
+			if not self.eod_flag:
+				self.run_eod()
+				self.eod_flag = True
             return False
         
         update_tick = get_tick_id(self.instruments[inst].last_update)
@@ -1102,6 +1118,9 @@ class Agent(AbsAgent):
             
             if tick_id > self.instruments[inst].last_tick_id-5:
                 self.day_finalize([inst])
+				if tick_id > self.mkt_end_tick-5:
+					self.run_eod()
+					self.eod_flag = True
         except:
             pass
         self.instruments[inst].is_busy = False               
@@ -1146,6 +1165,7 @@ class Agent(AbsAgent):
                 self.min_switch(inst)
 
             if self.cur_day[inst]['close'] > 0:
+				self.instruments[inst].prev_price = self.cur_day[inst]['close']
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
                 for fobj in self.day_data_func:
@@ -1159,8 +1179,8 @@ class Agent(AbsAgent):
             self.cur_day[inst]['date'] = self.scur_day
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
 
-    def on_trading_conn_close(self):
-        print 'on trading connection close'
+    def run_eod(self):
+        print 'run EOD process'
         now = datetime.datetime.now()
         tday = now.date()
         if get_tick_id(now) >= 2116000 and (tday.isoweekday()<6) and (tday not in CHN_Holidays):
@@ -1173,6 +1193,7 @@ class Agent(AbsAgent):
             self.save_eod_positions()
             self.etrades = []
             self.ref2order = {}
+			self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1184,6 +1205,9 @@ class Agent(AbsAgent):
         self.scur_day = scur_day
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
+		if not self.eod_flag:
+			self.run_eod()
+		self.eod_flag = False
                 
     def init_init(self):    #init中的init,用于子类的处理
         pass
