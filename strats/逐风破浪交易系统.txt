@@ -1,0 +1,94 @@
+开拓者逐风破浪交易系统源码
+
+源码内容：
+
+Params
+   Bool    bInitStatus(false);//初始化标志，修改初始仓位时需设置为True
+   Numeric InitMyRealMp(0);//初始当前仓位，正数表示多单，负数表示空单
+   Numeric FirstGrid(10);//第一笔交易的间距，最小跳动
+   Numeric AddGrid(30);//加仓间距，最小跳动
+   Numeric TotalGrids(10);//最大交易次数
+   Numeric TrailingGrid(10);//移动止损间距，最小跳动
+   Numeric EveryLots(1);//每次开仓手数
+   Numeric OffSet(1);//委托价偏差，默认买卖价偏差1个滑点
+   Numeric ExitOnCloseMins(15.00);//收盘平仓时间
+Vars
+   Numeric HighAfterlongEntry;
+   Numeric  LowAfterShortEntry;
+   Numeric    MyRealMp(0);
+   Numeric   MinPoint;
+   Numeric  TmpPrice;
+   Numeric   TmpLots;
+Begin
+   MinPoint=MinMove*PriceScale;//当前商品最小变动量*当前商品的计数单位
+   MyRealMp=GetGlobalVar(0); //获取MyRealMp全局变量值
+   HighAfterlongEntry=GetGlobalVar(1);
+   LowAfterShortEntry=GetGlobalVar(2);
+   If(BarStatus==0 And (MyRealMp==InvalidNumeric||bInitStatus))  
+   {MyRealMp=InitMyRealMp;}
+   If(Date<>Date[1])
+   {HighAfterlongEntry=High;
+   LowAfterShortEntry=Low;
+   MyRealMp=0;
+   }Else
+   {HighAfterlongEntry=Max(HighAfterlongEntry,High);
+   LowAfterShortEntry=Min(LowAfterShortEntry,Low);}
+   if (Time<ExitOnCloseMins/100)
+   {If(MyRealMp>0 And HighAfterlongEntry-Low>=TrailingGrid*MinPoint And(High-Low<TrailingGrid*MinPoint Or (High-Low>=TrailingGrid*MinPoint And Close<Open)))
+     {TmpPrice=Max(HighAfterLongEntry-(TrailingGrid-OffSet)*MinPoint,Low);
+     TmpLots=Abs(MyRealMp*EveryLots);
+     Sell(TmpLots,TmpPrice);
+     MyRealMp=0;
+     LowAfterShortEntry=Low;
+   }else
+     If(MyRealMp<0 And High-LowAfterShortEntry>=TrailingGrid*MinPoint And (High-Low<TrailingGrid*MinPoint Or (High-Low>=TrailingGrid*MinPoint And Close>Open)))
+     {TmpPrice=Min(LowAfterShortEntry+(TrailingGrid+OffSet)*MinPoint,High);
+      TmpLots=Abs(MyRealMp*EveryLots);
+      BuyToCover(TmpLots,TmpPrice);
+      MyRealMp=0;
+      HighAfterLongEntry=0;}
+      If(MyRealMp==0 And High-LowAfterShortEntry>=FirstGrid*MinPoint)//第一笔多单开仓
+      {TmpPrice=Min(LowAfterShortEntry+(FirstGrid+OffSet)*MinPoint,High);
+      TmpLots=EveryLots;
+      Buy(TmpLots,TmpPrice);
+      MyRealMp=1;
+      HighAfterLongEntry=High;
+      }Else
+      If(MyRealMp>0 And MyRealMp<TotalGrids And High-LowAfterShortEntry>=(FirstGrid+MyRealMp*AddGrid)*MinPoint)//多单加仓
+      {TmpPrice=Min(LowAfterShortEntry+(FirstGrid+MyRealMp*AddGrid+OffSet)*MinPoint,High);
+      TmpLots=EveryLots;
+      Buy(TmpLots,TmpPrice);
+      MyRealMp=MyRealMp+1;
+      }else
+      If(MyRealMp==0 And HighAfterLongEntry-Low>=FirstGrid*MinPoint)//第一笔空单开仓
+      {TmpPrice=Max(HighAfterLongEntry-(FirstGrid-OffSet)*MinPoint,Low);
+      TmpLots=EveryLots;
+      SellShort(TmpLots,TmpPrice);
+      MyRealMp=-1;
+      LowAfterShortEntry=Low;
+      }else
+      If(MyRealMp<0 And -1*MyRealMp<TotalGrids And HighAfterLongEntry-Low>=(FirstGrid+Abs(MyRealMp*AddGrid))*MinPoint)//空单加仓
+      {TmpPrice=Max(HighAfterLongEntry-(FirstGrid-Abs(MyRealMp*AddGrid)-OffSet)*MinPoint,Low);
+      TmpLots=EveryLots;
+      SellShort(TmpLots,TmpPrice);
+      MyRealMp=MyRealMp-1;}
+      }else
+      If(Time>=ExitOnCloseMins/100)
+      {If(MyRealMp>0)
+      {TmpLots=Abs(MyRealMp*EveryLots);
+      TmpPrice=Close;
+      Sell(0,TmpPrice);
+      MyRealMp=0;}
+      If(MyRealMp<0)
+      {TmpLots=Abs(MyRealMp*EveryLots);
+      TmpPrice=Close;
+      BuyToCover(0,TmpPrice);
+      MyRealMp=0;}}
+      SetGlobalVar(0,MyRealMp);
+      SetGlobalVar(1,HighAfterLongEntry);
+      SetGlobalVar(2,LowAfterShortEntry);
+      Commentary("MyRealMp="+Text(MyRealMp));
+      Commentary("HighAfterLLowAfterShortEntry="+Text(LowAfterShortEntry));
+      End
+
+

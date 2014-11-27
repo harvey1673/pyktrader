@@ -1,0 +1,64 @@
+开拓者dual-thrust日内交易系统源码
+
+Params
+     
+       Numeric M(50);
+       Numeric LOTS(1);
+         
+       Vars
+       Numeric offset;
+       Numeric offset1;
+       NumericSeries MA1;
+       NumericSeries MA2;
+       NumericSeries MA11;
+       NumericSeries MA22;
+       Numeric spread;
+       Numeric OPENP;
+
+     
+Begin
+
+       offset = 5*MinMove()*PriceScale();
+       spread=Max(HighD(1)-CloseD(1),CloseD(1)-LowD(1));
+       OPENP=OpenD(0);
+       MA1=OPENP+0.01*M*spread;
+       MA2=OPENP-0.01*M*spread;
+       MA11=OPENP+0.01*0.5*M*spread;
+       MA22=OPENP-0.01*0.5*M*spread;
+             
+if(Time<=0.0905)        {SetGlobalVar(0,0);}
+
+if(Time>0.0905 && Time<=0.1455)              
+       {
+
+       If(C[1]<MA2 && MarketPosition()==0 && GetGlobalVar(0)<=1)
+               {
+               SellShort(LOTS,C-offset);SetGlobalVar(0,GetGlobalVar(0)+1);
+               }// cxh99.com
+             
+       If(C[1]>ma1 && MarketPosition()==0 && GetGlobalVar(0)<=1)
+               {              
+               Buy(LOTS,C+offset);SetGlobalVar(0,GetGlobalVar(0)+1);
+               }//来源于: cxh99.com
+             
+       If(C[1]<MA11 && MarketPosition()==1)
+               {
+               Sell(LOTS,C-offset);
+               }
+             
+       If(C[1]>MA22 && MarketPosition()==-1)
+               {              
+               BuyToCover(LOTS,C+offset);
+               }
+
+       }
+       
+If(Time>0.1455&&MarketPosition!=0)
+       {
+       offset1 = 20*MinMove()*PriceScale();
+       Sell(0,C-offset);
+       BuyToCover(0,C+offset1);
+       }
+End
+
+

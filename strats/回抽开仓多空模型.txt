@@ -1,0 +1,75 @@
+回抽开仓多空模型源码 开拓者TB 文华通用
+
+    开拓者源码：
+
+    Params
+    Numeric lenth(10);
+    Numeric Lots(1);
+    Numeric ExitOnCloseMins(15.10);
+
+    Vars
+    Numeric H1;
+    Numeric H2;
+    Numeric H3;
+    Numeric L1;
+    Numeric L2;
+    Numeric L3;
+    Numeric HH;
+    Numeric LL;
+    Numeric Stopline;
+    Numeric C1;
+    Numeric C2;
+    Numeric C3;
+
+    Begin
+    H1=H[1];
+    H2=H[2];
+    H3=H[3];
+    L1=L[1];
+    L2=L[2];
+    L3=L[3];
+
+    HH=Highest(High[1],Lenth);
+    LL=Lowest(Low[1],lenth);
+    If(H1<H2 && H2>H3 && H1>H3 && High>=H2 && MarketPosition!=1)
+    {
+    Buy(Lots,Max(Open,H2));
+     Return;
+    }
+    If(L1>L2 && L2<L3 && L1<L3 && Low<=L2 && MarketPosition!=-1)
+    {
+    SellShort(Lots,Min(Open,L2));
+    Return;
+    }
+
+
+    If(MarketPosition==1 && L<=LL && BarsSinceEntry>0)Sell(Lots,Min(Open,LL));
+    If(MarketPosition==-1 && H>=HH && BarsSinceEntry>0)BuyToCover(Lots,Max(Open,HH));
+
+     If(Time >=ExitOnCloseMins/100)
+    {
+    Sell(0,Open);
+    BuyToCover(0,Open);
+    }
+    End
+
+     
+
+
+    文华财经WH3 源码：
+
+     
+
+    H1:=REF(H,1);
+    H2:=REF(H,2);
+    H3:=REF(H,3);
+    L1:=REF(L,1);
+    L2:=REF(L,2);
+    L3:=REF(L,3);
+    HH:=HHV(H1,10);
+    LL:=LLV(L1,10);
+    H1<H2 && H2>H3 && H1>H3 && HIGH>=H2,BK;
+    L1>L2 && L2<L3 && L1<L3 && LOW<=L2,SK;
+    L<=LL||TIME>=1510,SP;
+    H>=HH||TIME>=1510,BP;
+    AUTOFILTER;

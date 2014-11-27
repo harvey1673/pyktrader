@@ -1,0 +1,54 @@
+开拓者 TB 只做多交易策略
+
+Params
+        Numeric Length(1);                        
+        Numeric SlowLength(3);        
+        Numeric SmoothLength(3);
+        Numeric lots(1);
+Vars
+        NumericSeries HighestValue;                                
+        NumericSeries LowestValue;                                      
+        NumericSeries KValue;//TB中的K值
+        NumericSeries DValue;//TB中的K值
+        NumericSeries RSV;        
+        NumericSeries K1;//正规的K值
+        NumericSeries D1;//正规的D值
+
+Begin
+        HighestValue = HighestFC(High, Length);
+        LowestValue = LowestFC(Low, Length);
+                RSV = (Close-LowestValue)/(HighestValue-LowestValue)*100;
+       
+        KValue = SummationFC(Close - LowestValue,SlowLength)/SummationFC(HighestValue-LowestValue,SlowLength)*100;
+        DValue = AverageFC(KValue,SmoothLength);
+
+        K1 = SMA(RSV,SlowLength,1);
+        D1 = SMA(K1,SmoothLength,1);
+               
+                PlotNumeric("K",K1);
+        PlotNumeric("D",D1);
+        PlotNumeric("KTB",KValue);
+        PlotNumeric("DTB",DValue);
+        PlotNumeric("RSV",RSV);
+
+  if(MarketPosition == 0)//没仓位,KD判断,K穿D开多
+  {
+     if(CrossOver(K1,D1))
+        {
+           buy(lots,Close[1]);
+           Return;
+                }                        
+
+       }
+  if(MarketPosition == 1)//多仓, D穿K卖平
+  {
+    if(CrossUnder(K1,D1))
+        {
+          Sell(lots,Close);
+                  Return;
+        }
+  }
+end
+
+
+策略核心: 每次大跌就买入, DK穿过就当做止损卖出. 不许开空仓.

@@ -1,0 +1,95 @@
+程序化策略－简单突破系统（Hans交易法）
+
+    Simple Combined Breakout System for EUR/USD and GBP/USD
+    Determine the 06.00 CET – 10.00 CET High Low on EUR/USD and GBP/USD
+    Determine the 10.00 CET – 14.00 CET High Low on EUR/USD and GBP/USD
+    Set BuyStop at High + 5 pips and SellStop at Low - 5 pips for both timeframes and both currencies
+    Set Target Price at entry + 80 pips for EUR/USD and entry + 120 pips for GBP/USD
+    Set StopLoss at entry - 50 pips for EUR/USD and entry - 70 pips for GBP/USD. If the other side of the breakout is within 50 pips for EUR/USD or within 70 pips for GBP/USD then the StopLoss will be that level (Longtrade: SL = Low range - 5 pips = SellStop; Shorttrade: SL = High range + 5 pips = BuyStop)
+    Move the SL to breakeven after a gain of 30 pips for EUR/USD and a gain of 40 pips for GBP/USD
+    If a certain position is taken and price turns agains you and it breaks the other side of the breakout channel then turn. If the breakout channel is broader then the stoploss first the stoploss will be hit. If the breakout channel is narrower then the stoploss then hitting the other side means that you have to turn your position. There is only one turn per time frame possible
+    At 24.00 CET all orders expiring and close all trades at market. On Friday we do the same at 23.00 CET.
+    This link displays the time in every major city in the world: http://www.qlock.com./ I am using CET time (Amsterdam, Frankfurt).
+
+     
+
+
+    TB技术人员： 对上面文字大致的翻译（感谢iPG）：
+
+    一个简单有效的短线系统...
+    每日17点，找到今日13点到17点的最高价和最低价，下单BuyStop和SellStop。
+    每日21点，找到今日17点到21点的最高价和最低价，下单BuyStop和SellStop。
+
+
+    EUR/USD：
+    Buy Stop = 最高价 + 5；
+    止盈 = Buy Stop + 80；
+    止损 = Buy Stop - 50；
+
+    Sell Stop = 最低价 - 5；
+    止盈 = Sell Stop - 80；
+    止损 = Sell Stop + 50；
+    有30点浮动利润时将止损移至开仓价位。
+
+    GBP/USD：
+    Buy Stop = 最高价 + 5；
+    止盈 = Buy Stop + 120；
+    止损 = Buy Stop - 70；
+
+    Sell Stop = 最低价 - 5；
+    止盈 = Sell Stop - 120；
+    止损 = Sell Stop + 70；
+
+    有40点浮动利润时将止损移至开仓价位。
+    每日早7点，平掉手上所有单子。
+
+     
+
+
+    TB客服： 下面是结果（下面是我在翻，呵呵，不对大家不要笑）
+    Results October 2005:
+    05年10月的
+
+
+    10/03 : -22 pips
+    10/04: -61 pips
+    10/05: -103 pips
+    10/06: +168 pips
+    10/07: +156 pips
+    10/10: +135 pips
+    10/11: +61 pips
+    10/12: +108 pips
+    10/13: +97 pips
+    10/14: +274 pips
+    10/17: +178 pips
+
+
+    Total: +991 pips
+
+
+    The results this month are extreme. In general the system gives you an average return of 600 pips a month from
+    March 2005.
+
+    上面这个月的结果比较极端，一般而言从05年3月起平均每个月有600点左右。
+
+    On monthly basis the results are:
+    每月的结果为：
+    March 2005: +721 pips
+    April 2005: +940 pips
+    May 2005: +296 pips
+    June 2005: +857 pips
+    July 2005: +1,352 pips
+    August 2005: + 35 pips
+    September 2005: -20 pips
+    October 2005: +1,825 pips
+    November 2005: +554 pips
+    December 2005: +345 pips
+    January 2006: +73 pips
+    February 2006: -13 pips
+
+    All calculations before October 2005 are done by hand, so it is possible that there is a small deviation. It is only to show the power of such a simple system. Maybe someone can program this for Metatrader 4.
+    05年10月以前的结果是手动结算的，所以可能和实际有一点出入。这只是为了展示这个系统的威力的。或许有人可以用MQL4来验证。
+
+    I don't trade an EA, so please don't ask.
+    This is the current version of Hans123, so please don't ask.
+    Use the thread's search facility before you ask.

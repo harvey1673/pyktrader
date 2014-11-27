@@ -101,8 +101,8 @@ class MdSpiDelegate(MdApi):
     
     def OnRspUserLogin(self, userlogin, info, rid, is_last):
         self.logger.info(u'MD:user login,info:%s,rid:%s,is_last:%s' % (info,rid,is_last))
-		trading_day = datetime.datetime.strptime(self.GetTradingDay(),'%Y%m%d').date()
-		scur_day = datetime.date.today()
+        trading_day = datetime.datetime.strptime(self.GetTradingDay(),'%Y%m%d').date()
+        scur_day = datetime.date.today()
         if trading_day > self.agent.scur_day:    #换日,重新设置volume
             self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
             #self.agent.scur_day = scur_day
@@ -674,7 +674,7 @@ class Instrument(object):
         self.last_tick_id = 0
         # market snapshot
         self.price = 0.0
-		self.prev_price = 0.0
+        self.prev_price = 0.0
         self.volume = 0
         self.open_interest = 0
         self.last_update = datetime.datetime(1900, 1, 1, 0,0,0,0)
@@ -764,11 +764,11 @@ class Agent(AbsAgent):
         self.request_id = 1
         self.initialized = False
         self.scur_day = tday
-		
-		self.mkt_start_tick = min([self.instruments[inst].start_tick_id for inst in instruments])
-		self.mkt_end_tick = max([self.instruments[inst].end_tick_id for inst in instruments])
-		self.trade_start_tick = 1500000
-		self.trade_end_tick = 2115000
+        
+        self.mkt_start_tick = min([self.instruments[inst].start_tick_id for inst in instruments])
+        self.mkt_end_tick = max([self.instruments[inst].end_tick_id for inst in instruments])
+        self.trade_start_tick = 1500000
+        self.trade_end_tick = 2115000
 
         # market data
         self.daily_data_days = daily_data_days
@@ -787,15 +787,6 @@ class Agent(AbsAgent):
         for strat in self.strategies:
             strat.agent = self
             strat.initialize()
-
-        #self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.ATR, n=60), \
-        #                                        rfunc=fcustom(data_handler.atr, n=60)))
-        #self.register_data_func('1m', BaseObject(sfunc=fcustom(data_handler.EMA, n=20), \
-        #                                        rfunc=fcustom(data_handler.ema, n=20)))
-        #self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.EMA, n=12), \
-        #                                        rfunc=fcustom(data_handler.ema, n=12)))
-        #self.register_data_func('3m', BaseObject(sfunc=fcustom(data_handler.MA, n=15), \
-        #                                        rfunc=fcustom(data_handler.ma, n=15)))
         
         self.prepare_data_env()
         for inst in instruments:
@@ -827,8 +818,8 @@ class Agent(AbsAgent):
         self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
-		self.eod_flag = False
-		self.agent_start = datetime.datetime.now()
+        self.eod_flag = False
+        self.agent_start = datetime.datetime.now()
 
         #actions
         self.etrades = []
@@ -848,8 +839,8 @@ class Agent(AbsAgent):
         self.get_eod_positions()
         for inst in self.instruments:
             self.instruments[inst].get_margin_rate()
-		for strat in self.strategies:
-			strat.state_refrsh()
+        for strat in self.strategies:
+            strat.state_refrsh()
         for inst in self.positions:
             self.positions[inst].re_calc() 
         self.qry_commands.append(self.fetch_trading_account)
@@ -885,8 +876,8 @@ class Agent(AbsAgent):
             for inst in self.instruments:  
                 self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
                 df = self.day_data[inst]
-				if len(df) > 0:
-					self.instruments[inst].prev_price = df['close'][-1]
+                if len(df) > 0:
+                    self.instruments[inst].prev_price = df['close'][-1]
                 for fobj in self.day_data_func:
                     ts = fobj.sfunc(df)
                     df[ts.name]= pd.Series(ts, index=df.index)  
@@ -1022,17 +1013,17 @@ class Agent(AbsAgent):
         if self.scur_day < tick.timestamp.date():
             self.scur_day = tick.timestamp.date()
             self.day_finalize(self.instruments.keys())
-			if not self.eod_flag:
-				self.run_eod()
-			self.eod_flag = False
+            if not self.eod_flag:
+                self.run_eod()
+            self.eod_flag = False
         
         if (curr_tick < self.instruments[inst].start_tick_id-5):
             return False
-		
+        
         if (curr_tick > self.instruments[inst].last_tick_id+5):
-			if not self.eod_flag:
-				self.run_eod()
-				self.eod_flag = True
+            if not self.eod_flag:
+                self.run_eod()
+                self.eod_flag = True
             return False
         
         update_tick = get_tick_id(self.instruments[inst].last_update)
@@ -1118,9 +1109,9 @@ class Agent(AbsAgent):
             
             if tick_id > self.instruments[inst].last_tick_id-5:
                 self.day_finalize([inst])
-				if tick_id > self.mkt_end_tick-5:
-					self.run_eod()
-					self.eod_flag = True
+                if tick_id > self.mkt_end_tick-5:
+                    self.run_eod()
+                    self.eod_flag = True
         except:
             pass
         self.instruments[inst].is_busy = False               
@@ -1165,7 +1156,7 @@ class Agent(AbsAgent):
                 self.min_switch(inst)
 
             if self.cur_day[inst]['close'] > 0:
-				self.instruments[inst].prev_price = self.cur_day[inst]['close']
+                self.instruments[inst].prev_price = self.cur_day[inst]['close']
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
                 for fobj in self.day_data_func:
@@ -1193,7 +1184,7 @@ class Agent(AbsAgent):
             self.save_eod_positions()
             self.etrades = []
             self.ref2order = {}
-			self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
+            self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1205,9 +1196,9 @@ class Agent(AbsAgent):
         self.scur_day = scur_day
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
-		if not self.eod_flag:
-			self.run_eod()
-		self.eod_flag = False
+        if not self.eod_flag:
+            self.run_eod()
+        self.eod_flag = False
                 
     def init_init(self):    #init中的init,用于子类的处理
         pass

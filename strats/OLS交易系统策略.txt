@@ -1,0 +1,170 @@
+开拓者OLS交易系统策略源码，日内技术
+
+    组合交易方法不光包括品种的组合，还包括交易系统的组合和交易周期的组合。
+    没有什么能够阻挡我对自由的向往。
+    资金管理是期市生存第一铁律，要在这个市场生存下去，资金管理永远是第一位的。
+    执着和程序化交易让我重拾信心。
+    我是技术交易者，任何一个市场在我眼中都是独立的，关注好各自的价格即可。
+    日内短线的核心是赢率的重要性。
+    日内的最大优势是积小胜为大盈。
+    短线交易的优点是充分利用资金，缺点是往往会错过大段跳空利润。
+    科学、客观地制定交易计划。
+    在这个市场上评判高手的界定标准是：能操盘大资金并长期稳定获利，并且不限定行情。
+    做期货至今找到了幸福感，但缺乏成就感。
+    顺大势逆小势，永远跟着趋势走。
+
+    源码
+
+
+    //------------------------------------------------------------------------
+    // 简称: OLS
+    // 名称: 最小二乘估计回归均线
+    // 类别: 公式应用
+    // 类型: 用户应用
+    // 输出:
+    //------------------------------------------------------------------------
+
+    // 应用周期：分钟级别，最好是1分钟
+
+    Params
+           Numeric Length(5);
+    Vars
+           NumericSeries n;
+           Numeric iN;
+           Numeric B0;
+           Numeric B1;
+           NumericSeries X;
+           Numeric y;
+           NumericSeries OlsValue;
+           Numeric i;
+           Numeric Sum1(0);
+           Numeric Sum2(0);
+           Numeric Sum3(0);
+           Numeric Sum4(0);
+           Numeric Sum5(0);
+           Numeric Sum6(0);
+           Numeric Sum7(0);
+           Numeric Sum8(0);
+           Numeric Sum9(0);
+           Numeric Sum10(0);
+           Numeric Sum11(0);
+           Numeric Sum12(0);
+           NumericSeries Y0;
+           Numeric Yi;
+           Numeric YA;
+           Numeric SY;
+           Numeric X0;
+           Numeric XA;
+           Numeric TA(2);
+           Numeric R;
+           Numeric EndTime;
+           Numeric UpperBrand;
+           Numeric LowerBrand;
+    Begin
+           n = n[1];
+           X = X[1];
+           OlsValue = OlsValue[1];
+           Y0 = Y0[1];
+           If(BarType == 1 || Left(Symbol,2) != "IF")
+                   EndTime = 0.1460 - 0.0001*BarInterval;
+         
+           // ------------------ 计算拟合回归 ------------------
+           If(BarStatus == 0 || Date != Date[1])
+           {
+                   n = 1;
+                   X = 1;
+                   y = Close;
+                   Y0 = y;
+           }
+           Else
+           {
+                   n = n + 1;
+                   iN = n;
+                   If(BarType == 1)
+                   {
+                           X = X + BarInterval;
+                   }
+                   Else
+                   {
+                           Alert("请选择分钟周期");
+                           Return;
+                   }
+
+                   For i = 1 to iN
+                   {
+                           Sum1 = Sum1 + X[n-i]*Close[n-i];
+                   }
+                   For i = 0 to iN-1
+                   {
+                           Sum2 = Sum2 + X[i];
+                   }
+                   For i = 1 to iN
+                   {
+                           Sum3 = Sum3 + Close[n-i];
+                   }
+                   For i = 0 to iN-1
+                   {
+                           Sum4 = Sum4 + X[i]*X[i];
+                   }
+                   Sum5 = Sum2*Sum2;
+                   B1 = (n*Sum1 - Sum2*Sum3)/(n*Sum4 -Sum5);
+                   B0 = Sum3/n - B1*(Sum2/n);
+                   //y  = B0 + B1*n;
+                   y  = B0 + B1*n*0.75;
+                   //y  = B0 + B1*(n+1);
+           }
+           OlsValue = y;
+           PlotNumeric("曲线:", y, 0, Cyan);
+           If(BarStatus == 0 || BarStatus == 2 || Date != Date[1] || Time == EndTime)
+                   PlotNumeric("直线:", y, 0, Magenta);
+           Else
+           {
+                   y = InvalidNumeric;
+                   PlotNumeric("直线:", y, 0, Magenta);
+           }
+           PlotNumeric("开盘:", OpenD(0), 0, White);
+         
+           // ------------------ 预测置信区间 ------------------
+           X0 = X[n-1];
+           XA = Sum2/iN;
+           Sum6 = Sqr(X0 - XA);
+           For i = 0 to iN-1
+           {
+                   Sum7 = Sum7 + Sqr(X[i] - XA);
+           }
+           Sum8 = Sqrt(1 + 1/iN + Sum6/Sum7);
+           For i = 0 to iN-1
+           {
+                   Yi = B0 + B1*i;
+                   Sum9 = Sum9 + Sqr(Close[i] - Yi);
+           }
+           If(iN <= 2)
+                   SY = 10;
+           Else
+                   SY = Sqrt(Sum9/(iN-2));
+           //UpperBrand = OlsValue + TA*SY*Sum8;
+           //LowerBrand = OlsValue - TA*SY*Sum8;
+           UpperBrand = OlsValue + TA*SY*Sum8*0.6;
+           LowerBrand = OlsValue - TA*SY*Sum8*0.6;
+           PlotNumeric("上轨:", UpperBrand, 0, Red);
+           PlotNumeric("下轨:", LowerBrand, 0, Green);
+         
+           // ------------------ 判定拟合系数 ------------------
+           For i = 0 to iN-1
+           {
+                   Sum10 = Sum10 + OlsValue[i];
+           }
+           YA = Sum10/n;
+           //FileAppend("F:\\OLS"+"-"+Symbol+".txt", Text(date)+"   "+Text(time));
+           For i = 0 to iN-1
+           {
+                   Yi = B0 + B1*i;
+                   Sum11 = Sum11 + Sqr(Yi - YA);
+           }
+           For i = 0 to iN-1
+           {
+                   Sum12 = Sum12 + Sqr(Close[i] - YA);
+           }
+           R = Sum11/Sum12;
+           //FileAppend("F:\\OLS"+"-"+Symbol+".txt", "R = "+Text(R));
+    End

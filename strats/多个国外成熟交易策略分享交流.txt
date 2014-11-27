@@ -1,0 +1,271 @@
+多个国外成熟交易策略分享交流[开拓者公式]
+
+    1.基于交易时段选择和高低点突破的Hans123突破系统
+
+    2.适应震荡市场的EA scalper pro剥头皮系统(我外汇实盘用的系统)
+
+    3.适应震荡市场的ea boss剥头皮交易系统(汇友曾经有过2周22倍资金回撤0.89%的实盘交易记录)
+
+    4.基于新闻公布和基本面瞬时变化的自动化交易程序Luckey news5基于随机漫步原理和金字塔加码的稳健盈利ea point Break 5和其升级版DTS6用于eurgbp eurusd gbpusd的三角套利程序。其中ea boss和ea scalper pro都有一套完整的震荡市场过滤系统如果移植到国内相信对大家的交易应该很有帮助.由于外汇市场的交易手续费大都在百分之二以上.从赌博数学和金融数学的概率期望角度来分析,所有在外汇市场上有效的系统,在国内千分之三的手续费条件都应该是有效的而且利润应该是国外系统的数倍.
+
+
+    首先我来介绍第一个系统Hans123突破交易系统.
+
+    大家知道外汇市场主要分为三个交易时段,亚洲盘.欧洲盘和美洲盘.还有一个是只有电子盘交易的时段.其中电子盘和亚洲盘由于参与者较少,和亚洲金融机构实力较小的缘故,行情主要以上下震荡为主,这段时间是趋势交易者的地狱,但是是逆势剥头皮交易的天堂,很多准确率超过99%且风险很小的暴利策略都是针对这个交易时段的设计的(比如ea scalper pro和ea boss)这里我们后面再详细讨论.欧洲盘和美洲盘是参与者最多的时段,是最适合进行突破交易的时段,hans123就是一个非常典型且非常有效的自动化交易策略,它的基本原理是开盘一定时间内突破前一个市场的最高价或最低价顺势做多或做空,经过对止损止盈等参数的优化这套系统可以应用到几乎所有的外汇品种中并且盈利稳定,下面是具体的交易策略.
+
+        --交易规则—
+           初始策略
+        　　1)找出亚洲盘的最低最高点,在欧洲开市时.
+        　　2)挂单最高价+5点买进，最低价-5点卖出。
+           3)美洲盘开市前平掉所有仓位.
+           1)找出欧洲盘最高最低价在美洲盘开市时.
+           2)挂单最高价+5点买进，最低价-5点卖出。
+           3)美洲盘收市前平掉所有仓位
+        　　EUR/USD：
+        Buy Stop = 最高价 + 5；
+        止盈 = Buy Stop + 80；
+        止损 = Buy Stop - 50；
+        Sell Stop = 最低价 - 5；
+        止盈 = Sell Stop - 80；
+        止损 = Sell Stop + 50；
+        有30点浮动利润时将止损移至开仓价位。(30点追踪止损)
+        GBP/USD：
+        Buy Stop = 最高价 + 5；
+        止盈 = Buy Stop + 120；
+        止损 = Buy Stop - 70；
+        Sell Stop = 最低价 - 5；
+        止盈 = Sell Stop - 120；
+        止损 = Sell Stop + 70；有40点浮动利润时将止损移至开仓价位。(40点追踪止损)
+        每日早7点，平掉手上所有单子。
+        实盘使用的时候建议大家根据品种波动率来优化止盈止损等参数以达到最好的效果,这个mt4里可以用遗传基因算法优化来搞定很快,TB上目前用的还是穷举法,期待老大给咱们开发一下呵呵.
+        以下是原贴地址里面包括交易系统的模板和自动化交易程序国内好像给屏蔽了可能得翻墙
+        http://www.forex-tsd.com/expert- ... 785-hans123-ea.html
+        我各人优化以后这个系统的年均盈利在100%左右,资金回撤20%,使用的是分笔成交数据.后面我传了一份国际黄金期货的测试报告这个大家相对外汇还要熟悉一些，大家参考一下。
+
+        下面来谈谈如何把这个系统移植到国内的期货市场中来.
+
+        我目前的基本想法是这样的,hans123可以有以下几种移植方法
+        1突破昨日最高最低点5点顺势开仓.收盘前关仓.设置止盈止损追踪止损,止盈止损都设置成参数,以便根据品种波动率优化.这里最好加一个限制开仓时间的参数便于优化交易时段，因为根据我的经验一般来讲每个品种的有效突破都集中在一个特定的时段，并以此时段为中心进行正态分布排列。所以优化交易时段对这个策略来讲非常重要。这个在后面我共享的一个外汇市场的统计表里有说明，大家可以参考（进一步优化的filter:交易时段优化，ATR,Keltner Channel,KDJ等）
+        2突破前一个交易时段的最高最低点5点顺势开仓，本交易时段结束前平掉所有仓位。设置止盈止损追踪止损，止盈止损追踪止损都设置成参数以便根据品种波动率优化。加一个限制开仓时间的参数便于优化交易时段。（进一步优化的filter:交易时段优化，ATR,Keltner Channel,KDJ等）
+        我在论坛里逛了下发现了几个和我想法相似的朋友下面是他们已经完成的代码的整理，有些功能还没有实现各位前辈老大可否倾囊相授，告诉我如何实现这些功能，多谢了：）这个突破系统不要nextbar发送功能只要根据所有的即时价位来发出交易信号。另外希望能精确到分钟
+
+
+    1简单的昨日高低点突破系统：
+    这个系统我希望高手可以帮助我把那些加仓反手的功能都去掉，或者设置成可以开关的功能然后加入止盈止损和追踪止损并加入交易时间限制，使得我可以针对品种波动率优化参数。
+
+
+    日内高低点突破交易系统
+
+    //------------------------------------------------------------------------
+    // 简称: todayHLCross
+    // 名称:
+    // 类别: 交易指令
+    // 类型: 其他
+    // 输出:
+    //------------------------------------------------------------------------
+    /*
+           日内开盘区高低点机械突破系统
+    */
+    Params
+           Numeric maxLots(1);//单次开仓手数
+           Numeric maxTrad(4);//最大交易次数
+           Numeric minSpt(15);//最小开仓间隔bar数
+           Numeric splitRate(3); //交易滑点和佣金        
+           
+           Numeric tradBegin(930); //开仓时间        
+           Numeric tradEnd(1430); //开仓截止时间        
+           Numeric closeTime(1457); //bar的时间超过此值后平仓，一分钟交易=1457        
+
+    Vars
+           Numeric splitDot;        //交易滑点
+           
+           Bool bc(False);//开多条件
+           Bool sc(False);//开空条件
+           
+           Numeric tradePrice(0);
+
+           NumericSeries hh;
+           NumericSeries ll;
+
+    Begin
+           splitDot=splitRate*MinMove();
+           
+           If(BarStatus==0)
+           {
+                   hh=High;
+                   ll=Low;
+                   Return;
+           }
+           
+           if(Day !=Day[1])
+           {
+                   hh=High;
+                   ll=Low;                }        
+           Else        
+           If(Time<0.0001*tradBegin)
+           {
+                   if(High>hh[1]) hh=High; Else        hh=hh[1];
+                   if(Low<ll[1])         ll=Low;  Else        ll=ll[1];              
+           }
+           Else
+           if(Time>=0.0001*tradBegin And Time<=0.1500)
+           {
+                   hh=hh[1];
+                   ll=ll[1];              
+                 
+                   //穿越模式
+                   bc=CrossOver(Open,hh) Or CrossOver(High,hh) Or CrossOver(Low,hh)  Or CrossOver(Close,hh) ;
+                   sc=CrossUnder(Open,ll) Or CrossUnder(High,ll) Or CrossUnder(Low,ll) Or CrossUnder(Close,ll);        
+                 
+                   if(MarketPosition == 0)
+                   {
+                           // 当前无仓，开始建立多头
+                           if(bc)
+                           {
+                                   if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=hh+splitDot;
+                                   Buy(maxLots,tradePrice);
+                           }
+                           Else
+                           // 当前无仓，开始建立空头
+                           If(sc )
+                           {
+                                   if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=ll-splitDot;                        
+                                   SellShort(maxLots,tradePrice);                                
+                           }
+                   }
+                   //-----------------------------------------------------------------------------
+                   Else
+                   {
+                           if(MarketPosition > 0 )
+                           {
+                                   // 当前多仓，加仓多头
+                                   if(bc And BarsSinceLastEntry>minSpt)
+                                   {
+                                           if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=hh+splitDot;
+                                           Buy(maxLots,tradePrice);
+                                   }                        
+                                   // 当前多头，要求反转为空头
+                                   if(sc)
+                                   {
+                                           if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else  tradePrice=ll-splitDot;                                      
+
+                                           // 平多头开空
+                                           SellShort(maxLots,tradePrice);                                      
+                                   }                                      
+                                   //持仓处理,止损止盈平仓
+                                   //........
+                           }
+                           //-----------------------------------------------------------------------------------------------
+                           Else
+                           if(MarketPosition < 0 )
+                           {        
+                                   // 当前空仓，加空头
+                                   If(sc And BarsSinceLastEntry>minSpt)
+                                   {
+                                           if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=ll-splitDot;                        
+                                           SellShort(maxLots,tradePrice);
+                                   }                        
+                                   // 当前空头，要求反转为多头
+                                   if(bc)
+                                   {
+                                           if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else  tradePrice=hh+splitDot;                                
+                                           //平空头，开多
+                                           Buy(maxLots,tradePrice);
+                                   }                                
+                                   //持仓处理,止损止盈平仓                                
+                                   //........
+                           }
+                   }              
+           }
+    End
+
+    //------------------------------------------------------------------------
+    // 编译版本        GS2004.06.12
+    // 用户版本        2008/11/18 18:49
+    // 版权所有        fish0451
+    // 更改声明        TradeBlazer Software保留对TradeBlazer平台
+    //                        每一版本的TrabeBlazer公式修改和重写的权利
+    //------------------------------------------------------------------------
+
+     
+
+
+    网友回复：
+    2定义时间段内高低点的函数：
+
+    vars
+        NumericSeries TmpHiLine;
+    Begin
+       If(Date!=Date[1])
+       {
+           TmpHiLine = InvalidNumeric;
+       }else
+       {
+           TmpHiLine = TmpHiLine[1];
+       }
+
+       If(Time >= 0.1100 && Time <= 0.1120)
+       {
+            If(TmpHiLine  == InvalidNumeric )
+                  TmpHiLine = High;
+            else
+                  TmpHiLine = max(High,TmpHiLine );
+       }  
+     
+      PlotNumeric("MyHighLine",TmpHiLine );
+    End
+
+
+
+
+    一个30分钟突破的日内系统
+
+    这个系统我认为缺乏一个有效的过滤器会造成很多无效突破，在过滤器中最简单有效的是交易时段过滤器正如我前面提到的有效突破总是集中在一天中的某一时段呈正态分布向两边展开。通过时间过滤器可以大大提高系统的成功率和稳定性。希望高手添加一下。
+
+
+
+    Params
+           Numeric nMins(30);                // N分钟的突破
+       Numeric nOffset(3);                // 突破式的价格偏移
+    Vars
+           NumericSeries HighestOf30Min;
+       NumericSeries lowestOf30Min;
+       Numeric myPrice;
+       Numeric MinPoint;
+       Numeric lots(1);
+    Begin
+           MinPoint = MinMove*PriceScale;
+           If(Date <> Date[1])
+           {
+                   HighestOf30Min = High;
+                   lowestOf30Min = Low;
+           }Else If(Time < 0.0900+nMins*0.0001)
+           {
+                   HighestOf30Min = max(high,HighestOf30Min[1]);
+                   lowestOf30Min = min(Low,lowestOf30Min[1]);
+           }Else
+           {
+                   HighestOf30Min = HighestOf30Min[1];
+                   lowestOf30Min = lowestOf30Min[1];
+           }
+           
+           If(High >= HighestOf30Min + nOffset*MinPoint && MarketPosition != 1)
+           {
+                   myPrice = HighestOf30Min + nOffset*MinPoint;
+                   If(Open > myPrice) myPrice = Open;
+                   Buy(lots,myPrice);
+           }
+
+           If(Low <= lowestOf30Min - nOffset*MinPoint && MarketPosition != -1)
+           {
+                   myPrice = lowestOf30Min - nOffset*MinPoint;
+                   If(Open < myPrice) myPrice = Open;
+                   SellShort(lots,myPrice);
+           }
+
+           If(Time >= 0.1459)
+           {
+                   Sell(lots,Open);
+                   BuyToCover(lots,Open);
+           }
+    End

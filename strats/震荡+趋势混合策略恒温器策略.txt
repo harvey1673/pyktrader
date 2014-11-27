@@ -1,0 +1,252 @@
+开拓者 TB 【震荡+趋势混合策略】恒温器策略【
+
+【震荡+趋势混合策略】恒温器策略
+
+by RogarZ
+
+源码：
+
+
+    Params
+
+           Numeric bollinglengths(50);
+
+           Numeric trendliqlength(50);
+
+           Numeric numstddevs(2);
+
+           Numeric swingprcnt1(0.5);
+
+           Numeric swingprcnt2(0.75);
+
+           Numeric atrlength(10);
+
+           Numeric swingtrendswitch(50);
+
+    Vars
+
+                   BoolSeries swing(False);
+
+                   NumericSeries cmival;
+
+                   NumericSeries buyeasierday(0);
+
+                   NumericSeries selleasierday(0);
+
+                   NumericSeries trendlokbuy;
+
+                   NumericSeries trendloksell;
+
+                   NumericSeries trendbuypt;
+
+                   NumericSeries trendsellpt;
+
+                   NumericSeries keyofday;
+
+                   NumericSeries ma1;
+
+                   NumericSeries midd;
+
+                   Numeric swingprotstop;      
+
+                   Numeric atr;
+
+                   Numeric swingbuypt;
+
+                   Numeric swingsellpt;
+
+    Begin
+
+           Commentary("BarInterval= "+Text(BarInterval));
+
+                   cmival=Abs(Close[1]-Close[31])/(Highest(High[1],30)-Lowest(Low[1],30));
+
+                   trendloksell=Average(Low[1],3*240/BarInterval);
+
+                   trendlokbuy=Average(High[1],3*240/BarInterval);
+
+                   keyofday=(HighD(0)+LowD(0)+CloseD(0))/3;
+
+                   If(Date<>Date[1]){
+
+                   If(CloseD(1)>keyofday[1])
+
+                   {
+
+                   selleasierday=1;//空头日
+
+                   }Else{
+
+                   buyeasierday=1;//多头日
+
+                   }
+
+    }
+
+           Atr=XAverage(TrueRange,atrlength*240/BarInterval);
+
+    If(buyeasierday==1){
+
+           swingbuypt=OpenD(0)+swingprcnt1*atr;
+
+           swingsellpt=OpenD(0)-swingprcnt2*atr;
+
+    }
+
+    If(selleasierday==1){
+
+           swingbuypt=OpenD(0)+swingprcnt2*atr;
+
+           swingsellpt=OpenD(0)-swingprcnt1*atr;
+
+    }
+
+    swingbuypt=Max(swingbuypt,trendlokbuy);
+
+    swingsellpt=Min(swingsellpt,trendloksell);
+
+     
+
+    PlotNumeric("Buy",swingbuypt);
+
+    PlotNumeric("Sell",swingsellpt);
+
+     
+
+    ma1=Average(Close[1],trendliqlength);//趋势均线
+
+    midd=Average(Close[1],bollinglengths);//布林中线
+
+    trendbuypt=midd+numstddevs*StandardDev(Close[1],bollinglengths);
+
+    trendsellpt=midd-numstddevs*StandardDev(Close[1],bollinglengths);
+
+     
+
+    If(cmival<swingtrendswitch/100)
+
+    {
+
+           If(MarketPosition==0&&High[1]>=swingbuypt)
+
+           //开多仓
+
+    {
+
+                                   Buy(1,Max(Open,swingbuypt));
+
+                                   swing=True;
+
+    }
+
+           If(MarketPosition==0&&Low[1]<=swingsellpt)
+
+           //开空仓
+
+    {
+
+                                   SellShort(1,Min(Open,swingsellpt));
+
+                                   swing=True;
+
+    }
+
+    If(MarketPosition>0&&Low[1]<=swingsellpt)
+
+    //多头反手
+
+    {
+
+                                   SellShort(1, Min(Open,swingsellpt));
+
+                                   swing=True;
+
+    }
+
+    If(MarketPosition<0&&High[1]>=swingbuypt)
+
+    //空头反手
+
+    {
+
+                                   Buy(1, Max(Open,swingbuypt));
+
+                                   swing=True;
+
+    }
+
+    }Else{
+
+           swingprotstop=atr*3;
+
+           If(MarketPosition==0&&High[1]>=trendbuypt)
+
+    //开多仓
+
+    {
+
+           Buy(1,Max(Open,trendbuypt));
+
+           swing=False;
+
+    }
+
+    If(MarketPosition==0&&Low[1]<=trendsellpt)
+
+    //开空仓
+
+    {
+
+           SellShort(1,Min(Open,trendsellpt));
+
+           swing=False;
+
+    }
+
+    If(MarketPosition>0&&swing)
+
+    //多头止损
+
+    {
+
+           If(Low[1]<=EntryPrice-swingprotstop)
+
+    {
+
+           Sell(1,Min(Open, EntryPrice-swingprotstop));
+
+    }Else If(Low[1]<=ma1)
+
+    {
+
+           Sell(1,Min(Open,ma1));
+
+    }
+
+    }
+
+    If(MarketPosition<0&&swing)
+
+    //空头止损
+
+    {
+
+           If(High[1]>=EntryPrice+swingprotstop)
+
+    {
+
+           BuyToCover(1,Max(Open, EntryPrice+swingprotstop));
+
+    }Else If(High[1]>=ma1)
+
+    {
+
+           BuyToCover (1,Max(Open,ma1));
+
+    }
+
+    }
+
+    }
+
+    End

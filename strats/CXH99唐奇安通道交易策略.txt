@@ -1,0 +1,137 @@
+开拓者CXH99唐奇安通道交易策略源码
+
+开拓者CXH99唐奇安通道交易策略源码
+
+
+Params
+                       Numeric LongLength(20);                        // 长周期
+                       Numeric ShortLength(10);                // 短周期
+                       Numeric TrailingScale(0.5);                // 增仓比例
+                       Numeric StopLossSet(2);                        // 止损比例
+                       Numeric Lots(1);                                // 交易数量                              
+Vars
+                       Numeric MinPoint;                                // 最小变动单位
+                       NumericSeries AvgTR;                        // ATR
+                       Numeric N;                          // N 值
+                       NumericSeries DonchianHi;           // 唐奇安通道上轨，延后1个Bar
+                       NumericSeries DonchianLo;           // 唐奇安通道下轨，延后1个Bar
+                       Numeric ExitHighestPrice;           // 离市时判断需要的N周期最高价
+                       Numeric ExitLowestPrice;            // 离市时判断需要的N周期最低价
+                       Numeric myEntryPrice;               // 开仓价格
+                       Numeric myExitPrice;                // 平仓价格
+                       Bool SendOrderThisBar(False);   // 当前Bar有过交易
+                       NumericSeries preEntryPrice(0); // 前一次开仓的价格
+Begin
+                       If(BarStatus == 0)
+                       {
+                               preEntryPrice = InvalidNumeric;
+                       } Else
+                       {
+                               preEntryPrice = preEntryPrice[1];
+                       }
+     
+                       AvgTR = XAverage(TrueRange,LongLength);
+                       N = AvgTR[1];      
+                       DonchianHi = HighestFC(High[1],LongLength);
+                       DonchianLo = LowestFC(Low[1],LongLength);      
+                       ExitLowestPrice = LowestFC(Low[1],ShortLength);
+                       ExitHighestPrice = HighestFC(High[1],ShortLength);
+                       Commentary("N="+Text(N));
+                       Commentary("preEntryPrice="+Text(preEntryPrice));
+                       PlotNumeric("上轨",DonchianHi);
+                       PlotNumeric("下轨",DonchianLo);
+                       PlotNumeric("退出上轨",ExitHighestPrice);
+                       PlotNumeric("退出下轨",ExitLowestPrice);
+                     
+                       /*/////////////////////////////////开仓////////////////////////////////////////*/
+                       If(MarketPosition == 0 && High > DonchianHi)
+                       {
+                               myEntryPrice = min(high,DonchianHi);
+                               myEntryPrice = IIF(myEntryPrice < Open, Open,myEntryPrice); // 大跳空的时候用开盘价代替
+                               preEntryPrice = myEntryPrice;
+                               Buy(Lots,myEntryPrice);
+                               SendOrderThisBar = True;
+                       }
+                       If(MarketPosition == 0 && Low < DonchianLo)
+                       {
+                               myEntryPrice = max(low,DonchianLo);
+                               myEntryPrice = IIF(myEntryPrice > Open, Open,myEntryPrice); // 大跳空的时候用开盘价代替
+                               preEntryPrice = myEntryPrice;
+                               SendOrderThisBar = True;
+                               SellShort(Lots,myEntryPrice);
+                       }
+                       /*///////////////////////////////止盈加仓////////////////////////////////////*/
+                       If(MarketPosition == 1)
+                       {      
+                               Commentary("ExitLowestPrice="+Text(ExitLowestPrice));
+                               If(Low < ExitLowestPrice)
+                               {
+                                       myExitPrice = max(Low,ExitLowestPrice);
+                                       myExitPrice = IIF(myExitPrice > Open, Open,myExitPrice); // 大跳空的时候用开盘价代替
+                                       Sell(0,myExitPrice);    // 数量用0的情况下将全部平
+                               }Else
+                               {
+                                       If(preEntryPrice!=InvalidNumeric)
+                                       {
+                                               If(Open >= preEntryPrice + TrailingScale*N) // 如果开盘就超过设定的1/2N,则直接用开盘价增仓。
+                                               {
+                                                       myEntryPrice = Open;
+                                                       preEntryPrice = myEntryPrice;
+                                                       Buy(Lots,myEntryPrice);
+                                                       SendOrderThisBar = True;
+                                               }      
+                                               while(High >= preEntryPrice + TrailingScale*N) // 以最高价为标准，判断能进行几次增仓
+                                               {
+                                                       myEntryPrice = preEntryPrice + TrailingScale * N;
+                                                       preEntryPrice = myEntryPrice;
+                                                       Buy(Lots,myEntryPrice);
+                                                       SendOrderThisBar = True;                                      
+                                               }
+                                       }                      
+                                       /*///////////////////////////////////止损策略///////////////////////////////*/
+                                       If(Low <= preEntryPrice - StopLossSet * N && SendOrderThisBar == false) // 加仓Bar不止损
+                                       {
+                                               myExitPrice = preEntryPrice - StopLossSet * N;
+                                               myExitPrice = IIF(myExitPrice > Open, Open,myExitPrice); // 大跳空的时候用开盘价代替
+                                               Sell(0,myExitPrice); // 数量用0的情况下将全部平仓
+                                       }
+                               } // www.chengxuhuajiaoyi.com
+                       }Else If(MarketPosition ==-1) // 有空仓的情况
+                       {
+                               Commentary("ExitHighestPrice="+Text(ExitHighestPrice));
+                               If(High > ExitHighestPrice)
+                               {
+                                       myExitPrice = Min(High,ExitHighestPrice);
+                                       myExitPrice = IIF(myExitPrice < Open, Open,myExitPrice); // 大跳空的时候用开盘价代替
+                                       BuyToCover(0,myExitPrice);    // 数量用0的情况下将全部平仓
+                               }Else
+                               {
+                                       If(preEntryPrice!=InvalidNumeric)
+                                       {
+                                               If(Open <= preEntryPrice - TrailingScale*N) // 如果开盘就超过设定的1/2N,则直接用开盘价增仓。
+                                               {
+                                                       myEntryPrice = Open;
+                                                       preEntryPrice = myEntryPrice;
+                                                       SellShort(Lots,myEntryPrice);
+                                                       SendOrderThisBar = True;
+                                               }
+                                               while(Low <= preEntryPrice - TrailingScale*N) // 以最低价为标准，判断能进行几次增仓
+                                               {
+                                                       myEntryPrice = preEntryPrice - TrailingScale * N;
+                                                       preEntryPrice = myEntryPrice;
+                                                       SellShort(Lots,myEntryPrice);
+                                                       SendOrderThisBar = True;
+                                               }
+                               }
+                               /*///////////////////////////////////止损策略///////////////////////////////*/
+                               If(High >= preEntryPrice + StopLossSet * N && SendOrderThisBar==false) // 加仓Bar不止损
+                               {
+                                       myExitPrice = preEntryPrice + StopLossSet * N;
+                                       myExitPrice = IIF(myExitPrice < Open, Open,myExitPrice); // 大跳空的时候用开盘价代替
+                                       BuyToCover(0,myExitPrice); // 数量用0的情况下将全部平仓
+                               }
+                       }
+               }
+End
+
+

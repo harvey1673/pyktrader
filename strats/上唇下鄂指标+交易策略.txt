@@ -1,0 +1,78 @@
+开拓者上唇下鄂指标+交易策略源码
+
+    Vars
+           NumericSeries MidPrice;   // 定义变量用于保存高低价的平均值。
+           NumericSeries Value1;     // 定义变量用于保存SMA值
+           NumericSeries Value2;     // 定义变量用于保存SMA值
+           NumericSeries Value3;     // 定义变量用于保存SMA值
+           NumericSeries Value4;     // 用来保存中间变量
+    Begin
+           MidPrice = (High + Low)/2;
+           Value1 = SMA(MidPrice,5);
+           Value2 = SMA(MidPrice,8);
+           Value3 = SMA(MidPrice,13);
+           
+           PlotNumeric("上唇",Value1[3]);
+           PlotNumeric("牙齿",Value2[5]);
+           PlotNumeric("下颚",Value3[8]);
+           
+           Value4 = Value2[5];
+           If(CrossOver(Close,Value4))
+           {
+                   PlotNumeric("BuySignal",Low);
+           }
+
+           If(CrossUnder(Close,Value4))
+           {
+                   PlotNumeric("SellSignal",High);
+           }
+    End
+
+
+    思路是这样的，当价格从上往下穿越牙齿的时候开空单并且平掉多单，股价从下往上穿越牙齿的时候开多单并且平掉空单，
+
+
+
+
+
+
+    ===================================================================
+
+
+    上唇下鄂交易策略源码：
+
+        Vars
+
+           NumericSeries MidPrice;        // 定义变量用于保存高低价的平均值。
+
+           NumericSeries Value1;
+
+           NumericSeries Value2;
+
+        Begin
+
+           MidPrice = (High + Low)/2;
+
+           Value1 = SMA(MidPrice,8);
+
+           Value2 = Value1[5];
+
+           If(CrossOver(Close,Value2))
+
+           {
+
+               Buy(1,Close);
+
+           }
+
+         
+
+           If(CrossUnder(Close,Value2))
+
+           {
+
+               SellShort(1,Close);
+
+           }
+
+        End

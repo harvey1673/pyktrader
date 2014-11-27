@@ -1,0 +1,65 @@
+开拓者超级好用的股指日内模型源码
+
+    转载请保留出处
+
+
+
+
+
+    Params
+         
+           Numeric M(25);
+           Numeric LOTS(1);
+           
+           Vars
+           Numeric offset;
+           Numeric offset1;
+           NumericSeries MA1;
+           NumericSeries MA2;
+             Numeric spread;
+           Numeric OPENP;
+
+         
+    Begin
+
+           offset = MinMove()*PriceScale();
+           spread=Max(HighD(1)-CloseD(1),CloseD(1)-LowD(1));
+           OPENP=OpenD(0);
+           MA1=OPENP+0.01*M*spread;
+           MA2=OPENP-0.01*M*spread;
+           
+                 
+         
+
+    if(Time>0.0915 && Time<=0.1450)              
+           {
+
+           If(l[1]<MA2  )
+                   {
+                   SellShort(LOTS,ma2-offset);
+                   }
+                 
+           If(h[1]>ma1  )
+                   {              
+                   Buy(LOTS,ma1+offset);
+                   }}
+
+         
+
+    if(Time*100>=15.12 and Time<0.1600)
+    {
+    if(marketposition==-1)
+    {
+    BuyToCover(0,Open+offset);
+    PlotString("Vol","平12",Low,blue);
+    Return;// 来源：www.cxh99.com
+
+    }
+    if(marketposition==1)
+    {
+    Sell(0,Open-offset);
+    PlotString("Vol","平11",high,Red);
+    Return;
+
+    }}
+    End

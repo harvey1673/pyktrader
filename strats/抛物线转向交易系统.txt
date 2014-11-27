@@ -1,0 +1,259 @@
+独特的思路，开拓者抛物线转向交易系统源码分享
+
+    //------------------------------------------------------------------------
+
+    // 简称: SAR_system
+
+    // 名称:
+
+    // 类别: 公式应用
+
+    // 类型: 用户应用
+
+    // 输出: 穿堂风
+
+    //------------------------------------------------------------------------
+
+     
+
+    Params
+
+           Numeric AfStep(0.02);
+
+           Numeric AfLimit(0.2) ;
+
+           Numeric malen(120);
+
+           Numeric stopLoss(1);
+
+           Numeric BuyLots(1);
+
+           Numeric offset(0);
+
+    Vars
+
+           Numeric oParCl( 0 );
+
+           Numeric oParOp( 0 );
+
+           Numeric oPosition( 0 );
+
+           Numeric oTransition( 0 );
+
+           NumericSeries oParOp_s;
+
+           Numeric oParOp_p;
+
+           Numeric i_offset;
+
+           Numeric ma;
+
+           Bool bUpline;
+
+           string strkey;
+
+           string strValue;
+
+           Numeric i_stopLoss;
+
+         
+
+    Begin
+
+     
+
+           ma = Average(Open,malen);
+
+           bUpline = Open>= ma;
+
+           ParabolicSAR( AfStep, AfLimit, oParCl, oParOp, oPosition, oTransition ) ;
+
+           oParOp_s = oParOp;
+
+           oParOp_p = oParOp_s[1];
+
+           i_offset = offset*MinMove*PriceScale;
+
+           i_stopLoss = stopLoss*(OpenD(0)/100);
+
+         
+
+           Commentary("oParOp:"+Text(oParOp));
+
+           Commentary("oTransition:"+Text(oTransition));
+
+           Commentary("oPosition:"+Text(oPosition));
+
+    If(CurrentBar>malen)
+
+    {
+
+           PlotNumeric("oParCl",oParCl);
+
+           If(malen != 0)
+
+           {
+
+                   PlotNumeric("ma",ma);
+
+           }
+
+     
+
+     
+
+           If(MarketPosition == 0)
+
+           {
+
+                   If(malen == 0)
+
+                   {
+
+                           bUpline = True;
+
+                   }
+
+     
+
+                   If(oTransition == 1 and bUpline)
+
+                   {
+
+                           Buy(BuyLots,Max(Open,oParOp_p)+i_offset);
+
+                           Return;
+
+                   }
+
+                 
+
+                   If(malen == 0)
+
+                   {
+
+                           bUpline = False;
+
+                   }
+
+     
+
+                   If(oTransition == -1 and bUpline==False)
+
+                   {
+
+                           SellShort(BuyLots,Min(Open,oParOp_p)-i_offset);
+
+                           Return;
+
+                   }
+
+           }
+
+     
+
+           If(MarketPosition == 1)
+
+           {
+
+                   If(malen == 0)
+
+                   {
+
+                           bUpline = False;
+
+                   }
+
+                 
+
+                   If(LastEntryPrice-Low>=i_stopLoss)
+
+                   {
+
+                           Sell(BuyLots,Min(Open,LastEntryPrice-i_stopLoss)-i_offset);
+
+                           Return;
+
+                   }
+
+                   If(oPosition == -1)
+
+                   {
+
+     
+
+                           If(oTransition == -1 and bUpline==False)
+
+                           {
+
+                                   SellShort(BuyLots,Min(Open,oParOp_p)-i_offset);
+
+                           }
+
+                           Else
+
+                           {
+
+                                   Sell(BuyLots,Min(Open,oParOp_p)-i_offset);
+
+                           }
+
+                   }
+
+           }
+
+     
+
+           If(MarketPosition == -1)
+
+           {
+
+                   If(malen == 0)
+
+                   {
+
+                           bUpline = True;
+
+                   }
+
+     
+
+                   If(High-LastEntryPrice>=i_stopLoss)
+
+                   {
+
+                           BuyToCover(BuyLots,Max(Open,LastEntryPrice+i_stopLoss)+i_offset);
+
+                           Return;
+
+                   }              
+
+                   If(oPosition == 1)
+
+                   {
+
+                           If(oTransition == 1 and bUpline)
+
+                           {
+
+                                   Buy(BuyLots,Max(Open,oParOp_p)+i_offset);
+
+                           }
+
+                           Else
+
+                           {
+
+                                   BuyToCover(BuyLots,Max(Open,oParOp_p)+i_offset);
+
+                           }
+
+                   }
+
+           }
+
+    }
+
+    End
+
+     

@@ -1,0 +1,138 @@
+开拓者CXH99日内波动突破系统源码
+
+    最近在研究针对震荡市的日内波动突破系统，主要思想是在开盘后前半小时获取最高值和最低值，然后+上一定的ATR值最为上轨和下轨。目前完成了初稿，希望兄弟们能够帮忙完善下这个系统！
+
+
+    源码：
+
+        Params  
+
+               Numeric Range(1.5); //ATR Range
+
+               Numeric Length(10); //ATR Length
+
+               Numeric nMins(30);           // N分钟的突破
+
+               Numeric tradBegin(930);      //开仓时间        
+
+           Numeric tradEnd(1430);       //开仓截止时间  
+
+               Numeric TrailingStop(2);     // 追踪止损,回撤ATR的倍数
+
+        Vars
+
+               //ATR Values
+
+               NumericSeries TR;  
+
+               NumericSeries ATR;
+
+               Numeric UpperBand;
+
+               Numeric LowerBand;      
+
+               //30 Minutes Values
+
+               NumericSeries HighestOf30Min;
+
+               NumericSeries lowestOf30Min;      
+
+               Numeric MyPrice; //价格判断条件 www.cxh99.com
+
+               NumericSeries DayOpen;      
+
+               /* Set Profit Stop Position */
+
+               NumericSeries HigherAfterEntry;
+
+               NumericSeries LowerAfterEntry;
+
+               Numeric StopLine(0); //止损价位
+
+               Numeric MinPoint;
+
+               Numeric MyExitPrice;        /* Set Profit Stop Position */
+
+        Begin
+
+               MinPoint = MinMove * PriceScale;
+
+               //ATR Value
+
+               ATR=AvgTrueRange(Length);
+
+               Commentary("ATR=" + Text(ATR));
+
+               //30 Minutes Highest and Lowest Value
+
+               If(Date <> Date[1])
+
+               {
+
+                        HighestOf30Min = High;
+
+                        LowestOf30Min = Low;
+
+               }Else If(Time < 0.0900+nMins*0.0001)
+
+               {
+
+                        HighestOf30Min = max(high,HighestOf30Min[1]);
+
+                        LowestOf30Min = min(Low,LowestOf30Min[1]);
+
+               }Else
+
+               {
+
+                        HighestOf30Min = HighestOf30Min[1];
+
+                        LowestOf30Min = LowestOf30Min[1];
+
+               }
+
+             
+
+               UpperBand = HighestOf30Min + Range*ATR[1];
+
+               LowerBand = LowestOf30Min - Range*ATR[1];
+
+             
+
+               PlotNumeric("UpperBand",UpperBand);
+
+               PlotNumeric("LowerBand",LowerBand);              
+
+        //
+
+               If(MarketPosition != 1 And High > UpperBand And Time>=0.0001*tradBegin And Time <= tradEnd * 0.0001)
+
+                        {
+
+                       MyPrice = UpperBand;
+
+                       If(Open > MyPrice) MyPrice = Open;
+
+                       Buy(1, MyPrice);
+
+               }      
+
+             
+
+               If(MarketPosition != -1 And Low < LowerBand And Time>=0.0001*tradBegin And Time <= tradEnd * 0.0001 )
+
+               {
+
+                       MyPrice = LowerBand;
+
+                       If(Open < MyPrice) MyPrice = Open;
+
+                       SellShort(1,MyPrice);
+
+               }      
+
+             
+
+        End
+
+

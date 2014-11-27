@@ -1,0 +1,74 @@
+开拓者thermostat系统源码[开拓者公式]
+
+源码内容：
+
+inputs:
+       bollingerlengths(50),
+       trendliqlength(50),
+       numstddevs(2),
+swingprcnt1(0.50),
+swingprcnt2(0.75),
+atrlength(10),
+swingtrendswitch(20);
+vars:
+       cmival(0),
+       buyeasierday(0),
+       selleasierday(0),
+       trendlokbuy(0),
+trendloksell(0),
+keyofday(0),
+swingbuypt(0),
+swingsellpt(0),
+trendbuypt(0),
+trendsellpt(0),
+swingprotstop(0);
+
+cmival=choppymarketindex(30);
+buyeasierday=0;
+selleasierday=0;
+
+trendlokbuy=average(low,3);
+trendloksell=average(high,3);
+
+keyofday=(high+low+close)/3;
+if(close>keyofday) then selleasierday=1;
+if(close<=keyofday) then buyeasierday=1;
+
+if(buyeasierday=1) then
+begin
+  swingbuypt=open of tomorrow + swingprcnt1*avgtruerange(atrlength);
+  swingsellpt=open of tomorrow - swingprcnt2*avgtruerange(atrlength);
+end;
+if(selleasierday=1) then
+begin
+  swingbuypt=open of tomorrow + swingprcnt2*avgtruerange(atrlength);
+  swingsellpt=open of tomorrow - swingprcnt1*avgtruerange(atrlength);
+end;
+
+swingbuypt=maxlist(swingbuypt,trendlokbuy);
+swingsellpt=minlist(swingsellpt,trendloksell);
+
+trendbuypt=bollingerband(close,bollingerlengths,numstddevs);
+trendsellpt=bollingerband(close,bollingerlengths,-numstddevs);
+
+if(cmival<swingtrendswitch) then
+begin
+   if(marketposition<>1) then buy("swingbuy") next bar at swingbuypt
+      stop;
+   if(marketposition<>-1) then sellshort("swingsell") next bar at
+      swingsellpt stop;
+end
+else
+begin
+  swingprotstop=3*avgtruerange(atrlength);
+  buy("trendbuy") next bar at trendbuypt stop;
+  sellshort("trendsell") next bar at trendsellpt stop;
+  sell from entry("trendbuy") next bar at average(close,trendliqlenth)
+     stop;
+  buytocover from entry("trendsell") next bar at
+     average(close,trendliqlength) stop;
+  sell from entry("swingbuy") next bar at entryprice - swingprotstop
+     stop;
+  buytocover from entry("swingsell") next bar at entryprice +
+     swingprotstop stop;
+end;

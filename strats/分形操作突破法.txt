@@ -1,0 +1,26 @@
+开拓者 分形操作突破法 系统 模型 源码[开拓者公式]
+
+交易开拓者TB分形操作突破法 系统 模型 源码：
+
+Params
+      Numeric  length1(8);
+      Numeric  length2(5);
+Vars
+      Numeric  CHI;
+      NumericSeries  AA;
+      Numeric  BarNumsA;
+      Numeric  BarNumsB;
+      Numeric  HH;
+      Numeric  LL;
+Begin
+      AA=SMA((High+Low+Close)/3,length1);
+      CHI=AA[length2];
+      BarNumsA=NthCon((High>HighD[1] && High>HighD[2] && High>=NextHigh),1);
+      HH=HighD[BarNumsA];
+      BarNumsB=NthCon((Low<LowD[1] && Low<LowD[2] && Low<=NextLow),1);
+      LL=LowD[BarNumsB];
+      If(Close>HH)
+      {Buy(1,NextClose,true);}
+      If(Close<LL)
+      {SellShort(1,NextClose,True);}
+End

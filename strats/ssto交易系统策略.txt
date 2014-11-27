@@ -1,0 +1,83 @@
+开拓者 TB ssto 交易系统策略源码
+
+    //------------------------------------------------------------------------
+    // 简称: ssto
+    // 名称:
+    // 类别: 公式应用
+    // 类型: 用户应用
+    // 输出:
+    //------------------------------------------------------------------------
+    Params
+    Numeric Length(20); //N                      
+    Numeric SlowLength(24);   //M1    
+    Numeric SmoothLength(10);  //M2
+    Numeric LongLength(20);
+    Numeric lots(1);
+    Numeric offset(0);
+    Numeric stoploss(50);
+                     
+    Vars
+    NumericSeries HighestValue;                                
+    NumericSeries LowestValue;                                      
+    NumericSeries RSV;        
+    NumericSeries FASTK;
+    NumericSeries K1;
+    NumericSeries D1;
+    Numeric i_offset;
+    Numeric BuyPosition;
+    Numeric SellPosition;
+    Numeric myEntryPrice;                  
+    Numeric myExitPrice;
+                     
+    Begin
+    HighestValue = HighestFC(High, Length);
+    LowestValue = LowestFC(Low, Length);
+    RSV = (Close-LowestValue)/(HighestValue-LowestValue)*100;
+    FASTK = SMA(RSV,SlowLength,1);
+    K1 = SMA(FASTK,SmoothLength,1);
+    D1 = SMA(K1,LongLength,1);
+    i_offset = offset*MinMove*PriceScale;
+
+
+    if(MarketPosition == 0)
+      {
+         if(CrossOver(K1,D1))
+            {
+               buy(lots,Close[1]);
+               Return;
+                    }                        
+             //if(CrossUnder(K1,D1))//开空头
+            //{
+             // SellShort(lots,Close[1]);
+                     // Return;
+            //}
+           }
+      if(MarketPosition == 1)//平多
+      {
+        if(CrossUnder(K1,D1))
+            {
+              Sell(lots,Close);
+                      Return;
+            }
+      }
+     
+      //止损
+       If(MarketPosition == 1)
+           {
+                   If(Low < EntryPrice - StopLoss * MinMove*PriceScale)
+                   {
+                           myExitPrice = EntryPrice - (StopLoss+1) * MinMove*PriceScale;
+                           myExitPrice = max(low,myExitPrice);
+                           Sell(lots,myExitPrice);
+                   }
+           }
+           Else If(MarketPosition == -1)
+           {
+                   If(High > EntryPrice + StopLoss * MinMove*PriceScale)
+                   {
+                           myExitPrice = EntryPrice + (StopLoss+1) * MinMove*PriceScale;
+                           myExitPrice = min(high,myExitPrice);
+                           BuyToCover(lots,myExitPrice);
+                   }
+           }    
+    end

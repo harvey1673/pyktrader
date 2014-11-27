@@ -1,0 +1,81 @@
+开拓者 TB 简单的波动性突破系统
+
+    /------------------------------------------------------------------------
+
+    // 简称: ATR_Breaker
+
+    // 名称: 波动性突破系统
+
+    // 类别: 公式应用
+
+    // 类型: 用户应用
+
+    // 输出:
+
+    //------------------------------------------------------------------------
+
+    Params
+
+           Numeric range(1.5);
+
+           Numeric length(10);
+
+           Numeric N(20);
+
+           Numeric lots(1);
+
+    Vars
+
+           NumericSeries TR;
+
+           NumericSeries ATR;
+
+           Bool DT;
+
+           Bool KT;
+
+           Bool DT2;
+
+           Bool KT2;
+
+         
+
+    Begin
+
+           TR=Max(Max(High-Low,Abs(Close[1]-High)),Abs(Close[1]-Low));
+
+           ATR=Average(TR,length);
+
+           DT=Close>Close[1]+ATR[1]*range;
+
+           KT=Close<Close[1]-ATR[1]*range;
+
+           DT2=(CountIf(DT,2)==1)&&DT;
+
+           KT2=(CountIf(KT,2)==1)&&KT;
+
+         
+
+           PlotNumeric("UpperBand",Close+ATR*range);
+
+           PlotNumeric("LowerBand",Close-ATR*range);
+
+         
+
+           If(DT)
+
+           Buy(lots,Open);
+
+           If(KT)
+
+           SellShort(lots,Open);
+
+           If(CountIf(DT,N)==0||DT2)
+
+           Sell(lots,Open);
+
+           If(CountIf(KT,N)==0||KT2)
+
+           BuyToCover(lots,Open);
+
+    End

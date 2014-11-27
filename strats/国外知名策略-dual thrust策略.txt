@@ -1,0 +1,220 @@
+国外知名策略-dual thrust策略源码
+
+    dual thrust是八几年一个老外写的，目前在自动化交易里应该还能排到前三吧。
+    这个系统核心相当简单，我一直都相信越简单越有效，而且作者的思想很有借鉴之处，为方便与大家分享，我重写了一个TB版本。
+    原形很简单，很多人经验都比我丰富，一定能扩充不少，如加入止损，止赢，加入资金/风险管理，改成日内系统等，从而打造成为自己的一个利器。
+
+    写在前面的话：
+    从看dual thrust的原形到重写TB代码，用时大概半小时，因为我本人是从事研发工作，代码从构思开始就会首先考虑逻辑思维的严密和健壮性，但也很可能有疏忽之处，比如这个系统我就没有加入涨跌停和最小幅度控制（我只想原汁原味重写，其它的大家自己扩充吧），所以大家在提问的时候，不要先入为主的认为我会犯很多低级错误，一定要认真读过代码，并对TB机制有足够的了解，这也是对我的尊重吧，坦白说，前几次发分享系统，看到大家的回复，我有些失落。
+
+    TB源码
+
+        //------------------------------------------------------------------------
+
+        // 简称: dual_thrust
+
+        // 名称:
+
+        // 类别: 公式应用
+
+        // 类型: 用户应用
+
+        // 输出: 穿堂风
+
+        //------------------------------------------------------------------------
+
+         
+
+         
+
+        Params
+
+        Numeric K1(0.5);
+
+        Numeric K2(0.5);
+
+        Numeric Mday(1);
+
+        Numeric Nday(1);
+
+        Numeric lots(1);
+
+        Numeric offset(0);
+
+         
+
+        Vars
+
+        Numeric BuyRange(0);
+
+        Numeric SellRange(0);
+
+        Numeric BuyTrig(0);
+
+        Numeric SellTrig(0);
+
+        Numeric HH;
+
+        Numeric LL;
+
+        Numeric HC;
+
+        Numeric LC;
+
+        Numeric i_offset;
+
+        Numeric BuyPosition;
+
+        Numeric SellPosition;
+
+         
+
+        Begin
+
+        If(CurrentBar > 44*Max(Mday,Nday))//使用的是5分钟周期，其它的周期自己做相应修改
+
+        {
+
+               i_offset = offset*MinMove*PriceScale;
+
+               HH = Highest(HighD(1),Mday);
+
+               HC = Highest(CloseD(1),Mday);
+
+               LL = Lowest(LowD(1),Mday);
+
+               LC = Lowest(CloseD(1),Mday);
+
+         
+
+               If((HH - LC) >= (HC - LL))
+
+               {
+
+                       SellRange = HH - LC;
+
+               }
+
+               Else
+
+               {
+
+                       SellRange = HC - LL;
+
+               }
+
+         
+
+               HH = Highest(HighD(1),Nday);
+
+               HC = Highest(CloseD(1),Nday);
+
+               LL = Lowest(LowD(1),Nday);
+
+               LC = Lowest(CloseD(1),Nday);
+
+         
+
+               If((HH - LC) >= (HC - LL))
+
+               {
+
+                       BuyRange = HH - LC;
+
+               }
+
+               Else
+
+               {
+
+                       BuyRange = HC - LL;
+
+               }
+
+         
+
+               BuyTrig = K1*BuyRange;
+
+               SellTrig = K2*SellRange;
+
+             
+
+               BuyPosition = OpenD(0)+BuyTrig;
+
+               SellPosition = OpenD(0)-SellTrig;
+
+             
+
+               PlotNumeric("BuyPosition",BuyPosition);
+
+               PlotNumeric("SellPosition",SellPosition);
+
+         
+
+               If(MarketPosition == 0)
+
+               {
+
+                       If(High>=BuyPosition)
+
+                       {
+
+                               Buy(lots,Max(Open,BuyPosition)+i_offset);
+
+                               Return;
+
+                       }
+
+                     
+
+                       If(Low<=SellPosition)
+
+                       {
+
+                               SellShort(lots,Min(Open,SellPosition)-i_offset);
+
+                               Return;
+
+                       }
+
+               }
+
+         
+
+               If(MarketPosition == -1)
+
+               {
+
+                       If(High>=BuyPosition)
+
+                       {
+
+                               Buy(lots,Max(Open,BuyPosition)+i_offset);
+
+                               Return;
+
+                       }
+
+               }
+
+         
+
+               If(MarketPosition == 1)
+
+               {
+
+                       If(Low<=SellPosition)
+
+                       {
+
+                               SellShort(lots,Min(Open,SellPosition)-i_offset);
+
+                               Return;
+
+                       }
+
+               }
+
+        }
+
+        End

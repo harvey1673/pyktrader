@@ -1,0 +1,255 @@
+开拓者 TB 超级日内组合系统
+
+    //策略:超级日内组合系统
+    INPUT:SS(1,1,100,1),K1(0.3,0.1,1,0.1),K2(0.6,0.1,1,0.1),BOCP(0.25,0,1,0.01),FBOCP(0.25,0,1,0.01);
+    VARIABLE:开多次数=0,开空次数=0,趋买市=0,趋卖市=0,多头止损价=0,空头止损价=0;
+    CYC:=BARSLAST(DATE>REF(DATE,1))+1;
+    昨开:=CALLSTOCK(STKLABEL,VTOPEN,6,-1);
+    昨收:=CALLSTOCK(STKLABEL,VTCLOSE,6,-1);
+    昨昨收:=CALLSTOCK(STKLABEL,VTCLOSE,6,-2);//昨天的前一天的收盘价，暂称为昨昨收
+    昨低:=CALLSTOCK(STKLABEL,VTLOW,6,-1);
+    昨高:=CALLSTOCK(STKLABEL,VTHIGH,6,-1);
+    今高:=IF(CYC=1,HIGH,REF(HHV(HIGH,CYC),1));
+    今低:=IF(CYC=1,LOW,REF(LLV(LOW,CYC),1));
+    今开:=IF(CYC=1,OPEN,REF(OPEN,CYC-1));
+    10日平均波幅:=ref(MA(CALLSTOCK(STKLABEL,VTHIGH,6,0)-CALLSTOCK(STKLABEL,VTLOW,6,0),10),1);//AVERAGERANGE
+    10日平均开收盘区间:=ref(MA(ABS(CALLSTOCK(STKLABEL,VTopen,6,0)-CALLSTOCK(STKLABEL,VTclose,6,0)),10),1);//AVERAGEOCRANGE
+    开关:=ABS(昨开-昨收)
+    //交易条件
+    IF 昨收
+    IF 昨收>昨昨收 THEN BEGIN//昨日收盘价大于昨昨收为趋买市（SELLEASIERDAY)
+    趋卖市:=1;
+    趋卖市开多价:今开+K2*10日平均波幅;//BUYBOPT
+    趋卖市开空价:今开-K1*10日平均波幅;//SELLBOPOINT
+    END
+    //交易系统
+    //突破
+    IF TIME>=094500 AND TIME=趋买市开多价 AND HOLDING=0,手数,MARKET);
+        多头止损价:=MIN(ENTERPRICE-0.25*10日平均波幅,ENTERPRICE-3);//这个策略用于股指，多头常规止损价为 开仓价减25%的10日平均波幅和3个大点的较小值。
+     开多次数:=1;
+    END
+
+    IF 趋买市=1 AND 开空次数=0 THEN BEGIN
+      趋买市开空:BUYSHORT(CLOSE趋卖市开多价 AND HOLDING=0,手数,MARKET);
+        多头止损价:=MIN(ENTERPRICE-0.25*10日平均波幅,ENTERPRICE-3);
+      开多次数:=1;
+     END
+
+     IF 趋卖市=1 AND 开空次数=0 THEN BEGIN
+      趋卖市开空:BUYSHORT(CLOSE多头突破确认价 AND C=0 THEN BEGIN
+    多头止损1:SELL(1,手数,MARKET);
+    多翻空1:BUYSHORT(1,手数,MARKET);
+    开空次数:=1;
+    END
+
+    {多头突破失败情况2:突破入场后,行情反转。止损的同时我们反手开空，但前提是时间在中午11:30之前，且多头进场在至少4根K之前。瞬间止损我们不允许反转，因为这往往是市场的膝跳反射}
+    IF HOLDING>=0 AND TIME=4 THEN BEGIN
+      多翻空2:BUYSHORT(1,手数,MARKET);
+      空头止损价:=MIN(ENTERPRICE+0.15*10日平均波幅,ENTERPRICE+3);//多翻空止损价为开仓价加15%的10日平均波幅和3个大点的较小值。
+      开空次数:=1;
+     END
+    END
+    END
+    {空头突破失败情况1:价格曾经低于空头突破确认价，最新价又上涨至空翻多确认价}
+    IF 今低空翻多确认价 AND TIME=空头止损价 THEN BEGIN
+     空头止损2:SELLSHORT(1,手数,MARKET);
+     IF TIME=4 THEN BEGIN
+      空翻多2:BUY(1,手数,MARKET);
+      多头止损价:=MIN(ENTERPRICE-0.15*10日平均波幅,ENTERPRICE-3);//多翻空止损价为开仓价加15%的10日平均波幅和3个大点的较小值。
+      开多次数:=1;
+     END
+    END
+
+    END
+    //止损
+    IF HOLDING>0 AND C空头止损价 AND TIMEENTERPRICE+0.5*10日平均波幅 THEN 多头止损价:=ENTERPRICE+2*MINDIFF;
+    IF 今低=143000 THEN BEGIN
+    多头止损价:=MAX(多头止损价,3周期最低价);
+    空头止损价:=MIN(空头止损价,3周期最高价);
+    END
+    //日内平仓
+    IF TIME>=151000 THEN BEGIN
+    收盘平多:SELL(1,手数,MARKET);
+    收盘平空:SELLSHORT(1,手数,MARKET);
+    趋卖市:=0;
+    趋买市:=0;
+    开多次数:=0;
+    开空次数:=0;
+    多头止损价:=0;
+    空头止损价:=0;
+    END
+
+     
+
+
+    TB技术人员：
+
+
+    超级日内组合策略
+    (The Super Combo Day Trading Strategy)
+
+    成功的日内突破策略核心是开盘后不久，寻找到未来上涨趋势的近低点和下跌趋势的近高点。最怕的是在高点附近买进，在低点附近卖空。但是，我们通过观察测评可以发现，除去少部分买在低点，卖在高点的交易，绝大部分都是突破失败的例子。那么是否有这样的策略，在行情突破的时候做突破，若突破失败，自动切换成处理突破失败的策略呢？你可能会说，不太可能吧？但今天介绍的超级组合策略正是基于这种想法开发的。
+    策略简述：
+
+    超级日内组合策略是我目前整理策略发布以来最复杂的一个。简化后还是一堆文字，所以简述我就不写了，大家直接看策略详情吧。个人觉得若你能理解后独立写出这个策略的代码，金字塔平台上几乎任意的图表程序化编程都难不倒你了。
+    看这个策略之前，请先阅读Hans123、恒温器策略，相关概念不在此文重述了。
+
+    策略详情：
+    超级日内组合策略属于有很多个模块处理不同行情的复杂策略，如同R-breaker一样，将考虑突破与突破失败2种情况，但细节方面会更复杂。当然，在有条理的情况下，使用金字塔软件实现策略还是相对容易的。
+
+    首先，我们策略依然沿用突破、突破失败这类思想，并且引入了恒温器策略中趋买市、趋卖市的概念，这3者将是这个策略的基础。
+    对于策略突破的部分：时间处理上，我们将沿用Hans123策略的想法，开盘30分钟内不交易。其次，对于突破进场点，超级日内组合策略将使用类似恒温器策略中区间突破、趋买市、趋卖市的思想。首先，我们判断是否交易？经过长期的观察和研究，策略的开发者得出结论，一般短K线后面往往跟随着长K线，而我们追踪的正是长K线。所以，若昨天是短K，今日我们才入场，否则不入场。我们采用以下的方式来判断K线是否为短K。比较昨开-昨收的绝对值和前10天该值的平均值。若前者小于后者85%，我们认定为短K，反之为长K。接下来，我们来确定进场的点位，若收盘价小于等于前一日的收盘价为趋买市，反之为趋卖市。趋买市的开多条件为今开+30%前10日的真实区间。开空条件为今开-60%的前10日真实区间。趋卖市开多条件为今开+60%的前10日真实区间，开空条件为今开-30%前10日的真实区间。
+
+    接着，我们来处理突破失败的部分（反趋势）。在该系统中，我们以多头为例，将以下三种情况定义为突破失败：
+    1、市场比昨日最高价向上跳空一定高度接着又下跌到最高价以下一定位置。
+
+    2、开盘价在昨日最高价以下，后超过该价，然后又下跌至该价以下一定位置。
+    3、多头头寸开始但在中午12点前失败，失败是以触发停止为标志的。如果失败不是发生的很快，我们可以利用这个优势。
+
+    反之，为向下突破失败。
+    然后，我们来处理止损的部分。（依然以多头为例）
+
+    1、在常规情况下，我们多头止损点是开仓价-10日波幅区间的25%和3个大点（ IF下是15个最小变动价位）较大的那个。
+        这里混合使用 固定止损和百分比保护止损的理由是：百分比止损能较好地适应市场的情况，它是个自适应参数系统。它与固定止损对比的好处是，若市场是高波动的，用固定止损就会使大部分交易亏损；若市场波动率低，一个固定的止损价位会导致风险大于收益和最后的净亏损。但是，若前一天的波动非常的小（比如前一天开盘就涨停了）。百分比系统会产生一个很荒唐的值，所以我们设置了一个3个点的条件作为下限。
+
+    2、在突破失败的情况下反手入场，我们在止损点为 开仓价-10日波动区间的15%和3个大点的较大值。
+         这是因为当天市场可能是没有方向的。反复的震荡会让我们有很大的损失，在已经亏损了一次的情况下，我们将执行更严格的风控。
+
+    3、当我们赚取的利润已经等于10天波动区间的50%时，我们采用保本止损策略，止损价调整为开仓价+滑点和手续费。
+    4、当时间超过下午14:30后，止损点设置为低于、高于前3跟5分钟线的低高点。
+
+       ? 这是因为，我们发现交易的最后30-45分钟，市场全天的趋势将消退，极少数情况下会出现大幅翻转（我记得今年某次PTA,深深地V型翻转，伤透了心)，我们当然不希望盈利在最后丢掉，所以设置了这个较小的止损，市场一有不利我们的风吹草动，我们就撤。
+    5、一天最多进场多头、空头各一对。换句话说，进场2次就停止。
+
+    总结：这个策略只是一个抛砖引玉，它糅合了足够多的思想。大家可以此为例，尝试创造出自己一堆堆的策略咯。
+    代码：
+
+    //策略:超级日内组合系统
+    //类型:日内5、走完K线
+    //版本:1.0
+    //修订时间:2012.12.24
+    //DESIGNED BY ROGARZ
+    //中间变量
+    INPUT:SS(1,1,100,1),K1(0.3,0.1,1,0.1),K2(0.6,0.1,1,0.1),BOCP(0.25,0,1,0.01),FBOCP(0.25,0,1,0.01);
+    VARIABLE:开多次数=0,开空次数=0,趋买市=0,趋卖市=0,多头止损价=0,空头止损价=0;
+    CYC:=BARSLAST(DATE>REF(DATE,1))+1;
+    昨开:=CALLSTOCK(STKLABEL,VTOPEN,6,-1);
+    昨收:=CALLSTOCK(STKLABEL,VTCLOSE,6,-1);
+    昨昨收:=CALLSTOCK(STKLABEL,VTCLOSE,6,-2);//昨天的前一天的收盘价，暂称为昨昨收
+    昨低:=CALLSTOCK(STKLABEL,VTLOW,6,-1);
+    昨高:=CALLSTOCK(STKLABEL,VTHIGH,6,-1);
+    今高:=IF(CYC=1,HIGH,REF(HHV(HIGH,CYC),1));
+    今低:=IF(CYC=1,LOW,REF(LLV(LOW,CYC),1));
+    今开:=IF(CYC=1,OPEN,REF(OPEN,CYC-1));
+    10日平均波幅:=ref(MA(CALLSTOCK(STKLABEL,VTHIGH,6,0)-CALLSTOCK(STKLABEL,VTLOW,6,0),10),1);//AVERAGERANGE
+    10日平均开收盘区间:=ref(MA(ABS(CALLSTOCK(STKLABEL,VTopen,6,0)-CALLSTOCK(STKLABEL,VTclose,6,0)),10),1);//AVERAGEOCRANGE
+    开关:=ABS(昨开-昨收)<0.85*10日平均开收盘区间;//CANTRADE
+    3周期最高价:=REF(HHV(HIGH,3),1);
+    3周期最低价:=REF(LLV(LOW,3),1);
+    多头突破确认价:=昨高+BOCP*10日平均波幅;//LONGBREAKPT
+    空头突破确认价:=昨低-BOCP*10日平均波幅;//SHORTBREAKPT
+    多翻空确认价:=昨低+FBOCP*10日平均波幅;//LONGFBOPOINT
+    空翻多确认价:=昨高-FBOCP*10日平均波幅;//SHORTFBOPOINT
+    手数:=SS;
+    开仓历时:=ENTERBARS+1;
+    //交易条件
+    IF 昨收<=昨昨收 THEN BEGIN//昨日收盘价小于等于昨昨收为趋买市（BUYEASIERDAY)
+    趋买市:=1;
+    趋买市开多价:今开+K1*10日平均波幅;//BUYBOPT
+    趋买市开空价:今开-K2*10日平均波幅;//SELLBOPOINT
+    END
+
+    IF 昨收>昨昨收 THEN BEGIN//昨日收盘价大于昨昨收为趋买市（SELLEASIERDAY)
+    趋卖市:=1;
+    趋卖市开多价:今开+K2*10日平均波幅;//BUYBOPT
+    趋卖市开空价:今开-K1*10日平均波幅;//SELLBOPOINT
+    END
+    //交易系统
+    //突破
+    IF TIME>=094500 AND TIME<143000 AND 开关=1 THEN BEGIN
+    {趋买市}
+    IF 趋买市=1 AND 开多次数=0 THEN BEGIN
+      趋买市开多:BUY(C>=趋买市开多价 AND HOLDING=0,手数,MARKET);
+        多头止损价:=MIN(ENTERPRICE-0.25*10日平均波幅,ENTERPRICE-3);//这个策略用于股指，多头常规止损价为 开仓价减25%的10日平均波幅和3个大点的较小值。
+     开多次数:=1;
+    END
+
+    IF 趋买市=1 AND 开空次数=0 THEN BEGIN
+      趋买市开空:BUYSHORT(CLOSE<=趋买市开空价 AND HOLDING=0,手数,MARKET);
+        空头止损价:=Max(ENTERPRICE+0.25*10日平均波幅,ENTERPRICE+3);//这个策略用于股指，空头常规止损价为 开仓价加25%的10日平均波幅和3个大点的较小值。
+      开空次数:=1;
+     END
+    {趋卖市}
+     IF 趋卖市=1 AND 开多次数=0 THEN BEGIN
+      趋卖市开多:BUY(CLOSE>趋卖市开多价 AND HOLDING=0,手数,MARKET);
+        多头止损价:=MIN(ENTERPRICE-0.25*10日平均波幅,ENTERPRICE-3);
+      开多次数:=1;
+     END
+
+     IF 趋卖市=1 AND 开空次数=0 THEN BEGIN
+      趋卖市开空:BUYSHORT(CLOSE<趋卖市开空价 AND HOLDING=0,手数,MARKET);
+        空头止损价:=Max(ENTERPRICE+0.25*10日平均波幅,ENTERPRICE+3);
+      开空次数:=1;
+     END
+    END
+    //突破失败
+    {多头突破失败情况1:价格曾经高于多头突破确认价，最新价又回落至空翻多确认价}
+    IF 今高>多头突破确认价 AND C<多翻空确认价 AND TIME<143000 AND 开空次数=0 AND HOLDING>=0 THEN BEGIN
+    多头止损1:SELL(1,手数,MARKET);
+    多翻空1:BUYSHORT(1,手数,MARKET);
+    开空次数:=1;
+    END
+
+    {多头突破失败情况2:突破入场后,行情反转。止损的同时我们反手开空，但前提是时间在中午11:30之前，且多头进场在至少4根K之前。瞬间止损我们不允许反转，因为这往往是市场的膝跳反射}
+    IF HOLDING>=0 AND TIME<143000 AND 开空次数=0 THEN BEGIN
+    IF C<=多头止损价 THEN BEGIN
+     多头止损2:SELL(1,手数,MARKET);
+     IF TIME<=110000 AND 开仓历时>=4 THEN BEGIN
+      多翻空2:BUYSHORT(1,手数,MARKET);
+      空头止损价:=MIN(ENTERPRICE+0.15*10日平均波幅,ENTERPRICE+3);//多翻空止损价为开仓价加15%的10日平均波幅和3个大点的较小值。
+      开空次数:=1;
+     END
+    END
+    END
+
+    {空头突破失败情况1:价格曾经低于空头突破确认价，最新价又上涨至空翻多确认价}
+    IF 今低<空头突破确认价 AND C>空翻多确认价 AND TIME<143000 AND 开多次数=0 AND HOLDING<=0 THEN BEGIN
+    空头止损1:SELLSHORT(1,手数,MARKET);
+    空翻多1:BUY(1,手数,MARKET);
+    开多次数:=1;
+    END
+    {空头突破失败情况2:突破入场后,行情反转。止损的同时我们反手开多，但前提是时间在中午11:30之前，且空头进场在至少4根K之前。瞬间止损我们不允许反转，因为这往往是市场的膝跳反射}
+    IF HOLDING<0 AND TIME<143000 AND 开多次数=0 THEN BEGIN
+    IF C>=空头止损价 THEN BEGIN
+     空头止损2:SELLSHORT(1,手数,MARKET);
+     IF TIME<=110000 AND 开仓历时>=4 THEN BEGIN
+      空翻多2:BUY(1,手数,MARKET);
+      多头止损价:=MIN(ENTERPRICE-0.15*10日平均波幅,ENTERPRICE-3);//多翻空止损价为开仓价加15%的10日平均波幅和3个大点的较小值。
+      开多次数:=1;
+     END
+    END
+
+    END
+    //止损
+    IF HOLDING>0 AND C<多头止损价 AND TIME<151000 THEN 常规多头止损:SELL(1,手数,MARKET);
+    IF HOLDING<0 AND C>空头止损价 AND TIME<151000 THEN 常规空头止损:SELLSHORT(1,手数,MARKET);
+    //止损价调整
+    {若持多单，而5分钟K高点超过了开仓价+50%10日平均波幅，止损调整为保本型 }
+    IF 今高>ENTERPRICE+0.5*10日平均波幅 THEN 多头止损价:=ENTERPRICE+2*MINDIFF;
+    IF 今低<ENTERPRICE-0.5*10日平均波幅 THEN 空头止损价:=ENTERPRICE-2*MINDIFF;
+    {若时间处于14:30以后，多头跟踪止损为过去3个5分钟的最高低点与多空头止损价中的较大值}
+    IF TIME>=143000 THEN BEGIN
+    多头止损价:=MAX(多头止损价,3周期最低价);
+    空头止损价:=MIN(空头止损价,3周期最高价);
+    END
+    //日内平仓
+    IF TIME>=151000 THEN BEGIN
+    收盘平多:SELL(1,手数,MARKET);
+    收盘平空:SELLSHORT(1,手数,MARKET);
+    趋卖市:=0;
+    趋买市:=0;
+    开多次数:=0;
+    开空次数:=0;
+    多头止损价:=0;
+    空头止损价:=0;
+    END

@@ -1,0 +1,391 @@
+TS交易之王MACD指标模型实例[开拓者公式]
+
+    教程共分四大部分。
+    第一部第一章：指标写作
+
+    Know How EasyLanguage PowerEditor
+
+    简介
+
+    　　OmegaResearch 交易之王 系列产品是交易者公认最好用的交易工具整合环境。你不只可以拿它来看盘，使用它内建的诸多技术指针协助分析交易，你也可以自行开发属意的指标，只要你想的到的。最重要的你可以用它来开发交易系统协助你进入机械化交易的世界。把交易构想付之实现并量化，你可以给自己交易最重要的东西──信心！
+
+    　　这个开发并实现交易梦想的核心就存在它内含的EasyLanguage PowerEditor当中。它不是一般点选内建指针，再加一些逻辑运算选项的阳春交易系统设计平台。它是透过一个类似Pascal语法的所谓EasyLanguage来书写你的程序代码，然后透过内部的编译器产生执行效率高的机码（这就是让它屹立不摇的卖点）。甚至连它的竞争者如Equis 的 MetaStock 等多年来也只能不敢吭声的当老二。
+
+    　　虽然它名为「容易语言」，可是对许多没有程序语言经验的人来说它还真是宛如火星语一般的叫人直呼「不容易」。特别对我们这些非英语系的地区又多一曾障碍可称为最高级的「真不容易」。你的英语能力我没办法帮你改善的，至于EasyLanguage我可以助你一臂之力！不过你的计算机概念我也无能为力，基本上你还是要靠你自修加强，如果还是拿过去的理由让自己逃避，那省点事就干脆不要交易了吧！因为你放弃的是一条通往成功交易的不二法门，那就「学海无涯、回头是岸」吧。
+
+    　　以下所附的几则程序代码是未来全文所拿来探讨的样本，你可以节录列以便对照文章内的解说达事半功倍之效。对了、这些程序你都可以在你的PowerEditor找到，因为这些都是TS2000i所内建的。
+
+    MACD指标：
+
+    {*******************************************************************
+
+    Description   : This Indicator plots MACD
+
+    Provided By   : Omega Research, Inc. (c) Copyright 1999
+
+    ********************************************************************}
+
+    Inputs: FastMA(12), SlowMA(26), MacdMA(9);
+
+    Plot1(MACD(Close, FastMA, SlowMA), "MACD");
+
+    Plot2(XAverage(MACD(Close, FastMA, SlowMA), MacdMA), "MACDAvg");
+
+    Plot3(Plot1 - Plot2, "MADiff");
+
+    {Alert Criteria}
+
+    If Plot3 Crosses Over 0 Then
+
+        Alert("MACD has generated a bullish alert")
+
+    Else
+
+        If Plot3 crosses under 0 Then
+
+            Alert("MACD has generated a bearish alert");
+
+    {MACD Expert Commentary}
+
+    #BeginCmtry
+
+        Commentary(ExpertMACD(Plot1));
+
+    #End;
+
+    MACD函数之１：
+
+    {*******************************************************************
+
+    Description: Moving Average Convergence Divergence
+
+    Provided By: Omega Research, Inc. (c) Copyright 1999
+
+    ********************************************************************}
+
+    Inputs: Price(NumericSeries), FastMA(NumericSimple), SlowMA(NumericSimple);
+
+    MACD = XAverage(Price, FastMA) - XAverage(Price, SlowMA);
+
+    MACD函数之２
+
+    {*******************************************************************
+
+    Description: Exponential Average
+
+    Provided By: Omega Research, Inc. (c) Copyright 1999
+
+    ********************************************************************}
+
+    Inputs: Price(NumericSeries), Length(NumericSimple);
+
+    Variables: Factor(0);
+
+    If Length + 1 <> 0 Then Begin
+
+        If CurrentBar <= 1 Then Begin
+
+            Factor = 2 / (Length + 1);
+
+            XAverage = Price;
+
+        End
+
+        Else
+
+            XAverage = Factor * Price + (1 - Factor) * XAverage[1];
+
+    End;
+
+    MACD多头交易讯号
+
+    {*******************************************************************
+
+    Description   : MACD Long Entry
+
+    Provided By   : Omega Research, Inc. (c) Copyright 1999
+
+    ********************************************************************}
+
+    Inputs: FastMovAvg(12), SlowMovAvg(26), MACDMovAvg(9);
+
+    Variables: XMACD(0);
+
+    If CurrentBar > 2 AND MACD(Close, FastMovAvg, SlowMovAvg) Crosses Above XAverage(MACD(Close, FastMovAvg, SlowMovAvg), MACDMovAvg)[1] Then
+
+        Buy ("MACD") This Bar on Close;
+
+    MACD空头交易讯号
+
+    {*******************************************************************
+
+    Description   : MACD Short Entry
+
+    Provided By   : Omega Research, Inc. (c) Copyright 1999
+
+    ********************************************************************}
+
+    Inputs: FastMovAvg(12), SlowMovAvg(26), MACDMovAvg(9);
+
+    If CurrentBar > 2 AND MACD(Close, FastMovAvg, SlowMovAvg) Crosses Below XAverage(MACD(Close, FastMovAvg, SlowMovAvg), MACDMovAvg)[1] Then
+
+        Sell ("MACD") This Bar on Close;
+
+    待续
+
+
+    第一章：指标写作
+
+
+    　　现在开始我会逐行解说每一行程序代码的意义。我不想用一般手册的说明方法，因为那样子让我觉得没有效率；它让你懂一些方法，却也让你合上书后忘的一乾二净。我让你在实做中学习，马上披挂上阵！有成就感你就不容易忘。然后我会举一反三拿一些实例加强你的观念进入深植，想忘都不可能！至于手册、我希望你不要丢掉它，放在身边你会常常用它的；爱因斯坦说：不要去背找得到的数据来增加大脑的负担。相信我！我这二十多年涉猎许多计算机语言，没有手册我一行码都掰不出来的。让我们系上安全带，飞上天HI一下！
+
+
+
+    MACD指标：
+
+
+
+    　　Indicator？什么是Indicator？它就是指标、技术指标。不过在TS2000i它更泛指「可以显示在图型工作区的指针」，也就是说它不只是包含计算指标部份，更包括了显示部份（画图PLOT）。以下就是一个完整的MACD指针程序，使用EasyLanguage语法完成的。
+
+
+
+    {*******************************************************************
+
+    Description   : This Indicator plots MACD
+
+    Provided By   : Omega Research, Inc. (c) Copyright 1999
+
+    ********************************************************************}
+
+
+
+    　　这一段我们称为『备注』、『批注』（Remark）。在PowerEditor中它会显示为绿色，因为它不会被理会或被编译，但它方便我们阅读，知道自己在这段程序企图得到或想表现些什么。
+
+
+
+    　　批注被包围在大括符里头｛｝。只要你把一段文字用大括符包围起来，就是告诉PowerEditor不要去执行这段东西，就算它里面是计算式也不必去鸟它。因为它是写给我这有血有肉的人看的，不是给你这大脑装满海沙的家伙看的。
+
+
+
+    Inputs: FastMA(12), SlowMA(26), MacdMA(9);
+
+
+
+    　　Inputs : 『外来参数输入』。
+
+    文法　Inputs　加冒号『：』之后输入外来参数『FastMA』后加括符内填初设值『（12）』。如果有一个以上的参数需要被代入，参数间用逗点隔开『，』。最后结束时以分号终止『；』。
+
+
+
+    Inputs的部份是代表这些数据未来在我们使用该指标时是可以被更改的。如本例可以看到12，26，9就是一般MACD的惯用参数。特别说明的是当我们在设定参数名称（FastMA）时虽然没人管你要命什么名称，但设定一些可读性高的名称对你未来使用会是一件好事的。FastMA一条快速的移动平均线比用abc来的叫人会意些吧？
+
+
+
+    初值一般也引用常用数据来代入，如此在使用上你也会方便自己许多。为什么我们要设外来参数呢？因为它方便你在使用时迅速的更改配合当时需要。也许你有天想看看以6,13,5计算的MACD会长得如何？那好你直接在图形页改参数便可。如果你不用Inputs、那抱歉你只有再进入PowerEditor改新参数，然后重新编译一次才可以使用，当然你要是每到阴天闲的发慌我不阻止你如此干，至少你孩子会对我感激涕零。
+
+
+
+    Plot1(MACD(Close, FastMA, SlowMA), "MACD");
+
+
+
+    　　Plot1　呼叫Plot1函式（函式未来会提，现在你就当自己是皇上吆喝各司其职的小太监上场。有侍衣、侍食、侍寝、、之类的他们有自己的专属工作，只待你一声令下，只是你要叫对人）。函式后面紧跟括符『（）』，同样以分号结束叙述。括符内加入函式本身需要的参数或变量。加什么呢？这时手册就派上用场了！每一个函式要加的参数是不一定的，所以手册会帮你找到。你也可以利用在线手册，点选右上像一本书的图示或是选单的Tools＞EasyLanguage Dictionary。
+
+
+
+    　　文法Plot1（代入要显示的数据，”显示的文字字符串”）；同样的各参数间以逗点相隔，以分号结束。这里有一个不同；字符串输入必须包含在“”之间。它藉以区隔特别是数字以文字不被处理而直接表现。比如说”3-2”会表现3-2而不是变成１。
+
+
+
+    　　Plot1它有许多兄弟姊姊，排行由１到４。为什么呢？因为TS200i设计成每个指针的显示个数最大为４，无法显示更多。对了这四条线的当然包括你喜欢加在如RSI的超买或超卖的水平线，珍惜物资喔。
+
+
+
+
+
+
+
+
+
+
+
+    来源：http://bbs.moneyeast.com/viewthr ... 0&highlight=DMA
+
+     
+
+
+    TB技术人员： 改写MACD指标：
+
+
+
+    {*******************************************************************
+
+    Description : This Indicator plots MACD
+
+    Provided By : Omega Research, Inc. (c) Copyright 1999
+
+    ********************************************************************}
+
+
+
+    Inputs: FastMA(12), SlowMA(26), MacdMA(9);
+
+    Vars : Macd_Now(0),Macd_Xavg(0),Macd_Diff(0);
+
+
+
+    Macd_Now = MACD(Close, FastMA, SlowMA);
+
+    Macd_Xavg = XAverage(Macd_Now, MacdMA);
+
+    Macd_Diff = Macd_Now – Macd_Xavg;
+
+
+
+    Plot1(Macd_Now, "MACD");
+
+    Plot2(Macd_Xavg, "MACDAvg");
+
+    Plot3(Macd_Diff, "MADiff");
+
+    Plot4(0,”0”);
+
+
+
+    　　如何？是不是一样的东西？我们甚至用了第四条线来画零轴中线。最后你必须按『Ｆ３』进行，记住！所有新写或改写的程序都必须按一下F3让PowerEditor帮你检视并编译才可以使用。当回应你Excellent！你就可拍拍手鼓鼓掌，因为它签了通行证给你。快去TS2000i打开一张图然后按F7看看Indicator有没有你的大作出现？找到My_MACD点选有没有热泪盈眶呀？
+
+
+
+    　　不过打击接踵来到。你的柱状图为啥跟MACD一样是条线呢？嗯、再回到我们的PowerEditor点选File＞Properties在Indicator Properties – My_MACD 窗口下选Chart Style ＞ Plots ＞ MADiff ＞ Type ＞ Histogram。记得改完按确定后还是要按F3再编译一次。自己可以尝试看看如何把零轴改成点状的线段表示。
+
+    待续
+
+
+
+    接下来、我们再举一个例子写另一个通用指标Stochastic，就是我们惯称的ＫＤ指标。我们设定通用天数为９天，我们知道必须要运算ＲＳＶ（不成熟随机值）、与得到９天范围的最高与最低。完成程序如下
+
+
+
+    Inputs: Length(9), OverSold(20), OverBought(80);
+
+    Vars : RnHi(0),RnLo(0),RSV(0),sK(0),sD(0);
+
+
+
+    If CurrentBar > 1 then begin
+
+       RnHi = Highest(High, Length);
+
+       RnLo = Lowest(Low, Length);
+
+       RSV = (Close - RnLo) / (RnHi - RnLo) * 100;
+
+       sK = ((sK[1]/3) * 2) + (RSV / 3);
+
+       sD = ((sD[1]/3) * 2) + (sK / 3);
+
+    end;
+
+
+
+    Plot1(sK, "%K");
+
+    Plot2(sD, "%D");
+
+    Plot3(OverBought, "OverBought");
+
+    Plot4(OverSold, "OverSold");
+
+
+
+    　　以上程序代码大致应该没问题，不需再逐行解说了。所以我挑重点说明。这里出现一个新东西，我们第一个接触的『判别式』；IF（逻辑判断）THEN（执行）。我们把这个运算译成白话就是：如果（IF）今天下雨？（事实判断）那么（THEN）我们出门就要打伞（行动）。写成程序为：
+
+
+
+    　　IF 今天下雨？ THEN 我们出门就要打伞；
+
+
+
+    　　在『今天下雨？』这个条件判别将产生『真TRUE』或『伪FALSE』的结果，如果结果为真（TRUE），我们则执行随后要求的动作，如伪（FALSE）随后动作将不会被执行。再看以下例子：
+
+
+
+    　　My_Count = 12;
+
+    　　IF My_Count > 10 THEN My_Count = My_Count + 10; （TRUE＞执行）
+
+    　　IF My_Count < 10 THEN My_Count = My_Count / 100; （FALSE＞不被执行）
+
+
+
+    　　再插个花谈谈EasyLanguage『操作数』！在四则运算没有什么问题，顺序也依习惯做先乘除后加减。在『条件式』写法中可用逻辑操作数连接几个条件判断；如AND、OR等。特别的是大于或等于写成＞＝，不可以写＝＞。
+
+
+
+    　　拉回来再谈下去。如果THEN之后我们要执行的不只是担一步骤，那要如何解决？难道我们要一条一个IF~THEN的写下去？当然不必如此！我们用一个方式来告诉它执行某范围的动作，我们用BEGIN跟END来界定多个动作。
+
+
+
+    　　IF 今天下雨？ THEN BEGIN
+
+    我们出门就要打伞；
+
+    出门前提醒家人外出也要带伞；
+
+    检查家里的窗户关了没；
+
+    　　END;
+
+
+
+    　　上面的条件判断后将执行三个动作。当然你还可以在IF-THEN中再加入另一个IF-THEN，形成所谓的『巢状判别式』，往后碰到例子再加强说明吧。除上面谈的IF-THEN之外我们又看到几个常用函式，介绍一下用法！
+
+
+
+    　　CurrentBar是一个常常会呼叫的函式，不过它不必引入参数，它回传的是一个数字，这数字跟你计算指针的起始有效日数有关。在此例中、我们在数据开始的第９天后才能开始计算出KD的值，所以CurrentBar回传为１时就是第９天。所以我们在第９天之后开始计算KD（CurrentBar > 1），如此你就不会在第９天之前看到乱七八糟的指针数据了。
+
+
+
+    　　Highest(比较数据, 范围天数)。这个函式很容易了解因为它用High+Est。这里的High不是指我们说的当日最高，而是一堆数据里的最高值将被发现出来。所以我们如果输入Highest(Close, 9);将会寻找出过去９天中最高的收盘价。而相对的Lowest()便是找出输入范围的最低值。
+
+
+
+    　　最后一个是sK与sK[1]、sD与sD[1]。其中的不同点在于后面加了一个中括符。在EasyLanguage中，我们用中括符[X]来表示取前X天的数据或数据。所以当我们运算%K的时候需要昨天的%K数据，所以我们代入sK[1]就是得到１天前的%K数据。同理sD[1]也是这个意思。这个符号使用范围很广，几乎所有的变量都可以使用如此的表示。如Close[10]表10天前的收盘价、High[6]表6天前的当日最高值。好啰这段程序到现在应该没有感觉陌生的语法了吧？老写原来已经有的指标是否有点少些新鲜感？我们在继续推进前最后再举一个例子；它是在寰宇财金[45]－『最新技术分析指标』中的【随机RSI摆荡指标--P133】。
+
+
+
+    Name : StochRSI
+
+
+
+    Inputs : Price(close), Length(9);
+
+    Vars : ToRSI(0), HiRSI(0), LoRSI(0);
+
+
+
+    ToRSI = RSI(Price, Length);
+
+    HiRSI = Highest(ToRSI, Length);
+
+    LoRSI = Lowest(ToRSI, Length);
+
+
+
+    Value1 = (ToRSI - LoRSI) / (HiRSI - LoRSI);
+
+    Value2 = .8;
+
+    Value3 = .2;
+
+
+
+
+    Plot1(value1, "StRSI");
+
+    Plot2(value2, "O.B");
+
+    Plot3(value3, "O.S");
+
+
+    来源http://bbs.moneyeast.com/viewthr ... 0&highlight=DMA

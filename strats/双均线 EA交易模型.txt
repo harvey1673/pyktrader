@@ -1,0 +1,39 @@
+双均线 EA交易模型（指数移动均线和一条调整移动均线）
+
+源码：
+
+//------------------------------------------------------------------------
+// 简称: EA
+// 名称: EA交易模型
+// 类别: 交易指令
+// 类型: 其他
+// 输出: 一条指数移动均线和一条调整移动均线（适应性移动平均线）
+//------------------------------------------------------------------------
+Params
+       Numeric Length1(16);
+       Numeric Length2(80);
+   Numeric FastAvgLength(2);
+       Numeric SlowAvgLength(30);
+Vars  
+       NumericSeries AMA;
+       NumericSeries EMA;
+       Bool Condition1;
+       Bool Condition2;
+       Numeric TotalEquity;
+       Numeric UseMargin;
+       Numeric EntryLots;
+Begin
+       TotalEquity = CurrentCapital()+ Abs(CurrentContracts()*Close*ContractUnit()*BigPointValue()*MarginRatio());
+       UseMargin = Close*ContractUnit*BigPointValue*MarginRatio;
+       EntryLots = IntPart(TotalEquity*0.25/UseMargin);
+       AMA = AdaptiveMovAvg(Close,Length1,FastAvgLength,SlowAvgLength);
+       EMA = XAverage(Close, Length2);
+       if (AMA>EMA)
+       {
+               Buy(EntryLots,NextOpen,True);
+       }
+       if (EMA>AMA)
+       {
+           SellShort(EntryLots,NextOpen,True);
+       }
+End

@@ -1,0 +1,101 @@
+协整理论在期指套利中的运用及策略源码
+
+
+目前大家都是用沪50ETF和深100ETF组合模拟现货指数，用基差做期限套利，随着套利人群的增多，基差逐渐变
+
+小，不足以覆盖成本，所以机会很少，为此，需要修正基差。
+
+计量经济学中有个协整理论，今天抛砖引玉，和大家一起探讨。
+
+不同市场上的同质或相似商品的价格存在长期均衡关系，当价格偏离均衡时，由于套利交易的存在，偏离会迅速
+
+回到均衡。在一定的门限值以外，二者服从协整关系，在门限值以内，二者没有协整关系，这种关系称为门限协
+
+整。
+用沪50ETF和深100ETF组合模拟的现货指数，和HS300指数确实存在长期的均衡关系，但很可惜，模拟的现货指数
+
+和期货指数不具备长期的均衡关系，因为随时间推移，他们之间的价差会逼近0，那么，就无意义了吗？
+
+一个期指合约的存续期大约25天，如果从合约刚诞生，在极小的周期上，如10秒级别，在一定的存续期内，是存
+
+在这种协整关系的。并且这种机会出现的频率远高于正常的期限基差，这样就可以套利了。
+
+
+
+程序源码如下：
+
+Params
+   Numeric AjustmentRatio(804507);                  // 协整系数
+   Numeric AjustmentLength(2000);                  // 协整周期
+       Numeric Weight1(1);                             // 现货权重
+       Numeric Weight2(1);
+       Numeric Band(1.25);                                //目标价差曲线开仓上下限
+       Numeric Lots(1);                                //每次开仓手数
+ 
+Vars
+     
+       NumericSeries St;                                //指数自然对数变换曲线
+       NumericSeries St1;                               // 目标价差曲线
+       Numeric MinPoint;                               // 最小变动单位
+       Bool SellEntrysignal(False);                    // 正向套利信号
+       Bool BuyEntrysignal(False);                     // 反向套利信号
+   Bool SellExitsignal(False);                     // 正向套利出场信号
+       Bool BuyExitsignal(False);                      // 反向套利出场信号
+   Numeric myEntryPrice;
+Begin
+
+    St=10000*ln(Data0.close*ContractUnit)-AjustmentRatio*ln((Data1.close*Weight1+Data2.close*Weight2)/(Weight1+Weight2))/100;
+    st1=(st-XAverage(st,AjustmentLength))/StandardDev(st,AjustmentLength,0);
+    PlotNumeric("St1",St1);
+    PlotNumeric("零轴",0);
+    PlotNumeric("正向",Band);
+    PlotNumeric("反向",(-1)*Band);
+    MinPoint=MinMove*PriceScale;
+       
+        SellEntrysignal=st1[1]>Band;
+        If (SellEntrysignal)                                 // 正向套利,期指开空单，买入现货
+
+   {
+                                                              // 开仓价格取开盘价加上一个单位滑点，这样能更接近真实情况，并能尽量保证成交
+           myEntryPrice = Open-MinPoint;
+                       Sellshort(Lots,myEntryPrice);                                                              
+       }
+     
+        BuyEntrysignal=st1[1]<(-1)*Band;
+        If (BuyEntrysignal)                                      // 反向套利,期指开多单，卖出现货
+
+   {
+
+                                                       // 开仓价格取开盘价加上一个单位滑点，这样能更接近真实情况，并能尽量保证成交
+           myEntryPrice = Open+MinPoint;
+                       Buy(Lots,myEntryPrice);
+
+       }  
+     
+          SellExitsignal=CrossUnder(st1[1],0);
+      if( SellExitsignal && MarketPosition == -1 )    // 正向套利平仓,期指空单平，卖出现货
+
+   {
+
+                                                     // 开仓价格取开盘价加上一个单位滑点，这样能更接近真实情况，并能尽量保证成交
+           myEntryPrice = Open+MinPoint;
+                       BuyToCover(Lots,myEntryPrice);
+                     
+       }
+
+        BuyExitsignal=CrossOver(st1[1],0);
+       
+    if (BuyExitsignal && marketposition==1)             // 反向套利平仓,期指多单平，买入现货
+{
+
+                                                                                                               // 开仓价格取开盘价加上一个单位滑点，这样能更接近真实情况，并能尽量保证成交
+
+           myEntryPrice = Open-MinPoint;
+
+                       Sell(Lots,myEntryPrice);
+                     
+       }
+
+
+ 
+End

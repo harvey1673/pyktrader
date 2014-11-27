@@ -1,0 +1,303 @@
+开拓者道氏理论交易策略源码
+
+道氏理论内容：
+
+    //------------------------------------------------------------------------
+
+    // 简称: D1
+
+    // 名称: 道氏理论
+
+    // 类别: 交易指令
+
+    // 类型: 多头建仓
+
+    // 输出: www.cxh99.com
+
+    //------------------------------------------------------------------------
+
+     
+
+    Params
+
+           Numeric ATime(918);
+
+           Numeric CTime(1510);
+
+           Numeric Lot(1);
+
+           Numeric MoneyLoss(0.6);
+
+           Numeric BarCross(1);
+
+           Numeric Length(5);
+
+         
+
+    Vars
+
+           Numeric bTime(0);
+
+           Numeric MyClose(0);
+
+           Numeric MyDiff(0);
+
+           NumericSeries estP(0);
+
+           NumericSeries ExitP(0);
+
+           NumericSeries Position(0);
+
+           NumericSeries est(0);
+
+           NumericSeries est1(0);
+
+           NumericSeries est2(0);
+
+           NumericSeries est3(0);
+
+         
+
+           Bool bTimeCon;
+
+           Bool BarUpCon;
+
+           Bool BarDownCon;
+
+           Bool BarExitCon;
+
+           Bool LongOpenCon;
+
+           Bool ShortOpenCon;
+
+           Bool LongExitCon;
+
+           Bool ShortExitCon;
+
+         
+
+    Begin
+
+         
+
+           If (Date != Date[1])
+
+                   {
+
+                           est = Open;
+
+                           est1 = Open;
+
+                           est2 = Open;
+
+                           est3 = Open;
+
+                           estP = 0;
+
+                           ExitP = 0;
+
+                           Position = 0;
+
+                           MyClose = Open;
+
+                   }
+
+           Else
+
+                   {
+
+                           est = est[1];
+
+                           est1 = est1[1];
+
+                           est2 = est2[1];
+
+                           est3 = est3[1];
+
+                           estP = estP[1];
+
+                           ExitP = ExitP[1];
+
+                           Position = Position[1];
+
+                           If(Length != 0) MyClose = Average(Close[1],Length);
+
+                           Else MyClose = Close[1];
+
+                   }
+
+                 
+
+           MyDiff = MyClose * BarCross / 1000;
+
+         
+
+           bTime = IntPart(Time*10000);
+
+           bTimeCon = (bTime > ATime) And (bTime < CTime);
+
+         
+
+           If((MyClose < est And MyClose < est1) Or (MyClose > est And MyClose > est1)) est = MyClose;
+
+           If(((MyClose - est) > MyDiff And est < est1) Or ((est - MyClose) > MyDiff And est > est1))
+
+                   {
+
+                           est3 = est2;
+
+                           est2 = est1;
+
+                           est1 = est;
+
+                           est = MyClose;
+
+                   }
+
+                 
+
+           If(Position > 0 And High > estP) estP = High;
+
+           If(Position < 0 And Low < estP) estP = Low;
+
+           If(Position > 0) ExitP = estP * (100 - MoneyLoss) / 100;
+
+           If(Position < 0) ExitP = estP * (100 + MoneyLoss) / 100;
+
+         
+
+           If(bTime >= CTime)
+
+           {
+
+                   If (Position > 0)
+
+                           Sell(lot,Open);
+
+                   Else
+
+                           BuyToCover(lot,Open);
+
+           }
+
+           
+
+           If(bTimeCon)
+
+           {
+
+                   If (Position == 0)
+
+                   {
+
+                           If(est3 < est1 And (est2 / 2000 + est2) <= est And est3 < est2)
+
+                           {
+
+                                   Buy(lot,Open);
+
+                                   Position = lot;
+
+                                   estP = Open;
+
+                                   ExitP = estP * (100 - MoneyLoss) / 100;
+
+                                   Commentary("LongOpen");
+
+                                 
+
+                           }
+
+                           
+
+                           Else If(est3 > est1 And (est2 - est2 / 2000) >= est And est3 > est2)
+
+                           {
+
+                                   SellShort(lot,Open);
+
+                                   Position = lot * -1;
+
+                                   estP = Open;
+
+                                   ExitP = estP * (100 + MoneyLoss) / 100;
+
+                                   Commentary("ShortOpen");
+
+                           }
+
+                   }
+
+                 
+
+                   Else
+
+                 
+
+                   {
+
+                           If(Position > 0 And est3 > est1)
+
+                           {
+
+                                   Sell(lot,Open);
+
+                                   Position = 0;
+
+                                   Commentary("LongExit1");
+
+                           }
+
+                         
+
+                           Else If(Position < 0 And est3 < est1)
+
+                           {
+
+                                   BuyToCover(lot,Open);
+
+                                   Position = 0;
+
+                                   Commentary("ShortExit1");
+
+                           }
+
+                         
+
+                           Else If(Position > 0 And Open < ExitP)
+
+                           {
+
+                                   Sell(lot,Open);
+
+                                   Position = 0;
+
+                                   Commentary("LongExit2");
+
+                           }
+
+                         
+
+                           Else If(Position < 0 And Open > ExitP)
+
+                           {
+
+                                   BuyToCover(lot,Open);
+
+                                   Position = 0;
+
+                                   Commentary("ShortExit2");
+
+                           }
+
+                   }
+
+           }
+
+         
+
+           Commentary("Position = "+Text(Position));
+
+           Commentary("ExitP = "+Text(ExitP));
+
+    End

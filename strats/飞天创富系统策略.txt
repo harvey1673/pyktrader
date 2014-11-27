@@ -1,0 +1,116 @@
+开拓者飞天创富系统策略源码
+
+（一）思路：1.同时交易四个品种，每个品种动用总资金的10%。
+                    2.以连续合约发出信号，交易主力合约，连续合约为data0,现主力合约为data1,下一个主力合约为data2;
+                    3.总资金以A_CurrentEquity 表达是否正确；
+                    4.盘中达到止损，立即以止损价止损；
+                    5.开盘跳空越过止损价，立即以开盘价止损，但不能因集合竞价出现废单；
+                   
+（二）程序代码：
+
+//------------------------------------------------------------------------
+// 简称: FTCF
+// 名称: 飞天创富
+// 类别: 公式应用
+// 类型: 用户应用
+//------------------------------------------------------------------------
+
+Params
+       Numeric m(7);
+       numeric P(1.5);
+       numeric n(0.1);
+Vars
+       NumericSeries a;
+       NumericSeries b;
+       NumericSeries e;
+       numeric entrylots;
+       NumericSeries dtzf;
+       NumericSeries ktdf;
+Begin
+       a=(3*c+l+o+h)/6;
+       b=(20*a+19*a[1]+18*a[2]+17*a[3]+16*a[4]+15*a[5]+14*a[6]+13*a[7]+12*a[8]+11*a[9]+10*a[10]+9*a[11]+8*a[12]+7*a[13]+6*a[14]+5*a[15]+4*a[16]+3*a[17]+2*a[18]+a[20])/210;//来源 www.cxh99.com
+       e=average(b,m);
+       dtzf=c/Close[NthCon(CrossOver(b,e),1)]-1;
+       ktdf=1-c/Close[NthCon(CrossOver(e,b),1)];
+
+//多头开仓
+   if(crossover(b,e) and MarketPosition!=1 and ktdf<n and data1.v>data2.v and CurrentTime>=0.145955)      
+          {
+             entryLots= (A_CurrentEquity *0.1)/(data1.C*ContractUnit*MarginRatio);                          
+             entryLots  = IntPart(entryLots );
+             data1.Buy(entryLots,data1.C);
+          }
+       if(crossover(b,e) and MarketPosition!=1 AND ktdf>=n and data1.v>data2.v and CurrentTime>=0.145955)
+          {
+             entryLots= (A_CurrentEquity*0.05)/(data1.C*ContractUnit*MarginRatio);
+             entryLots  = IntPart(entryLots );
+             data1.Buy(entryLots,data1.C);
+          }
+       if(crossover(b,e) and MarketPosition!=1 and ktdf<n and data1.v<data2.v and CurrentTime>=0.145955)
+          {
+            entryLots= (A_CurrentEquity *0.1)/(data2.C*ContractUnit*MarginRatio);
+            entryLots  = IntPart(entryLots );
+            data1.BuyToCover(0,data1.c);
+            data2.Buy(entryLots,data2.C);
+          }
+       if(crossover(b,e) and MarketPosition!=1 AND ktdf>=n and data1.v<data2.v and CurrentTime>=0.145955)
+          {
+             entryLots= (A_CurrentEquity *0.05)/(data2.C*ContractUnit*MarginRatio);
+             entryLots  = IntPart(entryLots );
+             data1.BuyToCover(0,data1.c);
+             data2.Buy(entryLots,data2.C);
+          }  
+//多头开仓结束
+
+//空头开仓        
+       if(Crossover(e,b) and MarketPosition!=(-1) and dtzf<n and data1.v>data2.v and CurrentTime>=0.145955)
+          {
+           entryLots= (A_CurrentEquity * 0.1)/(data1.C*ContractUnit*MarginRatio);
+           entryLots  = IntPart(entryLots );
+           data1.SellShort(entryLots,data1.c);
+          }//来源 www.chengxuhuajiaoyi.com
+       if(Crossover(e,b) and MarketPosition!=(-1) and dtzf>=n and data1.v>data2.v and CurrentTime>=0.145955)
+          {
+           entryLots= (A_CurrentEquity* 0.05)/(data1.C*ContractUnit*MarginRatio);
+           entryLots  = IntPart(entryLots );
+           data1.Sellshort(entryLots,data1.c);
+          }
+       if(Crossover(e,b) and MarketPosition!=(-1) and dtzf<n and data1.v<data2.v and CurrentTime>=0.145955)
+          {
+           entryLots= (A_CurrentEquity * 0.1)/(data2.C*ContractUnit*MarginRatio);
+           entryLots  = IntPart(entryLots );
+           data1.Sell(0,data1.c);
+           data2.SellShort(entryLots,data2.c);
+          }
+       if(Crossover(e,b) and MarketPosition!=(-1) and dtzf>=n and data1.v<data2.v and CurrentTime>=0.145955)
+          {
+           entryLots= (A_CurrentEquity * 0.05)/(data2.C*ContractUnit*MarginRatio);
+           entryLots  = IntPart(entryLots );
+           data1.Sell(0,data1.c);
+           data2.Sellshort(entryLots,data2.c);
+          }  
+//空头开仓结束
+
+//多头止损
+     If(marketposition==1 and data1.l<=A_BuyAvgPrice*(1-p/100) and date>lastEntryDate AND currenttime>0.090000)
+               {
+                data1.Sell(0,A_BuyAvgPrice*(1-p/100));
+               }
+         If(marketposition==1 and data1.o<=A_BuyAvgPrice*(1-p/100) and date>lastEntryDate AND currenttime>0.090000)
+               {
+                data1.Sell(0,o);
+               }
+//多头止损结束
+
+//空头止损
+     If(marketposition==(-1) and data1.h>=A_sellAvgPrice*(1+p/100) and date>lastEntryDate AND currenttime>0.090000)
+               {
+                data1.BuyToCover(0,A_sellAvgPrice*(1+p/100));
+               }
+         If(marketposition==(-1) and data1.o>=A_sellAvgPrice*(1+p/100) and date>lastEntryDate AND currenttime>0.090000)
+               {
+                data1.BuyToCover(0,o);
+               }
+//空头止损结束        
+
+End

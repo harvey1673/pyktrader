@@ -1,0 +1,124 @@
+日内高低点突破交易系统[开拓者公式]
+
+//------------------------------------------------------------------------
+// 简称: todayHLCross
+// 名称:
+// 类别: 交易指令
+// 类型: 其他
+// 输出:
+//------------------------------------------------------------------------
+/*
+       日内开盘区高低点机械突破系统
+*/
+Params
+       Numeric maxLots(1);//单次开仓手数
+       Numeric maxTrad(4);//最大交易次数
+       Numeric minSpt(15);//最小开仓间隔bar数
+       Numeric splitRate(3); //交易滑点和佣金      
+     
+       Numeric tradBegin(930); //开仓时间      
+       Numeric tradEnd(1430); //开仓截止时间      
+       Numeric closeTime(1457); //bar的时间超过此值后平仓，一分钟交易=1457      
+
+Vars
+       Numeric splitDot;        //交易滑点
+     
+       Bool bc(False);//开多条件
+       Bool sc(False);//开空条件
+     
+       Numeric tradePrice(0);
+
+       NumericSeries hh;
+       NumericSeries ll;
+
+Begin
+       splitDot=splitRate*MinMove();
+     
+       If(BarStatus==0)
+       {
+               hh=High;
+               ll=Low;
+               Return;
+       }
+     
+       if(Day !=Day[1])
+       {
+               hh=High;
+               ll=Low;                }      
+       Else      
+       If(Time<0.0001*tradBegin)
+       {
+               if(High>hh[1]) hh=High; Else        hh=hh[1];
+               if(Low<ll[1])         ll=Low;  Else        ll=ll[1];              
+       }
+       Else
+       if(Time>=0.0001*tradBegin And Time<=0.1500)
+       {
+               hh=hh[1];
+               ll=ll[1];              
+             
+               //穿越模式
+               bc=CrossOver(Open,hh) Or CrossOver(High,hh) Or CrossOver(Low,hh)  Or CrossOver(Close,hh) ;
+               sc=CrossUnder(Open,ll) Or CrossUnder(High,ll) Or CrossUnder(Low,ll) Or CrossUnder(Close,ll);      
+             
+               if(MarketPosition == 0)
+               {
+                       // 当前无仓，开始建立多头
+                       if(bc)
+                       {
+                               if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=hh+splitDot;
+                               Buy(maxLots,tradePrice);
+                       }
+                       Else
+                       // 当前无仓，开始建立空头
+                       If(sc )
+                       {
+                               if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=ll-splitDot;                      
+                               SellShort(maxLots,tradePrice);                              
+                       }
+               }
+               //-----------------------------------------------------------------------------
+               Else
+               {
+                       if(MarketPosition > 0 )
+                       {
+                               // 当前多仓，加仓多头
+                               if(bc And BarsSinceLastEntry>minSpt)
+                               {
+                                       if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=hh+splitDot;
+                                       Buy(maxLots,tradePrice);
+                               }                      
+                               // 当前多头，要求反转为空头
+                               if(sc)
+                               {
+                                       if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else  tradePrice=ll-splitDot;                                      
+
+                                       // 平多头开空
+                                       SellShort(maxLots,tradePrice);                                      
+                               }                                      
+                               //持仓处理,止损止盈平仓
+                               //........
+                       }
+                       //-----------------------------------------------------------------------------------------------
+                       Else
+                       if(MarketPosition < 0 )
+                       {      
+                               // 当前空仓，加空头
+                               If(sc And BarsSinceLastEntry>minSpt)
+                               {
+                                       if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=ll-splitDot;                      
+                                       SellShort(maxLots,tradePrice);
+                               }                      
+                               // 当前空头，要求反转为多头
+                               if(bc)
+                               {
+                                       if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else  tradePrice=hh+splitDot;                              
+                                       //平空头，开多
+                                       Buy(maxLots,tradePrice);
+                               }                              
+                               //持仓处理,止损止盈平仓                              
+                               //........
+                       }
+               }              
+       }
+End

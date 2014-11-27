@@ -1,0 +1,197 @@
+开拓者夹板交易策略源码（振荡交易模型）
+
+源码：
+
+    // 返回值： 1：有所动作，0：没有动作
+
+    // 返回值为非零时，把当前要建立的头寸大小和方向写入needPosition，把以什么价格去建立该头寸写入needPrice
+
+    // 返回值： 1：有所动作，0：没有动作
+
+    // 返回值为非零时，把当前要建立的头寸大小和方向写入needPosition，把以什么价格去建立该头寸写入needPrice
+
+     
+
+    Params
+
+           Numeric         currentPosition(0);                // 当前头寸，可正可负
+
+           Numeric        firstLots(0);
+
+     
+
+           Numeric         wantShort(120);                // 开空仓位置
+
+           Numeric         wantLong(8);                         // 开多仓位置
+
+         
+
+           Numeric        wantStopShort(0);                // 空头止损的位置
+
+           Numeric        wantStopLong(0);                // 多头止损的位置
+
+     
+
+         
+
+           // 注意：以下两个都是引用变量！！！！
+
+           NumericRef        needPosition;    // 经过计算后的当前头寸，正数：建立多仓，负数：建立空仓，零：平光所有头寸
+
+           NumericRef needPrice;              // 建立needPosition时的价格
+
+         
+
+    Vars
+
+           Numeric                         tem;
+
+         
+
+    Begin
+
+     
+
+           // 14:55:00平掉当日所有头寸
+
+           if(time >= 0.1455 && currentPosition != 0)
+
+           {
+
+                   needPosition = 0;
+
+                   needPrice = close ;
+
+                   return 1;
+
+           }
+
+           if(currentPosition == 0)
+
+           {
+
+                   // 无仓，准备侍机开仓
+
+                   if(close <= wantLong)
+
+                   {
+
+                           // 多头 www.cxh99.com
+
+                           needPosition = firstLots;
+
+                           needPrice = wantLong;
+
+                           return 1;
+
+                   }
+
+                   if(close >= wantShort)
+
+                   {
+
+                           // 空头
+
+                           needPosition = -1 * firstLots;
+
+                           needPrice = wantShort;
+
+                           return 1;
+
+                 
+
+                   }
+
+                   return 0;
+
+           }
+
+         
+
+           if(currentPosition > 0)
+
+           {
+
+                   // 持多仓，准备止损或反转
+
+                   if(close >= wantShort)
+
+                   {
+
+                           // 反转
+
+                           needPosition = -1 * firstLots;
+
+                           needPrice = wantShort;
+
+                           return 1;
+
+                   }
+
+                 
+
+                   if(close <= wantStopLong)
+
+                   {
+
+                           // 止损
+
+                           needPosition = 0;
+
+                           needPrice = wantStopLong;
+
+                           return 1;
+
+                         
+
+                   }
+
+                   return 0;
+
+           }
+
+           if(currentPosition < 0)
+
+           {
+
+                   // 持空仓，准备止损或反转
+
+                   if(close <= wantLong)
+
+                   {
+
+                           // 反转
+
+                           needPosition = firstLots;
+
+                           needPrice = wantLong;
+
+                           return 1;
+
+                   }
+
+                 
+
+                   if(close >= wantStopShort)
+
+                   {
+
+                           // 止损
+
+                           needPosition = 0;
+
+                           needPrice = wantStopShort;
+
+                           return 1;
+
+                         
+
+                   }
+
+                   return 0;
+
+           }
+
+             return 0;
+
+    End

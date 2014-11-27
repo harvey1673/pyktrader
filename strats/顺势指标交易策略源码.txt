@@ -1,0 +1,92 @@
+TB顺势指标交易策略源码[开拓者公式]
+
+//------------------------------------------------------------------------
+// 简称: CCIapply
+// 名称: 顺势指标
+// 类别: 公式应用
+// 类型: 用户应用
+// 来源: WW.CXH99.COM
+//------------------------------------------------------------------------
+
+Params
+   Numeric Para1(10);
+   Numeric Para2(5);
+       Numeric Length(14);
+       Numeric AvgLength(9);
+Vars
+
+       Bool Condition1;
+       Bool Condition2;      
+       Bool PreBreakoutFailure;
+       NumericSeries TmpValue;
+       Numeric Mean( 0 );  
+       Numeric AvgDev( 0 );
+       Numeric Counter( 0 ) ;
+       NumericSeries CCIValue(0);  
+       NumericSeries CCIAvg;
+       Numeric ExitLowestPrice;              
+               Numeric myEntryPrice;                   // 开仓价格
+          Numeric myExitPrice;    // 平仓价格
+       NumericSeries preEntryPrice(0);               // 前一次开仓的价格
+
+Begin
+     
+     
+       TmpValue = High + Low + Close;
+       Mean = AverageFC( TmpValue, Length ) ;
+     
+       AvgDev = 0 ;
+       for Counter = 0 to Length - 1
+       {
+               AvgDev = AvgDev + Abs( TmpValue[Counter] - Mean ) ;
+       }
+       AvgDev = AvgDev / Length ;
+     
+       if( AvgDev == 0)
+               CCIValue = 0;
+       Else
+       CCIValue = ( TmpValue - Mean ) / ( 0.015 * AvgDev ) ;        //求CCI值      
+       CCIAvg = AverageFC(CCIValue, AvgLength );
+     
+        If(BarStatus == 0)
+   {
+               preEntryPrice = InvalidNumeric;
+               PreBreakoutFailure = false;
+       }      
+
+             
+       Condition1 =CCIValue>=CCIAvg&&CCIValue[1]<CCIAvg[1];
+       Condition2 = CCIValue<=CCIAvg&&CCIValue[1]>CCIAvg[1];
+     
+       If(Condition1)
+       {
+               if (MarketPosition==-1)
+               {
+               myExitPrice=c;
+               Commentary("myExitPrice="+Text(myExitPrice));
+               BuyToCover(1,c);
+               }
+        if (MarketPosition==0)
+               {
+                       myEntryPrice=Data0.close;
+                       Commentary("myEntryPrice="+Text(myEntryPrice));
+                       Buy(1,close);
+               }
+       }
+     
+       If(Condition1)
+       {
+               If(MarketPosition==1)
+               {
+               myExitPrice=c;
+               Commentary("myExitPrice="+Text(myExitPrice));
+               Sell(1,c);
+               }
+               If (MarketPosition==0)
+               {
+                       myEntryPrice=Data0.close;
+                       Commentary("myEntryPricePrice="+Text(myEntryPrice));
+                       SellShort(1,close);
+               }
+       }
+End

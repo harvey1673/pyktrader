@@ -1,0 +1,73 @@
+开拓者全自动动态突破型交易系统源码
+
+//源码：
+
+Params
+   Numeric ceilingAmt(60);
+   Numeric floorAmt(20);
+   Numeric bolBandTrig(2.00);
+Vars
+   Numeric lookBackDays(20);        
+   Numeric todayVolatility(0);
+   Numeric yesterDayVolatility(0);
+   Numeric deltaVolatility(0);
+   NumericSeries buyPoint(0);
+   NumericSeries sellPoint(0);
+   NumericSeries longLiqPoint(0);
+   NumericSeries shortLiqPoint(0);
+   Numeric upBand(0);
+   Numeric dnBand(0);
+   Numeric MidLine(0);
+   Numeric Band(0);
+Begin
+   todayVolatility = StandardDev(Close,30,1);
+   yesterDayVolatility = StandardDev(Close[1],30,1);
+   deltaVolatility = (todayVolatility - yesterDayVolatility)/todayVolatility;
+   lookBackDays = lookBackDays * (1 + deltaVolatility);
+   lookBackDays = Round(lookBackDays,0);
+   lookBackDays = Min(lookBackDays,ceilingAmt);
+   lookBackDays = Max(lookBackDays,floorAmt);
+   MidLine = AverageFC(Close,lookBackDays);
+   Band = StandardDev(Close,lookBackDays,bolBandTrig);
+   upBand = MidLine + bolBandTrig * Band;
+   dnBand = MidLine - bolBandTrig * Band;
+   buyPoint = Highest(High[1],lookBackDays);
+   sellPoint = Lowest(Low[1],lookBackDays);
+   longLiqPoint = Average(Close[1],lookBackDays);
+   shortLiqPoint = Average(Close[1],lookBackDays);
+if(Close > upBand)  
+{
+  If(CrossOver(high,buyPoint))  
+ {
+    Buy(1,max( buyPoint, Low ));
+ }
+Commentary("多头触发价:"+Text(buyPoint));
+}
+if(Close < dnBand)
+{
+  If(CrossUnder(Low,sellPoint ))
+  {
+     SellShort(1,min( sellPoint , High ));
+  }
+Commentary("空头触发价:"+Text(sellPoint));
+}
+if(MarketPosition == 1)
+{  
+  If(CrossUnder(Low,longLiqPoint ))
+  {
+     Sell(1,min( longLiqPoint , High ));
+  }
+Commentary("多头退出:"+Text(longLiqPoint));
+}
+
+
+if(MarketPosition == -1)
+{
+  If(CrossOver(high,shortLiqPoint))  
+ {
+    BuyToCover(1,max( shortLiqPoint, Low ));
+ }
+Commentary("空头退出:"+Text(shortLiqPoint));
+}
+
+End

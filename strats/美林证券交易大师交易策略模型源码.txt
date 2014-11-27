@@ -1,0 +1,85 @@
+美林证券交易大师交易策略模型源码
+
+    这个模型是美林证券“黄金圈”的交易大师乔治.克莱曼在《商品和金融期货交易指南》一书中介绍的，是典型的趋势跟踪型策略，是一个始终持有头寸的交易系统。
+
+    交易规则：
+       使用由23日和30日两条EMA平均线组成的波带，确定市场的主要走势。
+    做多条件：1、市场必须第一次收盘在波带之上（就是收盘价同时处在23日和30日两根移动平均线之上）。这一天的K线称为“起始柱”；
+             2、市场随后（也许下一根K线，也许间隔几根K线之后）超过“起始柱”的最高价。此时产生做多信号。
+    做空条件：1、市场必须第一次收盘在波带之下（就是收盘价同时处在23日和30日两根移动平均线之下）。这一天的K线称为“起始柱”；
+             2、市场随后（也许下一根K线，也许间隔几根K线之后）超过“起始柱”的最低价。此时产生卖空信号。
+
+       这个模型的编程难点在于如何记录“起始柱”的最高价和最低价，并以其作为做多或做空的建仓点。因为“起始柱”在突破两条均线后，有可能是下一根K线就突破“起始柱”的高低点，也有可能间隔几根K线之后才突破其高低点。本人TB编程能力有限，希望各位老师帮忙老师将这个策略编写成为交易模型。
+
+     
+
+
+    TB源码：
+
+        Params
+
+           Numeric length1(23);
+
+           Numeric length2(30);
+
+               Numeric filter(10);
+
+               Numeric units(1);
+
+        Vars
+
+               NumericSeries ma1(0);
+
+               NumericSeries ma2(0);
+
+           BoolSeries cond1(False);
+
+               BoolSeries cond2(False);
+
+               NumericSeries startbar1(0);
+
+               NumericSeries startbar2(0);
+
+           NumericSeries tobuy(0);
+
+               NumericSeries tosell(0);
+
+        Begin
+
+               ma1=Average(c,length1);
+
+               ma2=Average(c,length2);
+
+               PlotNumeric("ma1",ma1);
+
+               PlotNumeric("ma2",ma2);
+
+           If(close>ma1&&close>ma2&&close[1]<Max(ma1[1],ma2[1])){
+
+                       cond1=true;
+
+                       startbar1=CurrentBar;
+
+                       tobuy=high;
+
+               }
+
+               If(close<ma1&&close<ma2&&close[1]>min(ma1[1],ma2[1])){
+
+                       cond2=true;
+
+                       startbar2=CurrentBar;
+
+                       tosell=low;
+
+               }
+
+               If(currentbar-startbar1>filter)cond1=false;
+
+               If(currentbar-startbar2>filter)cond2=false;
+
+               If(MarketPosition!=1&&cond1&&high>=tobuy&&currentbar!=startbar1)Buy(units,max(o,tobuy));
+
+           If(MarketPosition!=-1&&cond2&&low<=tosell&&currentbar!=startbar2)SellShort(units,min(o,tosell));
+
+        End

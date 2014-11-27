@@ -1,0 +1,166 @@
+开拓者股指3分钟日内，支撑阻力位突破交易策略源码
+
+//-----------------------------------------------------------------------
+// 简称: 50050402
+// 名称: 支撑阻力位突破
+// 类别: 公式应用
+// 类型: 用户应用
+//------------------------------------------------------------------------
+Params
+       Numeric lostmove(0.20);
+             
+               Numeric N(0.70);
+             
+Vars
+
+            Numeric NetChg(0);
+           Numeric TotChg(0);
+           NumericSeries EffRatio(0);
+               NumericSeries AMAValue;                 //定义效率指数
+                     
+       NumericSeries HighVanlue(0);            //定义高点阻力位；
+       NumericSeries LowVanlue(0);             //定义低点支撑位；
+             
+               NumericSeries HigherVanlue(0);          //较高高点；
+               NumericSeries LowerVanlue(0);           //较低低点；
+             
+               Numeric ATR;
+
+Begin
+
+      //计算ATR
+          ATR = AvgTrueRange(20);
+
+      //定义AMA（自适应曲线）
+           if(CurrentBar == 0)
+           {
+                   AMAValue = close;
+           }Else
+           {
+                     NetChg = Abs( close - close[10] );
+                   TotChg = Summation( Abs( close - close[1] ), 10);              
+                   EffRatio = IIF(TotChg > 0, NetChg / TotChg, 0);
+           }
+     
+             
+               //三点清零
+               If(Time==0.1515)
+               {
+               HighVanlue=0;
+               LowVanlue=0;
+               }
+             
+               //定义阻力支撑位
+               If(Time>0.0930)
+               {
+         If(high[3]>high[4]&&High[3]>High[5]&&high[3]>high[2] &&high[3]>high[1])  
+                 {
+                 HighVanlue=high[3];
+                 }
+             
+         If(low[3]<low[4]&&Low[3]<Low[5] &&low[3]<low[2] &&low[3]<low[1])  
+                 {
+                 LowVanlue=low[3];
+                 }
+               }Else
+               {
+                 HighVanlue=Highest(High,BarsSinceToday);
+                 LowVanlue=Lowest(Low,BarsSinceToday);
+               }
+
+             
+               //比较较高的高点，较低的低点；
+               HigherVanlue = Max(HighVanlue,HighVanlue[1]);
+               LowerVanlue = Min(LowVanlue,LowVanlue[1]);
+             
+             
+             
+               //平仓
+             
+                 //盘中6000止损
+                 If(MarketPosition==1&&close<EntryPrice-20)
+                 {
+                   Sell(1,EntryPrice-20);
+                       PlotString("Vol","金额止损",Low,Red);
+                 }
+                 
+                 If(MarketPosition==-1&&Close>EntryPrice+20)
+                 {
+                   BuyToCover(1,EntryPrice+20);
+                       PlotString("Vol","金额止损",Low,Red);
+                 }
+                 
+                 
+                 //顺势平仓
+                 //平多单
+                 If(MarketPosition==1&&Low<LowVanlue-lostmove)
+                 {
+                  if(Open<LowVanlue-lostmove)
+                  {
+                    Sell(1,Open-lostmove);
+                        PlotString("Vol","破低",Low,Red);
+                  }Else
+                  {
+                  Sell(1,LowVanlue-lostmove);
+                  PlotString("Vol","破低",Low,Red);
+                  }
+                 }
+                 
+                 //平空单
+                 If(MarketPosition==-1&&High>HighVanlue+lostmove)
+                 {
+                   If(Open>HighVanlue+lostmove)
+                       {
+                         BuyToCover(1,Open+lostmove);
+                         PlotString("Vol","破高",Low,Red);
+                       }Else
+                       {
+                   BuyToCover(1,HighVanlue+lostmove);
+                       PlotString("Vol","破高",Low,Red);
+                       }
+                 }
+                 
+                 //回撤止损
+                 IF(MarketPosition==1&&Close<Highest(High,BarsSinceEntry)-4*ATR)
+                 {
+                   Sell(1,Close);
+                       PlotString("Vol","ATR",Low,Red);
+                 }
+                 
+                 If(MarketPosition==-1&&Close>Lowest(Low,BarsSinceEntry)+4*ATR)
+                 {
+                   BuyToCover(1,Close);
+                       PlotString("Vol","ATR",Low,Red);
+                 }
+             
+                 
+               //开仓
+               //顺势突破开仓
+               If(0.0930<Time&&Time<0.1430)
+               {
+                 If(MarketPosition!=1&&Close>HigherVanlue+lostmove&&EffRatio>N)
+                 {
+                 Buy(1,Close);
+                 }
+             
+                 If(MarketPosition!=-1&&Close<LowerVanlue-lostmove&&EffRatio>N)
+                 {
+                 SellShort(1,Close);
+                 }
+               }
+
+             
+                 //收盘平仓
+                 If(MarketPosition==1&&Time>=0.1509)
+                 {
+                 Sell(1,Close);
+                 PlotString("Vol","收盘平仓",Low,Red);
+                 }
+             
+                 If(MarketPosition==-1&&Time>=0.1509)
+                 {
+                 BuyToCover(1,Close);
+                 PlotString("Vol","收盘平仓",Low,Red);
+                 }
+
+End

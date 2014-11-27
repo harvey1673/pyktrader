@@ -1,0 +1,183 @@
+TB的R-Breaker策略源码，一分钟日内 有思路解析
+
+//------------------------------------------------------------------------
+// 简称: R_Breaker
+//来源：CXH99.COM
+Params
+Numeric notbef(9.00);
+Numeric notaft(14.55);
+Numeric f1(0.35);
+Numeric f2(0.07);
+Numeric f3(0.25);
+Numeric reverse(1.00);
+Numeric rangemin(0.2);
+Numeric xdiv(3);
+
+Vars
+NumericSeries ssetup(0);
+NumericSeries bsetup(0);
+NumericSeries senter(0);
+NumericSeries benter(0);
+NumericSeries bbreak(0);
+NumericSeries sbreak(0);
+NumericSeries ltoday(0);
+NumericSeries hitoday(9999);
+NumericSeries startnow(0);
+NumericSeries div(0);
+BoolSeries rfilter(false);
+Numeric i_reverse;
+Numeric i_rangemin;
+Numeric i_vB;
+Numeric i_vS;
+
+Begin
+i_reverse = reverse*(OpenD(0)/100);
+i_rangemin = rangemin*(OpenD(0)/100);
+if(BarStatus==0)
+{
+       startnow=0;
+       div=max(xdiv,1);
+}
+
+if(Date != Date[1])
+{
+       SetGlobalVar(0,0);
+       SetGlobalVar(1,0);
+       startnow=startnow+1;
+       ssetup=hitoday[1]+f1*(Close[1]-ltoday[1]);
+       senter=((1+f2)/2)*(hitoday[1]+Close[1])-(f2)*ltoday[1];
+       benter=((1+f2)/2)*(ltoday[1]+Close[1])-(f2)*hitoday[1];
+       bsetup=ltoday[1]-f1*(hitoday[1]-Close[1]);
+       bbreak=ssetup+f3*(ssetup-bsetup);
+       sbreak=bsetup-f3*(ssetup-bsetup);
+
+       hitoday=High;
+       ltoday=Low;
+
+       rfilter=(hitoday[1]-ltoday[1])>=i_rangemin;
+}//来源：CXH99.COM
+
+
+if(High>hitoday)
+{
+       hitoday=High;
+}
+if(Low<ltoday)
+{
+       ltoday=Low;
+}
+if(Time*100>=notbef and Time*100<notaft and startnow>=2 and rfilter)
+{
+
+       if(Time != GetGlobalVar(1) and GetGlobalVar(1) != 0)
+       {
+               SetGlobalVar(1,10000);
+       }
+       if(hitoday>=ssetup and marketposition>-1 and GetGlobalVar(1)<1)
+       {
+               If(Low<=(senter+(hitoday-ssetup)/div))
+               {
+                       SellShort(1,senter+(hitoday-ssetup)/div);
+                       SetGlobalVar(1,Time);
+                       Return;
+               }
+       }
+       if(ltoday<=bsetup and marketposition<1  and GetGlobalVar(1)<1)
+       {
+               If(High>=(benter-(bsetup-ltoday)/div))
+               {
+                       Buy(1,benter-(bsetup-ltoday)/div);
+                       SetGlobalVar(1,Time);
+                       Return;
+               }
+       }
+
+       if(marketposition==-1)
+       {
+               SetGlobalVar(0,1);
+               if(High-EntryPrice>=i_reverse)
+               {
+                       BuyToCover(1,entryprice+i_reverse);
+                       Return;
+               }
+       }//来源：CXH99.COM
+       if(marketposition==1)
+       {
+               SetGlobalVar(0,1);
+               if(EntryPrice-Low>=i_reverse)
+               {
+                       Sell(1,entryprice-i_reverse);
+                       Return;
+               }
+       }
+
+       if(marketposition==0)
+       {
+               if(High>=bbreak and GetGlobalVar(0) == 0)
+               {
+                       Buy(1,bbreak);
+                       Return;
+               }
+       }
+       if(marketposition==0)
+       {
+               if(low<=sbreak  and GetGlobalVar(0) == 0)
+               {
+                       SellShort(1,sbreak);
+                       Return;
+               }
+       }
+
+}
+
+if(Time*100>=notaft and Time<0.1600)
+{
+
+       if(marketposition==-1)
+       {
+               BuyToCover(1,Open);
+       }
+       if(marketposition==1)
+       {
+               Sell(1,Open);
+       }
+
+}
+End
+
+
+
+//＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+
+
+
+
+
+
+
+
+
+
+思路解析：
+
+
+
+中轨上顶部区间：ssetup：=昨日最高+0.35*（昨天收盘-昨天最低）；
+
+中轨上区间：senter+(昨最高-中轨上顶部区间)/3  //  senter：=（（1+0.07)/2*(昨最高+昨最低）-0.07*昨天最低；
+
+中轨下区间：benter-(中轨下顶部区间-昨最低)/3   // benter：=（（1+0.07)/2*(昨最高+昨最低）-0.07*昨天最高；
+
+中轨下顶部区间：bsetup:=昨最低-0.35*（昨最高-昨收盘）；
+
+上轨：bbreak：=（ssetup+0.25*(ssetup-bsetup);
+
+下轨：sbreak：=bsetup-0.25*(ssetup-bsetup);
+
+
+
+当价格直接突破上轨，开多。 否则， 当今日最高价大于中轨上区间，并且小于上轨运行，价格如果下穿中轨上区间后，开空。
+
+
+
+当价格直接突破下轨，开空。 否则， 当今日最低价小于中轨下区间，并且大于下轨运行，价格如果上穿中轨下区间后，开多。

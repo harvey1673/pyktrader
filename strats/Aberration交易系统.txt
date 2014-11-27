@@ -1,0 +1,66 @@
+开拓者 TB Aberration交易系统源码
+
+Aberration
+
+Aberration交易系统是由Keith Fitschen of Trade-System公司在1986年完成的，首次推出在1983年。这是一款完备的趋势交易系统，在8种期货市场之间灵活运转：谷物、肉类、金属、能源、外汇和金融以及股指期货等。运用统一的交易分析和价值指标，平均每种商品每年交易4次，部位持有时间平均60%每年。
+
+Aberration的持续稳定性使其成为期货投资组合的重要选择。
+
+
+//开拓者 TB Aberration交易系统源码
+
+//------------------------------------------------------------------------
+// 简称: JYXT_Aberration
+// 名称: Aberration
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出:Rookies
+//------------------------------------------------------------------------
+Params
+Numeric Length(35);
+Numeric StdDevUp(2.0);
+Numeric StdDevDn(-2.0);
+Numeric Lots(1);
+
+
+Vars
+NumericSeries UpperBand;
+NumericSeries LowerBand;
+NumericSeries AveMa;
+Numeric StdValue;
+
+
+Begin
+
+AveMa=Average(Close[1],Length);
+StdValue = StandardDev(Close[1],Length);
+
+UpperBand=Avema+StdDevUp*StdValue;
+LowerBand=Avema-StdDevUp*StdValue;
+PlotNumeric("UpperBand",UpperBand);
+PlotNumeric("LowerBand",LowerBand);
+
+PlotNumeric("AveMa",AveMa);
+If(MarketPosition!=1 &&CrossOver(Close[1],UpperBand[1]))
+{
+       Buy(Lots,Open);
+}
+
+If(MarketPosition!=-1 &&CrossUnder(Close[1],LowerBand[1]))
+{
+       SellShort(Lots,Open);
+}
+
+If(MarketPosition==1 && Close[1]<AveMa[1])
+{
+       Sell(Lots,Open);
+
+}
+
+If(MarketPosition==-1 && Close[1]>AveMa[1])
+{
+
+       BuyToCover(Lots,Open);
+}
+
+End

@@ -1,0 +1,87 @@
+开拓者 TB盈利的交易系统源码
+
+    系统描述：以10：00那根K线的开盘价作为基准线BaseLine，上下0.25%做为开仓线，10：05开始，如果CLOSE大于BaseLine*（1+0.0025）则开多，小于BaseLine则平仓；如果CLOSE小于BaseLine*（1-0.0025）则开空，大于BaseLine则平仓；14:00以后不再开仓；14:55平持仓。
+
+
+    这个系统超级白痴，没有那么高智能的开仓点选择，也不做平推（如有兴趣也可以实现平推功能）。看看效果如何：
+
+
+
+    2011年以来，胜率38.37%，盈亏比2.39，年化收益率214%，当前收益323667，最大回撤44268，总交易次数331，平均单次盈利977.
+
+    if888   5分钟周期测试   双向手续费150
+
+     
+
+
+    盈利交易模型源码：
+
+    Params
+
+                   Numeric lots(1);
+                   //Numeric offset(2);       //滑点  
+
+    Vars
+
+                 
+                   NumericSeries Tday(0);
+                   NumericSeries upBand(0);
+                   NumericSeries dnBand(0);
+    Begin
+
+           if(time>=0.1455)
+                   {
+                   if(MarketPosition==1)
+                           sell(lots,close);
+                   if(MarketPosition==-1)
+                                   {
+                           buytocover(lots,close);
+                                                 
+           }
+                                   Return;
+           }
+                 
+         
+                       if(date<>date[1])
+                           {
+                                   Tday=0;
+         
+                           }Else
+                           {
+                         
+                           if (time==0.1000)
+                           {
+                           Tday=o;      
+                           upBand        =        Tday*(1+0.0025);
+                           dnBand        =        Tday*(1-0.0025);
+
+                           }
+                         
+                           }
+                         
+                         
+                           PlotNumeric("text1",upBand);
+                           PlotNumeric("text2",dnBand);
+                         
+                         
+                         
+                   If(MarketPosition <>1 && Close[1] > upBand && time>0.1005 && time <0.1400)
+           {
+                   Buy(lots,max( open ,upBand));  
+                                 
+           }
+
+
+
+           If(MarketPosition <>-1 && Close[1] < dnBand && time>0.1005 && time <0.1400)
+           {
+                   SellShort(lots,min( open ,dnBand));
+                                 
+           }
+                         
+                         
+                         
+         
+    End
+
+

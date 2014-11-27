@@ -1,0 +1,327 @@
+完善的日内交易系统框架源码 可处理信号反复问题
+
+    源码内容：
+
+    //------------------------------------------------------------------------
+    // 简称: s007
+    // 名称: 来源 WWW.CXH99.COM
+    // 类别: 交易指令
+    // 类型: 其他
+    // 输出:
+    //------------------------------------------------------------------------
+    Params
+           Numeric maxLots(1);//单次开仓手数
+           Numeric maxTrad(3);//最大交易次数
+           Numeric splitRate(3); //交易滑点和佣金      
+         
+           Numeric ma1(5);
+           Numeric ma2(18);
+         
+           Numeric tradBegin(909); //开仓时间      
+           Numeric tradEnd(1440); //开仓时间      
+           Numeric closeTime(1456); //bar的时间超过此值后平仓
+         
+           Numeric stopLoss(40); //亏损大于于此值时止损，为0不判断
+           Numeric stopProfis(200); //盈利高于此值时止赢，为0不判断
+         
+           Numeric tracProfis(0); //盈利高于此值后执行追踪止赢，为0不判断
+           Numeric tracLoss(0); //追踪止盈的回撤值，为0不判断，
+         
+           Numeric returnProfis(70); //盈利高于此值后执行回撤止赢，为0不判断      
+                 
+           Numeric minProfis(10); //持仓bar数超过maxHoles后盈利小于此值平仓，为0不判断
+           Numeric maxHolds(7);//为0不判断
+    Vars
+           String fileName;        
+           String fileName2;
+           String toDay;
+           Numeric splitDot;        //交易滑点
+         
+           Bool b1(False);//开多条件
+           Bool b2(False);//开多条件      
+         
+           Bool s1(False);//开空条件
+           Bool s2(False);//开空条件      
+         
+           Bool bc(False);//开多条件
+           Bool sc(False);//开多条件
+         
+           Numeric tradePrice(0);//发单的价格      
+         
+           StringSeries  tradMem("");//交易描述      
+           Numeric tradProve(0);//可否开仓：0/禁止，1/允许
+           Numeric tradNum(0);//交易次数
+           Numeric tradState(0);//持仓状态：0/无，1/多，-1/空      
+           Numeric tradCost(0);//持仓成本
+           Numeric tradIdx(0);//持仓Bar的index
+           Numeric tradCyc(0);//持仓周期
+           String pKey;//
+           String pKeyTradProve("TRADPROVE");//
+           String pKeyTradState("TRADSTATE");//
+           String pKeyTradCost("TRADCOST");//
+           String pKeyTradNum("TRADNUM");//
+           String pKeyTradIdx("TRADIDX");//
+         
+           Numeric curProfit(0);//持仓当前浮动盈亏
+           NumericSeries maxProfit(0);//持仓最大浮盈
+           NumericSeries maxLoss(0);//持仓最大浮亏
+         
+           String  dopos("");//持仓处理代码
+           NumericSeries m1(0);
+           NumericSeries m2(0);
+         
+    Begin
+           splitDot=splitRate*MinMove();
+         
+           pKey=FormulaName()+SymbolName()+Text(BarType())+Text(BarInterval());
+           pKeyTradProve="TRADPROVE";//
+           pKeyTradState="TRADSTATE";//
+           pKeyTradCost="TRADCOST";//
+           pKeyTradNum="TRADNUM";//
+           pKeyTradIdx="TRADIDX";//      
+           //初始化
+           If(BarStatus==0)
+           {              
+                   SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                   SetTBProfileString(pKey,pKeyTradState,Text(0));
+                   SetTBProfileString(pKey,pKeyTradCost,Text(0));
+                   SetTBProfileString(pKey,pKeyTradNum,Text(0));
+                   SetTBProfileString(pKey,pKeyTradIdx,Text(0));
+
+                   tradMem="";
+                   maxProfit=0;
+                   maxLoss=0;      
+                   Return;
+           }
+
+           if(Day !=Day[1])
+           {
+                   SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                   SetTBProfileString(pKey,pKeyTradState,Text(0));
+                   SetTBProfileString(pKey,pKeyTradCost,Text(0));
+                   SetTBProfileString(pKey,pKeyTradNum,Text(0));
+                   SetTBProfileString(pKey,pKeyTradIdx,Text(0));
+                 
+                   tradMem=" ";              
+                   maxProfit=0;
+                   maxLoss=0;              
+           }      
+           Else
+           {
+                   //获取交易状态
+                   tradProve=Value(GetTBProfileString(pKey,pKeyTradProve));
+                   tradState=Value(GetTBProfileString(pKey,pKeyTradState));
+                   tradCost=Value(GetTBProfileString(pKey,pKeyTradCost));
+                   tradNum=Value(GetTBProfileString(pKey,pKeyTradNum));
+                   tradIdx=Value(GetTBProfileString(pKey,pKeyTradIdx));
+                 
+                   tradMem=" ";              
+                   maxProfit=maxProfit[1];
+                   maxLoss=maxLoss[1];
+
+                   m1=iTodayEMA(Open,ma1);//指标
+                   m2=iTodayEMA(Open,ma2);//指标
+
+                   //开仓条件
+                   //跌停板附近不开多仓，涨停附近不开空仓
+                   if(BarStatus==2)
+                   {
+                           b1=Close>(Q_LowerLimit()+15*MinMove());
+                           s1=Close<(Q_UpperLimit()-15*MinMove()) ;
+                   }
+                   Else
+                   {      
+                           b1=Not(High==Low And High==Close Or High[1]==Low[1] );
+                           s1=Not(High==Low And High==Close Or High[1]==Low[1] );
+                   }              
+                         
+                   If(tradNum<=maxTrad And Time>=0.0001*tradBegin And Time<=0.0001*tradEnd)
+                   {
+                           //开仓条件
+                           bc=CrossOver(m1,m2) And b1 ;//
+                           sc=CrossUnder(m1,m2) And b1 ;//                                              
+                   }              
+         
+                   // 当前无仓-----------------------------------------------------------------Begin
+                   if(tradState==0 )
+                   {              
+                           // 当前无仓，开始建立多头
+                           if(bc)
+                           {
+                                   if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=Open+splitDot;                              
+                                   If(Buy(maxLots,tradePrice))
+                                   {
+                                           SetTBProfileString(pKey,pKeyTradProve,Text(0));
+                                           SetTBProfileString(pKey,pKeyTradState,Text(1));
+                                           SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                           SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                           SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));              
+                                           tradMem="开多-"+Text(tradePrice);
+                                           Commentary(tradMem);                                                                              
+                                   }
+                           }
+                           Else
+                           // 当前无仓，开始建立空头
+                           If(sc)
+                           {
+                                   if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=Open-splitDot;                              
+                                   If(SellShort(maxLots,tradePrice))
+                                   {
+                                           SetTBProfileString(pKey,pKeyTradProve,Text(0));
+                                           SetTBProfileString(pKey,pKeyTradState,Text(-1));
+                                           SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                           SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                           SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));                                                              
+                                           tradMem="开空-"+Text(tradePrice);
+                                           Commentary(tradMem);                                      
+                                   }
+                           }
+                   }
+                   // 当前无仓-----------------------------------------------------------------end
+                   // 当前有仓-----------------------------------------------------------------begin
+                   Else
+                   {
+                           //计算当前盈亏和最大浮动盈亏
+                           curProfit=tradState*(Close-tradCost);                      
+                           If(BarStatus==2)
+                           {                              
+                                   If(curProfit>maxProfit)        maxProfit=curProfit;
+                                   If(curProfit<maxLoss)                maxLoss=curProfit;
+                           }
+                           Else
+                           {
+                                   If(tradState==1)
+                                   {
+                                           If((High-tradCost)>maxProfit) maxProfit=(High-tradCost);
+                                           If((Low-tradCost)<maxLoss)                maxLoss=(Low-tradCost);
+                                   }
+                                   If(tradState==-1)
+                                   {
+                                           If((tradCost-Low)>maxProfit)        maxProfit=tradCost-Low;
+                                           If((tradCost-High)<maxLoss)        maxLoss=tradCost-High;      
+                                   }
+                           }                      
+                         
+                           //平多反空
+                           If(tradState==1 And sc And tradNum<maxTrad And Time>=0.0001*tradBegin And Time<=0.0001*tradEnd)
+                           {
+                                   if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=Open-splitDot;      
+                                   If(SellShort(maxLots,tradePrice))
+                                   {
+                                           tradMem="平多反空-"+Text(tradePrice);Commentary(tradMem);
+                                           SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                           SetTBProfileString(pKey,pKeyTradState,Text(-1));
+                                           SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                           SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                           SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));
+                                           maxProfit=0;
+                                           maxLoss=0;      
+                                           curProfit=0;
+                                   }
+                           }
+                           //平空反多
+                           If(tradState==-1 And bc And tradNum<maxTrad And Time>=0.0001*tradBegin And Time<=0.0001*tradEnd)
+                           {
+                                   if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=Open+splitDot;      
+                                   If(Buy(maxLots,tradePrice))
+                                   {
+                                           tradMem="平空反多-"+Text(tradePrice);Commentary(tradMem);
+                                           SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                           SetTBProfileString(pKey,pKeyTradState,Text(1));
+                                           SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                           SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                           SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));
+                                           maxProfit=0;
+                                           maxLoss=0;
+                                           curProfit=0;                                      
+                                   }
+                           }      
+                         
+                           tradCyc=(CurrentBar()-tradIdx);
+                           tradMem="浮盈:"+Text(curProfit)+",最大浮盈:"+Text(maxProfit)+",仓期："+Text(tradCyc);Commentary(tradMem);
+                           dopos="";
+                           //开仓BAR的处理
+                           if(tradCyc==0)
+                           {
+                         
+                           }                      
+                           //持仓BAR的处理
+                           Else
+                           if(tradCyc>0)
+                           {
+                                   //开仓后第一根BAR的处理-应对bar走完后的信号消失问题**********************************************                              
+                                   if(tradCyc==1)
+                                   {
+                                         。。。。。
+                                   }              
+                                   Else                              
+                                   dopos=DoPosition(tradState,tradCyc,curProfit,maxProfit,stopLoss,stopProfis,tracProfis,tracLoss,returnProfis,minProfis,maxHolds,closeTime);
+                           }
+                         
+                           dopos=DoPosition(tradState,tradCyc,curProfit,maxProfit,stopLoss,stopProfis,tracProfis,tracLoss,returnProfis,minProfis,maxHolds,closeTime);
+                           //统一的平仓处理-------------------------------------------------------------------------------------------
+                           if(Len(dopos)>2)
+                           {
+                                   //处理交易价格，叫卖叫买价加上滑点，便于成交
+                                   if(BarStatus==2)
+                                   {
+                                           If(tradState==1)         tradePrice= Q_BidPrice -splitDot;
+                                           If(tradState==-1)         tradePrice= Q_AskPrice +splitDot;
+                                   }Else tradePrice=Close-tradState*splitDot;
+                                 
+                                   //平多
+                                   If(tradState==1)
+                                   {
+                                           If(Sell(maxLots,tradePrice))
+                                           {
+                                                   tradMem=dopos+":平多-"+Text(tradePrice);
+                                                   SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                                   SetTBProfileString(pKey,pKeyTradState,Text(0));                                              
+                                                   maxProfit=0;
+                                                   maxLoss=0;
+                                           }
+                                   }
+                                   //平空
+                                   If(tradState==-1)
+                                   {
+                                           If(BuyToCover(maxLots,tradePrice))
+                                           {
+                                                   tradMem=dopos+":平空-"+Text(tradePrice);
+                                                   SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                                   SetTBProfileString(pKey,pKeyTradState,Text(0));                                              
+                                                   maxProfit=0;
+                                                   maxLoss=0;                                              
+                                           }
+                                   }              
+                                   Commentary(tradMem);                      
+                           }                      
+                   }                                      
+           }
+    End
+
+     
+
+     
+
+     
+
+     
+
+     
+
+     
+
+     
+
+
+    补充说明： m1=iTodayEMA(Open,ma1);//指标
+    m2=iTodayEMA(Open,ma2);//指标
+    dopos=DoPosition(tradState,tradCyc,curProfit,maxProfit,stopLoss,stopProfis,tracProfis,tracLoss,returnProfis,minProfis,maxHolds,closeTime);
+    是用户函数，自己编吧。
+
+     
+
+
+    该指令采用文件方式保存开平仓状态，可以解决开仓bar走完后，信号又消失的问题！
+
+

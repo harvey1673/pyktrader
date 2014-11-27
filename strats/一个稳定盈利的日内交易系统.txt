@@ -1,0 +1,113 @@
+开拓者 TB一个稳定盈利的日内交易系统代码
+
+两天我发过一篇帖子介绍了hans123系统,今天我给大家来点硬货,一个实实在在稳定盈利的日内系统,其中还有很大完善空间,由于我学TB刚刚一周多,技术方面还不是很熟练,希望各位程序高手协助我完善系统,我很喜欢国外论坛的那种氛围,交易高手分享他们的思路和ea雏形,程序高手无偿的帮助他们实现他们的想法,在这个过程中相互提高.再此我希望更多高手分享他们系统的源码,以此来相互提高,让我们早日超过欧美同行的水平.恩,我以为真正掌握交易之道的人是不怕分享他们的思路和系统的,因为一个失效的系统略加修改就可以成为一个稳定获利的系统.为了证明这一点我将在接下来的文章中公布一个和这个系统完全相反的系统,你会发现只要调整交易周期和参数,系统就可以稳定获利.道家说道可道,非常道.名可名,非常名.无,曰天地始.有,曰万物主.常无,欲观其妙.常有,欲关其缴.玄之又玄,众妙之门.用在交易系统上来说就是可以写出来的系统肯定不是永远有效的系统,只有掌握了交易之道的人,才能随着市场变化调整他的交易策略.永远与道同在.所谓常无,就是要经常抛弃以前的所有的理论和观念,以客观观察市场的奥妙.常有,就是要带着你以前设计交易系统的经验和技巧.去审视你现在所用的系统.谨以此篇献给各位交易市场的新手老手.希望我们大家一起合作,制作出一个完善可靠的交易系统来.就算没有任何系统经验的人也来分享一下你们的想法,很多时候新手的一句话也是我灵感的源泉.实在不知道说啥的就帮顶一下吧,此帖能一直置顶我就每周发一个交易系统,呵呵.不废话了,开始说代码和思路.
+***1基本思路:RangeBreak加入交易时间过滤,多周期趋势过滤,突破range过滤.Range优化.
+参加过高级应用培训的人应该很熟悉这个系统,这是我在外汇市场用了很久的系统,想移植到国内来,通过搜索找到了培训的文档.然后写了出来,发现效果不是很好,于是我就对其进行了优化,优化的结果还是相当不错的资金曲线稳定增长,利润也不小,大家可以自己测试一下.用于股指期货铜，锌等品种的15分钟都是相当不错的。恩下面叙述一下基本的交易思路。
+以昨日震幅为基础，今日开盘价+N*昨日震幅等于上轨 今日开盘价-昨日震幅*N等于下轨，突破上轨做多突破下轨做空。反之平仓，14点55分平掉所有仓位。N=0.8
+已完成优化的思路
+1。限制交易时间，最后开仓时间在下午两点以前（根据观察接近收盘的突破一般是无效的）
+2。限制前一日的最小震幅（根据观察昨日震幅太小的话会出现很多无效信号）
+未完成的交易思路 各位高手前辈不吝赐教协助我完成下哈。
+1。根据观察与大周期趋势相反的突破一般来说是假突破。限制大周期趋势方法，日线n周期ma方向.
+  处理方法：
+  1.过滤掉所有与大周期趋势相反的信号
+  2.所有大周期相反的信号反向操作既原来做空现在做多，原来做多现在做空。
+根据我外汇自动交易的经验处理方法2更加有效，但编程比较复杂希望高手能帮助我完成这两个思路的编程。
+PS：大家有什么进一步优化这个系统的思想也可以提出来我会尽我所能去实现它。
+代码缺陷：
+14点55分平仓在15分钟不能运行，在1分钟运行正常。不明白为什么，请高手赐教。
+有其它缺陷大家也请提出来
+
+
+
+
+具体源码
+
+
+//------------------------------------------------------------------------
+// 简称: RB
+// 名称:15Min RangeBreak
+// 类别: 交易指令
+// 类型: 其他
+// 输出:
+//------------------------------------------------------------------------
+Params
+     Numeric PercentOfRange(0.8);//突破参数N
+     Numeric ExitOnCloseMins(14.55);//平仓时间
+     Numeric MinRange(0.2);//最小Range
+     Numeric LastTradeMins(14.00);//最后交易时间
+     Numeric BeginTradeMins(9.00);
+     Numeric Lots(1);
+     Numeric Stoplossset(1);
+Vars
+     NumericSeries DayOpen;
+     NumericSeries preDayRange;
+     NumericSeries HigherAfterEntry;
+     NumericSeries LowerAfterEntry;
+     Numeric preDayHigh;
+     Numeric preDayLow;
+     Numeric UpperBand;
+     Numeric LowerBand;
+     Numeric MyPrice;
+     Numeric StopLine;
+Begin
+     DayOpen=OpenD(0);
+     preDayHigh=HighD(1);
+     preDayLow=LowD(1);
+     preDayRange=HighD(1)-LowD(1);
+     UpperBand=DayOpen+preDayRange*PercentOfRange;
+     LowerBand=Dayopen-preDayRange*PercentOfRange;
+    If(BarsSinceEntry==1)
+    {
+        HigherAfterEntry=AvgEntryPrice;
+        LowerAfterEntry=HigherAfterEntry;
+     }Else If(BarsSinceEntry>1)
+    {
+         HigherAfterEntry=max (HigherAfterEntry[1],High[1]);
+         LowerAfterEntry=min(LowerAfterEntry[1],Low[1]);
+    }
+    If(Date!=Date[1])
+    {DayOpen=Open;
+     preDayRange=preDayHigh-preDayLow;
+     If(preDayRange<Open*MinRange*0.01)
+        PreDayRange=Open*MinRange*0.01;
+     }Else
+     {
+      DayOpen=DayOpen[1];
+      preDayRange=preDayRange[1];
+      }
+    If(MarketPosition!=1&&High>=UpperBand&&Time<LastTradeMins/100)
+    {
+             Myprice=UpperBand;
+             If(Open>Myprice)Myprice=Open;
+             Buy(1,Myprice);
+             Return;
+     }
+     If(MarketPosition!=1&&Low<=LowerBand&&Time<LastTradeMins/100)
+    {
+             Myprice=LowerBand;
+             If(Open<Myprice)Myprice=Open;
+             Sellshort(1,Myprice);
+             Return;
+     }
+     If(MarketPosition==1)
+     {
+           
+            StopLine=UpperBand-DayOpen*StopLossSet*0.01;
+            If(Low<=StopLine)
+            {
+                 MyPrice=StopLine;
+                 If(Open<MyPrice)MyPrice=Open;
+                 BuyToCover(Lots,MyPrice);
+             }
+      }
+     
+     //收盘平仓
+     If(Time>=ExitOnCloseMins/100)
+     {
+              Sell(1,Open);
+              BuyToCover(1,Open);
+      }
+      SetExitOncLOSE;
+End
+  

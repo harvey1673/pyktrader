@@ -1,0 +1,81 @@
+开拓者顺势模型源码
+
+排查:1.基本的公式计算. 2.系统的函数.
+
+针对:1.RSV这个是标准的KD代码,我只是简单的移植,这个出问题的概率不大.
+我查了下资料,有2种说法,一是说是crossover有问题,我看了下别人的源码,也有用crossover.为了避免K=D的假信号,我用必须'大于'(或者是小于)来过滤假信号.
+
+2.就是大家诟病的close函数,这个我正在换算法.或者换其它函数. 现在用的是open等结果.
+
+
+//源码：
+Params
+ Numeric Length(30); //N 30                    
+ Numeric SlowLength(10);   //M1
+ Numeric SmoothLength(10);  //M2
+ Numeric lots(1);
+ Numeric offset(2);
+ Numeric Stoploss(40);
+
+Vars
+NumericSeries HighestValue;                                
+NumericSeries LowestValue;                                      
+NumericSeries KValue;//TB中的K值
+NumericSeries DValue;//TB中的K值
+NumericSeries RSV;        
+NumericSeries K1;//正规的K值
+NumericSeries D1;//正规的D值
+Numeric i_offset;
+Numeric BuyPosition;
+Numeric SellPosition;
+Numeric myEntryPrice;                  
+Numeric myExitPrice;    
+
+Begin
+{
+      HighestValue = HighestFC(High, Length);
+      LowestValue = LowestFC(Low, Length);
+      RSV = (Close-LowestValue)/(HighestValue-LowestValue)*100;
+      K1 = SMA(RSV,SlowLength,1);
+      D1 = SMA(K1,SmoothLength,1);                
+      KValue = SummationFC(Close - LowestValue,SlowLength)/SummationFC(HighestValue-LowestValue,SlowLength)*100;
+      DValue = AverageFC(KValue,SmoothLength);
+      PlotNumeric("RSV",RSV);
+
+if(MarketPosition == 0)
+{
+    if(K1 > D1)
+    {
+        buy(lots,high);  //<---原来这里用的buy(lots,close[1]);
+        Return;
+    }  
+}        
+  else if (MarketPosition == 1) //平多
+  {
+    if(K1 < D1)
+        {
+          sell(lots,open);//<--这里用的是sell(lots,close);
+                  Return;
+        }
+  }
+ //止损
+       If(MarketPosition == 1)
+       {
+               If(Low < EntryPrice - StopLoss * MinMove*PriceScale)
+               {
+                       myExitPrice = EntryPrice - (StopLoss+1) * MinMove*PriceScale;
+                       myExitPrice = max(low,myExitPrice);
+                       Sell(lots,myExitPrice);
+               }
+       }
+       Else If(MarketPosition == -1)
+       {
+               If(High > EntryPrice + StopLoss * MinMove*PriceScale)
+               {
+                       myExitPrice = EntryPrice + (StopLoss+1) * MinMove*PriceScale;
+                       myExitPrice = min(high,myExitPrice);
+                       BuyToCover(lots,myExitPrice);
+               }
+       }      
+}
+end

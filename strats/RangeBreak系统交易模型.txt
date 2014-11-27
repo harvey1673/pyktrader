@@ -1,0 +1,281 @@
+RangeBreak系统交易模型[开拓者公式]
+
+这是个日内交易系统，收盘一定平仓；
+RangeBreak基于昨日振幅和今日开盘价的关系。
+昨日振幅=昨日最高价-昨日最低价
+上轨 = 今日开盘价+N*昨日振幅
+下轨 = 今日开盘价-N*昨日振幅
+当价格突破上轨，买入开仓。
+当价格跌穿下轨，卖出开仓。
+
+
+RangeBreak指标
+
+Params
+Numeric PercentOfRange(0.3);
+Vars
+Numeric DayOpen;
+Numeric preDayRange;
+Numeric UpperBand;
+Numeric LowerBand;
+Begin
+DayOpen = OpenD(0);
+preDayRange = HighD(1) -  LowD(1);
+UpperBand = DayOpen + preDayRange*PercentOfRange;
+LowerBand = DayOpen - preDayRange*PercentOfRange;
+
+PlotNumeric("UpperBand",UpperBand);
+PlotNumeric("LowerBand",LowerBand);
+PlotNumeric("MidLine",DayOpen);
+End
+
+
+RBS_V1
+
+Params
+Numeric PercentOfRange(0.3);
+Numeric ExitOnCloseMins(14.59);
+Vars
+Numeric DayOpen;
+Numeric preDayRange;
+Numeric UpperBand;
+Numeric LowerBand;
+Numeric MyPrice;
+Begin
+DayOpen = OpenD(0);
+preDayRange = HighD(1) -  LowD(1);
+UpperBand = DayOpen + preDayRange*PercentOfRange;
+LowerBand = DayOpen - preDayRange*PercentOfRange;
+If(MarketPosition!=1 && High>=UpperBand)
+  {
+ MyPrice = UpperBand;
+ If(Open > MyPrice) MyPrice = Open;
+ Buy(1,MyPrice);
+ Return;
+}
+
+If(MarketPosition!=-1 && Low<=LowerBand)
+{
+ MyPrice = LowerBand;
+ If(Open < MyPrice) MyPrice = Open;
+ SellShort(1,MyPrice);
+ Return;
+}
+
+// 收盘平仓
+If(Time >=ExitOnCloseMins/100)
+{
+ Sell(1,Open);
+ BuyToCover(1,Open);
+}
+SetExitOnClose;
+End
+
+
+必须考虑的特殊情况
+
+如果前一日涨停或跌停，则会出现范围很小。
+解决方案：
+设定一个范围的最小值，假定为当前价格的0.2%。
+
+代码中的改动
+
+Params
+   Numeric MinRange(0.2);
+Vars
+   NumericSeries DayOpen;
+   Numeric preDayHigh;
+   Numeric preDayLow;  
+   NumericSeries preDayRange;
+Begin
+   preDayHigh = HighD(1);
+   preDayLow = LowD(1);
+   If(Date!=Date[1])
+   {
+       DayOpen = Open;
+       preDayRange = preDayHigh - preDayLow;
+       If(preDayRange < Open*MinRange*0.01)
+            preDayRange = Open*MinRange*0.01;
+   }Else
+   {
+       DayOpen = DayOpen[1];
+       preDayRange = preDayRange[1];
+   }
+
+
+增加止损
+
+有可能通道会比较宽，难道非要等到反转才平仓？
+考虑增加止损设置，有2种方案：
+1、亏损固定点数。
+2、亏损当前价格的百分比。
+考虑到商品价格变化的差异，我们采取第二种方式。
+
+
+止损部分代码
+
+先增加一个变量StopLine,用来保存止损位置。
+下面是做多时的止损代码：
+If(MarketPosition==1)
+{
+StopLine = AvgEntryPrice-DayOpen*StopLossSet*0.01;
+If(Low <= StopLine)
+{
+ MyPrice = StopLine;
+ If(Open < MyPrice) MyPrice = Open;
+ Sell(Lots,MyPrice);  
+}
+}
+
+下面是做空的止损代码：
+
+Else If(MarketPosition==-1)
+{
+StopLine = AvgEntryPrice+DayOpen*StopLossSet*0.01;
+If(High >= StopLine)
+{
+ MyPrice = StopLine;
+ If(Open > MyPrice) MyPrice = Open;
+ BuyToCover(Lots,MyPrice);  
+}
+}
+
+入场时间的考虑
+
+
+突破的时效性，发生在上午和下午意义是不同的。
+不同的商品时效属性不尽相同
+为此我们增加最后交易时间参数，可供优化测试来确定最佳值。
+
+
+实现代码
+
+
+增加参数：
+Numeric LastTradeMins(14.00);
+开仓条件处增加一个时间条件。
+If(MarketPosition!=1 && High>=UpperBand && Time < LastTradeMins/100)
+{
+// 多头开仓
+}
+
+If(MarketPosition!=-1 && Low<=LowerBand && Time < LastTradeMins/100)
+{
+// 空头开仓
+}
+
+止赢规则
+
+为了防止较大的盈利被吞噬，增加跟踪止赢。
+设定跟踪止赢的起始点。
+设定跟踪止赢的回撤值。
+或者可以选择百分比跟踪止赢。
+这里我们采取回撤值。
+
+跟踪止损的编码可配合前面的止损编码一起控制。
+If(HigherAfterEntry>=AvgEntryPrice+DayOpen*TrailingStart*0.01)
+{
+StopLine = HigherAfterEntry - DayOpen*TrailingStop*0.01;
+}Else // 止损
+{
+StopLine = AvgEntryPrice-DayOpen*StopLossSet*0.01;
+}
+ 
+If(Low <= StopLine)
+{
+MyPrice = StopLine;
+If(Open < MyPrice) MyPrice = Open;
+Sell(1,MyPrice);  
+}
+做空的代码类似。
+
+
+再进场原则
+
+
+当我们止损或跟踪止损之后，有两种情况我们需要加以控制：
+止损后，再次突破上轨或下轨；
+追踪止赢后，价格仍符合最初的开仓条件，出场后，马上又会开仓入场。
+同时，为了不错失大的波段，我们也需要再次入场，只是进场需要更高的条件。我们增加一条：
+再次进场必须在突破前期的高点\低点。
+
+
+代码的修改
+
+我们需要标记止损动作，并要记录高低位。
+新建两个布尔型序列变量：
+BoolSeries  bLongStoped;
+BoolSeries  bShortStoped;
+在脚本开始位置增加处理，保证其值向后传递。
+增加HigherAfterEntry和LowerAfterEntry在平仓后的值传递。
+
+
+初次进场和再次进场
+
+在原始开仓位置增加条件，开多仓时bLongStoped不能为True，开空仓时bShortStoped不能为True。
+发出交易指令处理这两个序列变量。
+增加再次入场的代码：
+
+If(bLongStoped && MarketPosition==0 && High >=UpperBand && High > HigherAfterEntry && Time < LastTradeMins/100)
+{
+MyPrice = Max(HigherAfterEntry,UpperBand) + MinPoint;
+If(Open > MyPrice) MyPrice = Open;
+Buy(1,MyPrice);
+bLongStoped = False;
+Return;
+}
+
+// 做空再次入场代码：
+If(bShortStoped && MarketPosition==0 && Low<=LowerBand  && Low < LowerAfterEntry && Time < LastTradeMins/100 && bInBoardRange==false)
+{
+MyPrice = Min(LowerAfterEntry,LowerBand) - MinPoint;
+If(Open < MyPrice) MyPrice = Open;
+SellShort(1,MyPrice);
+bShortStoped = False;
+Return;
+}
+
+
+涨跌停的控制
+
+接近涨跌停板不应开仓。
+若有持仓，价格到达涨跌停板马上平仓。
+
+
+判断是否接近涨跌停
+
+我们新建一个布尔变量bInBoardRange，默认值设置为False。
+bInBoardRange =
+(Open < Q_LowerLimit + DayOpen*StopLossSet*0.02) Or
+( Open > Q_UpperLimit - DayOpen*StopLossSet*0.02);
+
+在开仓条件中加入(bInBoardRange==false)
+
+
+涨跌停板平仓
+
+为了在价格达到涨跌停价马上平仓，我们需要在增加如下代码：
+做多时：
+If(Open == Q_UpperLimit)  Sell(1,Open);
+做空时：
+If(Open == Q_LowerLimit)  BuyToCover(Lots,Open);
+
+交易次数控制
+
+增加失败次数限制，防止单日亏损无限制扩大。
+
+增加二个变量记录失败的次数。
+NumericSeries LongFailureCnts;
+NumericSeries ShortFailureCnts;
+增加一个参数设置最大次数。
+Numeric FailureLimit(2);
+
+实现代码
+
+在脚本开始部分增加序列变量值的向后传递处理。
+在平仓时增加是否亏损的判断，如果亏损则将计数+1.
+If(PositionProfit < 0 ) LongFailureCnts = LongFailureCnts + 1;
+在开仓时增加次数限定。
+  LongFailureCnts < FailureLimit
+
+

@@ -1,0 +1,74 @@
+开拓者 TB 突破+穿越追涨杀跌法交易策略源码
+
+一小段股指期货（IF）程序，送懂得感恩的人。
+
+
+
+
+Params
+ Numeric K1(50);
+ Numeric K2(7);
+ Numeric nOffSet(0);
+ Numeric stopLossSet(100);
+
+ Vars
+ NumericSeries a1;
+ NumericSeries a2;
+ Numeric MinPoint;  
+ Numeric MyEntryPrice;      
+ Numeric MyExitPrice;
+ Numeric stopLossPoint;
+ Numeric offSetDots;
+ bool    cross1;
+ bool    cross2;
+
+Begin
+offSetDots = nOffSet * MinMove * PriceScale;
+
+ a1=Highest(high[1],K1);
+ a2=Lowest(low[1],K2);
+ 
+ cross1=CrossOver(high,a1);
+ cross2=CrossUnder(low,a2);
+ 
+
+ 
+ If(cross1 && MarketPosition<>1)
+ {
+  Buy(1,a1+offSetDots);      
+  }
+ If(cross2 && MarketPosition<>-1)
+ {
+  SellShort(1,a2-offSetDots);      
+  }
+stopLossPoint = stopLossSet * MinMove * PriceScale;
+     
+     
+       If(MarketPosition == 1)
+       {
+     
+             
+               myEntryPrice = AvgEntryPrice;
+     
+                If(low <= myEntryPrice - stopLossPoint)
+               {
+                       myExitPrice = myEntryPrice - stopLossPoint;
+                       If(open < myExitPrice) myExitPrice = open;
+                       Sell(0,myExitPrice);
+               }
+       }
+       else If (MarketPosition == -1)
+       {
+     
+               myEntryPrice = AvgEntryPrice;
+     
+                If(High >= myEntryPrice + stopLossPoint)
+               {
+                       myExitPrice = myEntryPrice + stopLossPoint;
+                       If(open > myExitPrice) myExitPrice = open;
+                       BuyToCover(0,myExitPrice);      
+               }
+       }
+     
+ 
+End

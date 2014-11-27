@@ -1,0 +1,155 @@
+开拓者盈多亏交易策略源码
+
+//------------------------------------------------------------------------
+// 简称: JY
+// 名称:盈多亏少
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出: www.cxh99.com
+//------------------------------------------------------------------------
+
+Params
+   Bool bInitStatus(false);  
+   Numeric InitMP(0);
+   Numeric MidLinel(5600);
+   Numeric MidLineLength(250);
+   Numeric FirstGrid(3);
+   Numeric TotalGrids(10);
+   Numeric GridInterval(3);
+   Numeric WinGrid(3);  
+   Numeric EveryLots(1);  
+   Numeric MidLineWeieht(1);
+   Numeric ExitOnCloseMins(14.50);
+       
+Vars
+   Numeric MidLineWeight;
+   NumericSeries midline;  
+   Numeric MinPoint;  
+   Numeric AvgOfClose;  
+   Numeric AskLine;    
+   Numeric BidLine;    
+   NumericSeries RealMidLine;    
+   Numeric MyRealMp(0);    
+   Numeric TmpGridIndex;    
+   Numeric TmpPrice;
+       Numeric TmpPriee;
+       Numeric OpenDPrice;
+       
+Begin
+
+    OpenDPrice= opend;
+   if(day<>day[1])    
+     {
+            midline=OpenDPrice;
+         }Else        
+        {
+                   midline=midline[1];
+                }
+       MinPoint=MinMove*PriceScale;
+       MyRealMp=GetGlobalvar (0);
+       AvgOfClose =AverageFC(Close, MidLineLength);    
+   If (BarStatus== O)  
+     {
+           If(MyRealMp  ==  InvalidNumeric || bInitStatus)
+           {
+                          MyRealMp=InitMP;
+                          SetGlobalVar(0,MyRealMp);
+                       }Else
+                       If(BarStatus==2&&A_AccountID!="")
+              {
+                             If(Q_AskPrice <= 0||Q_BidPrice <=0 )
+                                 Return;
+                          }
+         }
+       
+        If(Q_BidPrice==Q_UpperLimit||Q_AskPrice==Q_LowerLimit)
+       {
+              Return;
+               }      
+   If ((Time==0.0900||Time==0.1030||Time==0.1330)&&(High ==Low))
+        {
+              Return;
+               }            
+   If (CurrentTime<ExitOnCloseMins/100)
+       {
+                  RealMidLine=MidLine*MidLineWeight+AvgOfClose*(1-MidLineWeight);
+
+              AskLine=Q_AskPrice;
+              BidLine=Q_BidPrice;
+              Commentary ("中线="+Text (RealMidLine));
+              Commentary ("叫卖价="+Text (Askline));
+              Commentary ("叫买价"+Text (BidLine) );
+       If (MyRealmP<=0 &&BidLine>RealMidLine+FirstGrid*MinPoint)
+          {
+                 TmpPrice=RealMidLine+FirstGrid*MinPoint+Abs (MyRealMp)* (GridInterval*MinPoint);
+             TmpPriee=Ceiling (TmpPrice, Minpoint);  
+             Commentary ("开仓价="+text (TmpPrice));  
+             TmpGridIndex=1- IntPart   ((BidLine-RealMidLine -FirstGrid*MinPoint)/(GridInterval*MinPoint));
+                       If(TmpGridIndex<MyRealMp&&TmpGridIndex>=-1*TotalGrids)
+                {
+                                    MyRealMp=MyRealMp-1; A_SendOrder (Enum_Buy, Enum_Entry, EveryLots, BidLine);
+                                }//来源： www.cxh99.com
+                 }Else
+                 If(MyRealMp>=0 && AskLine<RealMidLine- FirstGrid*MinPoint)
+       
+           {
+                           TmpPrice=RealMidLine -FirstGrid*MinPoint -Abs(MyRealMp)*(GridInterval*MinPoint);
+               TmpPrice= Floor (TmpPrice, MinPoint);              
+                               Commentary ("开仓价="+Text (TmpPrice));                              
+               TmpGridIndex=1+Intpart ((RealMidLine- FirstGrid*MinPoint- AskLine)/(GridInterval*MinPoint));
+             If(TmpGridIndex>MyRealMp && TmpGridIndex<=TotalGrids)              
+                {
+                                  MyRealMp=MyRealMp+1;
+                                  A_SendOrder(Enum_Sell, Enum_Entry, EveryLots, AskLine);
+                                }
+            }                                
+                 If (MyRealMp>O)                                                
+                    {
+                                            TmpPrice=RealMidLine-FirstGrid*MinPoint - (Abs (MyRealMp) -1) * (GridInterval*MinPoint) +WinGrid*MinPoint;
+                        TmpPrice = Ceiling(TmpPrice, MinPoint);
+                        Commentary ("平仓价 ="+Text (TmpPriee));                          
+                   }Else
+                                       If (MyRealMp<O)
+                      {
+                                             TmpPrice=RealMidLine+FirstGrid*MinPoint +(Abs (MyRealMp)- 1 )*(GridInterval*MinPoint) -WinGrid*MinPoint;  
+                                                TmpPriee = Floor (TmpPrice, MinPoint);                              
+                         Commentary ("平仓价="+Text (TmpPrice));
+                                          }                          
+                      TmpGridIndex=-1- IntPart((AskLine-FirstGrid*MinPoint+WinGrid*MinPoint-RealMidLine)/(GridInterval*MinPoint));      
+                      TmpGridIndex=min (0, TmpGridIndex);
+                      If(TmpGridIndex>MyRealMp)  
+                         {
+                                                    MyRealMp=MyRealMp+1;
+                                                        A_SendOrder (Enum_Sell, Enum_Exit, EveryLots,AskLine);  
+                            TmpGridIndex=1+IntPart((RealMidLine-FirstGrid*MinPoint+WinGrid*MinPoint-BidLine)/(GridInterval*MinPoint));        
+                                                        TmpGridIndex=max (0, TmpGridIndex);
+                                                 }
+                                         If(TmpGridIndex < MyRealMp)  
+                         {
+                                                       MyRealMp=MyRealMp-1;
+                                                       A_SendOrder (Enum_sell, Enum_Exit, EveryLots,BidLine);
+                                                 }
+                                                 
+         }Else
+                 If(CurrentTime> ExitOnCloseMins/100)                                        
+            {
+                          If(MyRealMp>0)
+                   {
+                                          MyRealMp=MyRealMp-1;A_SendOrder(Enum_Sell,Enum_Exit,EveryLots,BidLine);
+                                       }Else
+                                       If(MyRealMp<0)
+                                          {
+                                             MyRealMp=MyRealMp+1;A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,AskLine);
+                                          }
+           }
+                       SetGlobalVar(0,MyRealMp);
+           Commentary("实际仓位="+Text(MyRealMp));
+           Commentary("当前时间="+Text(Q_LastTime));
+       if(Q_LastTime >0.145000 and CurrentTime<0.150000)
+     {
+           A_SendOrder(Enum_Sell,Enum_Exit,1,Q_BidPrice);
+
+       A_SendOrder(Enum_Buy,Enum_Exit,1,Q_AskPrice);
+        }
+
+End

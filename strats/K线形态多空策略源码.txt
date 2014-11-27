@@ -1,0 +1,37 @@
+开拓者K线形态多空策略源码（用EMA过小震荡行情）[开拓者公式]
+
+开多条件为：当前K线的收盘价比上根K线的收盘价高出N点，连续3次达到条件，则开多。开空反之。用EMA过滤。
+
+
+Params
+Numeric lots(1);
+Numeric p1(5);
+Numeric p2(5);
+Numeric Length(5);
+
+Vars
+BoolSeries Cha1;
+BoolSeries Cha2;
+NumericSeries Ema;
+
+Begin
+
+Cha1=Close[1]-Close[2]>P1*MinMove*PriceScale;
+
+Cha2=Close[2]-Close[1]>p2*MinMove*PriceScale;
+
+Ema=XAverage(XAverage(XAverage(XAverage(Close,Length),Length),Length),Length);
+
+If(Cha1 and Cha1[1] and Cha1[2] and Close[1]>Ema[1])
+{
+   Buy(lots,Open);
+}
+
+If(Cha2 and Cha2[1] and Cha2[2] and Close[1]<Ema[1])
+{
+   SellShort(lots,Open);
+}
+
+
+
+End

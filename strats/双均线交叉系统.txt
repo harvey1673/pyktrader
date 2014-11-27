@@ -1,0 +1,60 @@
+双均线交叉系统[TB交易模型][开拓者公式]
+
+交易规则：
+如果短期均线上穿长期均线，做多，如原来持有空单，则先平空单，再建多仓
+如果短期均线下穿长期均线，做空，如原来持有多单，则先平多单，再建空单
+短周期：10
+长周期：20
+交易头寸暂为1手
+
+
+出场部分设计
+
+我们使用三种类型的止损设置：
+进场后设置初始止损；
+有一定盈利后设置保本止损；
+盈利增大后使用追踪止盈(峰值价回落ATR倍数)；
+为此，设置三个止损参数：
+     Numeric InitialStop(20);                   // 初始止损（千分之N）
+Numeric BreakEvenStop(30);          // 保本止损（千分之N）
+Numeric TrailingStop(50);                // 追踪止损（千分之N）
+三种止损的代码可以放在一起处理，取最有利的价格作为止损（赢）价。
+
+多头止损部分的代码
+
+// 初始止损
+StopLine = EntryPrice * (1-InitialStop/1000);
+
+// 达到保本止损条件，将止损位上移到保本的价位
+If (HigherAfterEntry >= EntryPrice * (1+BreakEvenStop/1000))
+StopLine = EntryPrice;
+
+// 追踪止损的价位超过保本止损价，止损价随盈利峰值价的上升同步提高
+If (StopLine < HigherAfterEntry*(1-TrailingStop/1000))
+StopLine = HigherAfterEntry*(1-TrailingStop/1000);
+
+Commentary("止损价:"+Text(StopLine));
+ 
+// 止损触发
+If(Low <= StopLine)
+{
+MyPrice = StopLine;
+If(Open < MyPrice) MyPrice = Open;
+Sell(Lots,MyPrice);
+bLongStoped = True;  // 止损后设置标志
+Commentary("Long Position Stoped at "+text(MyPrice));
+}
+
+其他规则
+
+其他策略和例子1相同：
+采用多空模型分开设计；
+再进场必须行情再创新高（低）；
+过滤集合竞价数据
+
+
+止损处理的细节
+
+无论初次进场还是再次进场，进场后都是把进场价作为开仓后的盈利最高价或最低价。两者的区别之处在于：
+初次进场，因为是开盘价进场，可以在开仓Bar实现止损；
+而再次入场，因为在历史K线中，无法确定入场点和最高价最低价在时间次序上的关系，从而无法实现在开仓BAR的止损。因此，必须在记录开仓后最高和最低后，加上Return指令，从而忽略掉后面的止损部分公式。
