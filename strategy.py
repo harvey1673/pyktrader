@@ -110,22 +110,22 @@ class Strategy(object):
         if agent == None:
             self.folder = ''
         else:
-            self.folder = self.folder + self.name + '\\'
+            self.folder = self.folder + self.name + '_'
         
     def initialize(self):
         if self.agent == None:
             self.folder = ''
         else:
-            self.folder = self.agent.folder + self.name + '\\'
+            self.folder = self.agent.folder + self.name + '_'
             self.logger = self.agent.logger
         if len(self.data_func)>0:
             for (freq, fobj) in self.data_func:
                 self.agent.register_data_func(freq,fobj)
         self.update_trade_unit()
     
-	def state_refresh(self):
-		self.load_state()
-		
+    def state_refresh(self):
+        self.load_state()
+        
     def resume(self):
         pass
     

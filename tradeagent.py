@@ -16,6 +16,7 @@ import pandas as pd
 import data_handler
 import strategy as strat
 from base import *
+import ctp_emulator 
 from ctp.futures import ApiStruct, MdApi, TraderApi
 
 #数据定义中唯一一个enum
@@ -101,14 +102,20 @@ class MdSpiDelegate(MdApi):
     
     def OnRspUserLogin(self, userlogin, info, rid, is_last):
         self.logger.info(u'MD:user login,info:%s,rid:%s,is_last:%s' % (info,rid,is_last))
-        trading_day = datetime.datetime.strptime(self.GetTradingDay(),'%Y%m%d').date()
-        scur_day = datetime.date.today()
+        trade_day_str = self.GetTradingDay()
+        if len(trade_day_str) == 0:
+            trading_day = datetime.date.today()
+        else:
+            try:
+                trading_day = datetime.datetime.strptime(self.GetTradingDay(),'%Y%m%d').date()
+            except ValueError:
+                trading_day = datetime.date.today()
         if trading_day > self.agent.scur_day:    #换日,重新设置volume
             self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
             #self.agent.scur_day = scur_day
             self.agent.day_switch(trading_day) 
         if is_last and not self.checkErrorRspInfo(info):
-            self.logger.info(u"MD:get today's trading day:%s" % repr(self.GetTradingDay()))
+            self.logger.info(u"MD:get today's trading day:%s" % trade_day_str)
             self.subscribe_market_data(self.instruments)
 
     def subscribe_market_data(self, instruments):
@@ -766,7 +773,7 @@ class Agent(AbsAgent):
         self.scur_day = tday
         
         self.mkt_start_tick = min([self.instruments[inst].start_tick_id for inst in instruments])
-        self.mkt_end_tick = max([self.instruments[inst].end_tick_id for inst in instruments])
+        self.mkt_end_tick = max([self.instruments[inst].last_tick_id for inst in instruments])
         self.trade_start_tick = 1500000
         self.trade_end_tick = 2115000
 
@@ -965,7 +972,7 @@ class Agent(AbsAgent):
         self.logger.info('EOD process: saving EOD position for %s' % self.scur_day.strftime('%y%m%d'))
         if os.path.isfile(logfile):
             self.logger.info('EOD position file for %s already exists' % self.scur_day.strftime('%y%m%d'))
-            return True
+            return False
         else:
             with open(logfile,'wb') as log_file:
                 file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
@@ -1014,6 +1021,7 @@ class Agent(AbsAgent):
             self.scur_day = tick.timestamp.date()
             self.day_finalize(self.instruments.keys())
             if not self.eod_flag:
+                self.eod_flag = True
                 self.run_eod()
             self.eod_flag = False
         
@@ -1022,6 +1030,7 @@ class Agent(AbsAgent):
         
         if (curr_tick > self.instruments[inst].last_tick_id+5):
             if not self.eod_flag:
+                self.eod_flag = True
                 self.run_eod()
                 self.eod_flag = True
             return False
@@ -1109,7 +1118,8 @@ class Agent(AbsAgent):
             
             if tick_id > self.instruments[inst].last_tick_id-5:
                 self.day_finalize([inst])
-                if tick_id > self.mkt_end_tick-5:
+                if (tick_id > self.mkt_end_tick-5) and (not self.eod_flag):
+                    self.eod_flag = True
                     self.run_eod()
                     self.eod_flag = True
         except:
@@ -1172,19 +1182,35 @@ class Agent(AbsAgent):
 
     def run_eod(self):
         print 'run EOD process'
-        now = datetime.datetime.now()
-        tday = now.date()
-        if get_tick_id(now) >= 2116000 and (tday.isoweekday()<6) and (tday not in CHN_Holidays):
-            for etrade in self.etrades:
-                etrade.update()
-                if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
-                    etrade.status = order.ETradeStatus.Cancelled
-            for strat in self.strategies:
-                strat.day_finalize()
-            self.save_eod_positions()
-            self.etrades = []
-            self.ref2order = {}
-            self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
+        pfilled_list = []
+        for etrade in self.etrades:
+            etrade.update()
+            if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
+                etrade.status = order.ETradeStatus.Cancelled
+            elif etrade.status == order.ETradeStatus.PFilled:
+                etrade.status = order.ETradeStatus.Cancelled
+                self.logger.warning('Still partially filled after close. trade id= %s' % etrade.id)
+                pfilled_list.append(etrade)
+        if len(pfilled_list)>0:
+            file_prefix = self.folder + 'PFILLED_'
+            order.save_trade_list(self.scur_day, pfilled_list, file_prefix)    
+        for strat in self.strategies:
+            strat.day_finalize()
+        self.save_eod_positions()
+        curr_pos = {}
+        for inst in self.positions:
+            pos = self.positions[inst]
+            curr_pos[inst] = (pos.curr_pos.long, pos.curr_pos.short)
+        self.etrades = []
+        self.ref2order = {}
+        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
+        for inst in self.positions:
+            if self.instruments[inst].exchange == 'SHFE': 
+                self.positions[inst].pos_yday.long = curr_pos[inst][0] 
+                self.positions[inst].pos_yday.short = curr_pos[inst][1] 
+            else:
+                self.positions[inst].pos_tday.long = curr_pos[inst][0] 
+                self.positions[inst].pos_tday.short = curr_pos[inst][1] 
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1192,11 +1218,12 @@ class Agent(AbsAgent):
         strat.initialize()
          
     def day_switch(self,scur_day):  #重新初始化opener
-        self.logging.info('switching the trading day from %s to %s' % (self.scur_day, scur_day))
+        self.logger.info('switching the trading day from %s to %s' % (self.scur_day, scur_day))
         self.scur_day = scur_day
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
         if not self.eod_flag:
+            self.eod_flag = True
             self.run_eod()
         self.eod_flag = False
                 
@@ -1658,15 +1685,17 @@ def test_main(name='test_trade'):
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
                  'daily_data_days':25, \
                  'min_data_days':2 }
-    myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
+    #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
+    myagent, my_trader = ctp_emulator.create_agent_with_mocktrader(agent_name, insts, strat_cfg, tday)
+    make_user(myagent,user_cfg)
     try:
         myagent.resume()
 
 # position/trade test        
-        myagent.positions['cu1501'].pos_tday.long  = 0
-        myagent.positions['cu1501'].pos_tday.short = 0
-        myagent.positions['cu1502'].pos_tday.long  = 0
-        myagent.positions['cu1502'].pos_tday.short = 0
+        myagent.positions['cu1501'].pos_yday.long  = 2
+        myagent.positions['cu1501'].pos_yday.short = 2
+        myagent.positions['cu1501'].pos_yday.long  = 0
+        myagent.positions['cu1501'].pos_yday.short = 0
         
         myagent.positions['cu1501'].re_calc()
         myagent.positions['cu1502'].re_calc()        
@@ -1676,11 +1705,11 @@ def test_main(name='test_trade'):
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
-        #myagent.tick_id = valid_time - 10
-        #for o in myagent.positions['ag1506'].orders:
-        #    o.on_trade(2000,o.volume,141558400)
+        myagent.tick_id = valid_time - 10
+        #for o in myagent.positions['cu1501'].orders:
+            #o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
-        #myagent.process_trade_list() 
+        myagent.process_trade_list() 
         myagent.positions['cu1501'].re_calc()
         myagent.positions['cu1502'].re_calc()
         #orders = [iorder for iorder in myagent.positions['ag1412'].orders]

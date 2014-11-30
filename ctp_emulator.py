@@ -11,12 +11,119 @@ import data_handler
 import itertools
 from ctp.futures import ApiStruct
 
-class TraderMock(object):
+class CTPOrderMixin(object):
+    def send_order(self, iorder):
+        req = ApiStruct.InputOrder(
+                InstrumentID = iorder.instrument.name,
+                Direction = iorder.direction,
+                OrderRef = str(iorder.order_ref),
+                LimitPrice = iorder.limit_price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
+                VolumeTotalOriginal = iorder.volume,
+                OrderPriceType = iorder.price_type,
+                BrokerID = self.broker_id,
+                InvestorID = self.investor_id,
+                CombOffsetFlag = iorder.action_type,         #开仓 5位字符,但是只用到第0位
+                CombHedgeFlag = ApiStruct.HF_Speculation,   #投机 5位字符,但是只用到第0位
+                VolumeCondition = ApiStruct.VC_AV,
+                MinVolume = 1,  #这个作用有点不确定,有的文档设成0了
+                ForceCloseReason = ApiStruct.FCC_NotForceClose,
+                IsAutoSuspend = 1,
+                UserForceClose = 0,
+                TimeCondition = ApiStruct.TC_GFD,
+                )
+        r = self.ReqOrderInsert(req,self.agent.inc_request_id())
+        return r
+
+    def cancel_order(self, iorder):
+        inst = iorder.instrument
+        req = ApiStruct.InputOrderAction(
+                InstrumentID = inst.name,
+                OrderRef = str(iorder.order_ref),
+                BrokerID = self.broker_id,
+                InvestorID = self.investor_id,
+                FrontID = self.front_id,
+                SessionID = self.session_id,
+                ActionFlag = ApiStruct.AF_Delete,
+                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
+            )
+        r = self.ReqOrderAction(req,self.agent.inc_request_id())
+        return r
+
+    def query_trade( self, startTime = '', endTime = '' ):
+        req = ApiStruct.QryTrade(
+                        BrokerID=self.broker_id, 
+                        InvestorID=self.investor_id,
+                        InstrumentID='',
+                        ExchangeID ='', #交易所代码, char[9]
+                        TradeTimeStart = startTime, #开始时间, char[9]
+                        TradeTimeEnd = endTime, #结束时间, char[9]
+                )
+        r = self.ReqQryTrade(req, self.agent.inc_request_id())
+        return r
+    
+    def query_order(self, startTime = '', endTime = ''):
+        req = ApiStruct.QryOrder(
+                        BrokerID = self.broker_id, 
+                        InvestorID = self.investor_id,
+                        InstrumentID ='',
+                        ExchangeID = '', #交易所代码, char[9]
+                        InsertTimeStart = startTime, #开始时间, char[9]
+                        InsertTimeEnd = endTime, #结束时间, char[9]
+                )
+        r = self.ReqQryOrder(req, self.agent.inc_request_id())
+        return r
+    
+    def query_investor_position_detail(self, instrument_id):
+        req = ApiStruct.QryInvestorPositionDetail(BrokerID=self.broker_id, InvestorID=self.investor_id, InstrumentID=instrument_id)
+        r=self.ReqQryInvestorPositionDetail(req, self.agent.inc_request_id())
+        return r
+
+    def query_investor_position(self, instrument_id):
+        req = ApiStruct.QryInvestorPosition(BrokerID=self.broker_id, InvestorID=self.investor_id,InstrumentID=instrument_id)
+        r=self.ReqQryInvestorPosition(req,self.agent.inc_request_id())
+        return r
+
+    def query_trading_account(self):            
+        req = ApiStruct.QryTradingAccount(BrokerID=self.trader.broker_id, InvestorID=self.trader.investor_id)
+        r=self.ReqQryTradingAccount(req,self.agent.inc_request_id())
+        #self.logger.info(u'A:查询资金账户, 函数发出返回值:%s' % r)
+        return r
+
+    def query_instrument(self, instrument_id):
+        req = ApiStruct.QryInstrument(
+                        InstrumentID=instrument_id,
+                )
+        r = self.ReqQryInstrument(req, self.agent.inc_request_id())
+        return r
+        
+    def query_instruments_by_exch(self, exchange_id):
+        req = ApiStruct.QryInstrument(
+                        ExchangeID=exchange_id,
+                )
+        r = self.ReqQryInstrument(req, self.agent.inc_request_id())
+        return r
+
+    def query_instrument_marginrate(self, instrument_id):
+        req = ApiStruct.QryInstrumentMarginRate(BrokerID=self.broker_id,
+                        InvestorID=self.investor_id,
+                        InstrumentID=instrument_id,
+                        HedgeFlag = ApiStruct.HF_Speculation
+                )
+        r = self.ReqQryInstrumentMarginRate(req,self.agent.inc_request_id())
+        return r
+    
+class TraderMock(CTPOrderMixin):
     def __init__(self,myagent):
+        self.broker_id = '0'
+        self.investor_id = '0'
+        self.front_id = '0'
+        self.session_id = '0'
+        
         self.agent = myagent
         self.available = 1000000    #初始100W
-        # self.myspi = BaseObject(is_logged=True,confirm_settlement_info=self.confirm_settlement_info)
 
+        # self.myspi = BaseObject(is_logged=True,confirm_settlement_info=self.confirm_settlement_info)
+        
     def ReqOrderInsert(self, order, request_id):
         logging.info(u'报单')
         oid = order.OrderRef
@@ -26,11 +133,11 @@ class TraderMock(object):
                     Price = order.LimitPrice,
                     Volume = order.VolumeTotalOriginal,
                     OrderRef = oid,
-                    TradeID=oid,
-                    OrderSysID=oid,
-                    BrokerOrderSeq=oid,
+                    TradeID = oid,
+                    OrderSysID= oid,
+                    BrokerOrderSeq= int(oid),
                     OrderLocalID = oid,
-                    TradeTime = time.strftime('%H%M%S'),
+                    TradeTime = time.strftime('%H%M%S')
                 )
         inst = self.agent.instruments[order.InstrumentID]
         if order.CombOffsetFlag == ApiStruct.OF_Open:
@@ -135,11 +242,7 @@ def trade_mock( curr_date, insts = [['IF1412', 'IF1503']]):
     tday = curr_date
     my_agent, my_trader = create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
     my_user  = MarketDataMock(my_agent)
-    req = BaseObject(InstrumentID='IF1412')
-    my_trader.ReqQryInstrumentMarginRate(req)
-    my_trader.ReqQryInstrument(req)
-    my_trader.ReqQryTradingAccount(req)    
-    
+    req = BaseObject(InstrumentID='IF1412')  
     my_agent.resume()
     my_user.play_tick(tday)
 
@@ -186,4 +289,5 @@ def semi_mock(curr_date, user_cfg, insts = [['IF1412', 'IF1503']]):
 if __name__ == '__main__':
     tday = datetime.date(2014,11,21)
     insts = [['IF1412'], ['IF1503']]
+    semi_mock(tday, PROD_USER)
     trade_mock(tday)
