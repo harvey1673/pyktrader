@@ -144,8 +144,14 @@ class TraderMock(CTPOrderMixin):
             self.available -= order.LimitPrice * inst.multiple * inst.marginrate[0]
         else:
             self.available += order.LimitPrice * inst.multiple * inst.marginrate[0]
-
-        self.agent.rtn_trade(trade)
+            
+        ptrade = BaseObject( instID = trade.InstrumentID,
+                            order_ref = int(trade.OrderRef),
+                            order_sysid = trade.OrderSysID,
+                            price = trade.Price,
+                            volume= trade.Volume,
+                            trade_time = trade.TradeTime )
+        self.agent.rtn_trade(ptrade)
 
     def ReqOrderAction(self, corder, request_id):
         #print u'in cancel'
@@ -160,22 +166,22 @@ class TraderMock(CTPOrderMixin):
 
     def ReqQryTradingAccount(self,req,req_id=0):
         logging.info(u'查询帐户余额')
-        account = BaseObject(Available=self.available) 
-        self.agent.rsp_qry_trading_account(account)
+        #account = BaseObject(Available=self.available) 
+        self.agent.rsp_qry_trading_account(self.available)
 
     def ReqQryInstrument(self,req,req_id=0):#只有唯一一个合约
         logging.info(u'查询合约')
         instID = req.InstrumentID
         inst = self.agent.instruments[instID]
-        ins = BaseObject(InstrumentID = instID, VolumeMultiple = inst.multiple, PriceTick=inst.tick_base)
+        ins = BaseObject(instID = instID, multiple = inst.multiple, tick_base=inst.tick_base, marginrate =  (inst.marginrate[0],inst.marginrate[0]) )
         self.agent.rsp_qry_instrument(ins)
 
     def ReqQryInstrumentMarginRate(self,req,req_id=0):
         logging.info(u'查询保证金')
         instID = req.InstrumentID
         inst = self.agent.instruments[instID]
-        mgr = BaseObject(InstrumentID = instID,LongMarginRatioByMoney=inst.marginrate[0],ShortMarginRatioByMoney=inst.marginrate[0])
-        self.agent.rsp_qry_instrument_marginrate(mgr)
+        mgr = (inst.marginrate[0],inst.marginrate[0])
+        self.agent.rsp_qry_instrument_marginrate(instID, mgr)
 
     def ReqQryInvestorPosition(self,req,req_id=0):
         #暂默认无持仓
@@ -242,7 +248,7 @@ def trade_mock( curr_date, insts = [['IF1412', 'IF1503']]):
     tday = curr_date
     my_agent, my_trader = create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
     my_user  = MarketDataMock(my_agent)
-    req = BaseObject(InstrumentID='IF1412')  
+    req = BaseObject(InstrumentID='cu1502')  
     my_agent.resume()
     my_user.play_tick(tday)
 
@@ -272,7 +278,7 @@ def semi_mock(curr_date, user_cfg, insts = [['IF1412', 'IF1503']]):
     my_agent, my_trader = create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
     agent.make_user(my_agent,user_cfg)
     
-    req = BaseObject(InstrumentID='IF1412')
+    req = BaseObject(InstrumentID='cu1502')
     my_trader.ReqQryInstrumentMarginRate(req)
     my_trader.ReqQryInstrument(req)
     my_trader.ReqQryTradingAccount(req)    
@@ -288,6 +294,6 @@ def semi_mock(curr_date, user_cfg, insts = [['IF1412', 'IF1503']]):
     
 if __name__ == '__main__':
     tday = datetime.date(2014,11,21)
-    insts = [['IF1412'], ['IF1503']]
-    semi_mock(tday, PROD_USER)
-    trade_mock(tday)
+    insts = [['cu1502'], ['cu1503']]
+    semi_mock(tday, PROD_USER, insts)
+    #trade_mock(tday)
