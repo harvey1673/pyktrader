@@ -1,4 +1,4 @@
-#-*- coding:utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 import ctp.futures
 from agent import *
 from base import *
@@ -11,15 +11,15 @@ class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
         并自行处理杂务
     '''
     logger = logging.getLogger('ctp.MdSpiDelegate')
-	ApiStruct = ctp.futures.ApiStruct
+    ApiStruct = ctp.futures.ApiStruct
     def __init__(self,
             instruments, #合约映射 name ==>c_instrument
             broker_id,   #期货公司ID
             investor_id, #投资者ID
             passwd, #口令
             agent,  #实际操作对象
-        ):        
-        self.instruments = set([name for name in instruments])
+        ):            
+        self.instruments = instruments
         self.broker_id =broker_id
         self.investor_id = investor_id
         self.passwd = passwd
@@ -32,7 +32,7 @@ class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
         pass
 
     def subscribe_market_data(self, instruments):
-        self.SubscribeMarketData(list(instruments))
+        self.SubscribeMarketData(instruments)
 
     def market_data2tick(self, dp, timestamp):
         #market_data的格式转换和整理, 交易数据都转换为整数
@@ -53,7 +53,7 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
         并自行处理杂务
     '''
     logger = logging.getLogger('ctp.TraderSpiDelegate')    
-	ApiStruct = ctp.futures.ApiStruct
+    ApiStruct = ctp.futures.ApiStruct
     def __init__(self,
             instruments, #合约映射 name ==>c_instrument 
             broker_id,   #期货公司ID
@@ -61,7 +61,7 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
             passwd, #口令
             agent,  #实际操作对象
         ):        
-        self.instruments = set([name for name in instruments])
+        self.instruments = instruments
         self.broker_id = broker_id
         self.investor_id = investor_id
         self.passwd = passwd
@@ -118,7 +118,7 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
                 self.logger.warning(u'TD-ORQSI-B 结算单内容错误:%s' % str(inst))
             #self.agent.initialize()
             pass
-            
+
     def OnRspQrySettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
         '''请求查询结算信息确认响应'''
         self.logger.debug(u"TD:结算单确认信息查询响应:rspInfo=%s,结算单确认=%s" % (pRspInfo,pSettlementInfoConfirm))
@@ -136,14 +136,13 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
                 self.logger.info(u'TD:最新结算单已确认，不需再次确认,最后确认时间=%s,scur_day:%s' % (pSettlementInfoConfirm.ConfirmDate,self.agent.scur_day))
                 self.agent.initialize()
 
-
     def OnRspSettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
         '''投资者结算结果确认响应'''
         if(self.resp_common(pRspInfo,bIsLast,u'结算单确认')>0):
             self.agent.isSettlementInfoConfirmed = True
             self.logger.info(u'TD:结算单确认时间: %s-%s' %(pSettlementInfoConfirm.ConfirmDate,pSettlementInfoConfirm.ConfirmTime))
         self.agent.initialize()
-		
+        
     def check_order_status(self):
         Is_Set = False
         if len(self.ctp_orders)>0:
@@ -167,7 +166,6 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
             self.ctp_orders = {} #{ o: self.ctp_orders[o] for o in order_list}
         return Is_Set
 
-		
 def make_user(my_agent,hq_user):
     #print my_agent.instruments
     for port in hq_user.ports:

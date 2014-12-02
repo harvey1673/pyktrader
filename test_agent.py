@@ -1,3 +1,4 @@
+﻿#-*- coding:utf-8 -*-
 import agent
 import fut_api
 import strategy
@@ -47,7 +48,7 @@ def test_main(name='test_trade'):
                  'min_data_days':2 }
     #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
     myagent, my_trader = ctp_emulator.create_agent_with_mocktrader(agent_name, insts, strat_cfg, tday)
-    make_user(myagent,user_cfg)
+    fut_api.make_user(myagent,user_cfg)
     try:
         myagent.resume()
 
@@ -90,12 +91,12 @@ def test_main(name='test_trade'):
 #         myagent.ref2order[iorder.order_ref] = iorder
 #         myagent.cancel_order(iorder)
 #         print iorder.status        
-        #测试报单
+        #娴嬭瘯鎶ュ崟
 #         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=1)
 #         myagent.open_position(morder)
 #         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=20)
 #         
-#         #平仓
+#         #骞充粨
 #         corder = agent.BaseObject(instrument='IF1103',direction='1',order_ref=myagent.inc_order_ref(),price=3220,volume=1)
 #         myagent.close_position(corder)
 #         

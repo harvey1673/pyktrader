@@ -1,7 +1,8 @@
-#-*- coding:utf-8 -*-
+﻿#-*- coding:utf-8 -*-
 import ctp.lts
 from agent import *
 from base import *
+from misc import *
 import logging
 import order
 
@@ -11,15 +12,17 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
         并自行处理杂务
     '''
     logger = logging.getLogger('ctp.LtsMdSpi')
-	ApiStruct = ctp.lts.ApiStruct
+    ApiStruct = ctp.lts.ApiStruct
     def __init__(self,
             instruments, #合约映射 name ==>c_instrument
+            exchanges,
             broker_id,   #期货公司ID
             investor_id, #投资者ID
             passwd, #口令
             agent,  #实际操作对象
-        ):        
-        self.instruments = set([name for name in instruments])
+        ):            
+        self.instruments = instruments
+        self.exchanges = exchanges
         self.broker_id =broker_id
         self.investor_id = investor_id
         self.passwd = passwd
@@ -32,9 +35,16 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
         pass
 
     def subscribe_market_data(self, instruments):
-        self.SubscribeMarketData(list(instruments))
+        instIds = {'SSE': [], 'SZE':[]}
+        for inst in instruments:
+            instId, echgId = inst.split('.')
+            instIds[echgId].append(instId)
+        for echgId in instIds:
+            if len(instIds[echgId])>0:
+                self.SubscribeMarketData(instIds[echgId], echgId)
 
     def market_data2tick(self, dp, timestamp):
+        print dp
         #market_data的格式转换和整理, 交易数据都转换为整数
         try:
             #rev的后四个字段在模拟行情中经常出错
@@ -53,7 +63,7 @@ class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):
         并自行处理杂务
     '''
     logger = logging.getLogger('ctp.LtsTraderSpi')    
-	ApiStruct = ctp.lts.ApiStruct
+    ApiStruct = ctp.lts.ApiStruct
     def __init__(self,
             instruments, #合约映射 name ==>c_instrument 
             broker_id,   #期货公司ID
@@ -61,7 +71,7 @@ class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):
             passwd, #口令
             agent,  #实际操作对象
         ):        
-        self.instruments = set([name for name in instruments])
+        self.instruments = instruments
         self.broker_id = broker_id
         self.investor_id = investor_id
         self.passwd = passwd
@@ -118,7 +128,7 @@ class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):
                 self.logger.warning(u'TD-ORQSI-B 结算单内容错误:%s' % str(inst))
             #self.agent.initialize()
             pass
-            
+
     def OnRspQrySettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
         '''请求查询结算信息确认响应'''
         self.logger.debug(u"TD:结算单确认信息查询响应:rspInfo=%s,结算单确认=%s" % (pRspInfo,pSettlementInfoConfirm))
@@ -136,14 +146,13 @@ class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):
                 self.logger.info(u'TD:最新结算单已确认，不需再次确认,最后确认时间=%s,scur_day:%s' % (pSettlementInfoConfirm.ConfirmDate,self.agent.scur_day))
                 self.agent.initialize()
 
-
     def OnRspSettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
         '''投资者结算结果确认响应'''
         if(self.resp_common(pRspInfo,bIsLast,u'结算单确认')>0):
             self.agent.isSettlementInfoConfirmed = True
             self.logger.info(u'TD:结算单确认时间: %s-%s' %(pSettlementInfoConfirm.ConfirmDate,pSettlementInfoConfirm.ConfirmTime))
         self.agent.initialize()
-		
+        
     def check_order_status(self):
         Is_Set = False
         if len(self.ctp_orders)>0:
@@ -167,11 +176,10 @@ class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):
             self.ctp_orders = {} #{ o: self.ctp_orders[o] for o in order_list}
         return Is_Set
 
-		
-def make_user(my_agent,hq_user):
+def make_user(my_agent,hq_user, insts):
     #print my_agent.instruments
     for port in hq_user.ports:
-        user = LtsMdSpi(instruments=my_agent.instruments, 
+        user = LtsMdSpi(instruments=insts, 
                              broker_id=hq_user.broker_id,
                              investor_id= hq_user.investor_id,
                              passwd= hq_user.passwd,
@@ -205,6 +213,20 @@ def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.
 
 def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = datetime.date.today()):
     trader, my_agent = create_trader(tradercfg, insts, strat_cfg, agent_name, tday)
-    make_user(my_agent,usercfg)
+    make_user(my_agent,usercfg, insts)
     return my_agent
-    
+
+def test_main():
+    logging.basicConfig(filename="save_lts_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    app_name = 'SaveAgent'
+    insts = ['600104.SSE', '000300.SSE', '510180.SSE']
+    my_agent = SaveAgent(name = app_name, trader = None, cuser = None, instruments=insts, daily_data_days=0, min_data_days=0)
+    my_agent.save_flag = False
+    make_user(my_agent,LTS_SO_USER, insts)
+    try:
+        while 1: time.sleep(1)
+    except KeyboardInterrupt:
+        my_agent.mdapis = []; my_agent.trader = None
+
+if __name__=="__main__":
+    test_main()

@@ -1,4 +1,4 @@
-#-*- coding:utf-8 -*-
+﻿#-*- coding:utf-8 -*-
 import workdays
 import time
 import datetime
@@ -102,7 +102,7 @@ class CTPMdMixin(object):
             self.agent.RtnTick(tick)
         finally:
             pass
-		        
+                
 class CTPTraderQryMixin(object):
     def query_instrument_marginrate(self, instrument_id):
         req = self.ApiStruct.QryInstrumentMarginRate(BrokerID=self.broker_id,
@@ -170,29 +170,29 @@ class CTPTraderQryMixin(object):
     def queryDepthMarketData(self, instrument):
         req = self.ApiStruct.QryDepthMarketData(InstrumentID=instrument)
         r=self.ReqQryDepthMarketData(req, self.agent.inc_request_id())
-		
+        
     ###交易操作
     def send_order(self, iorder):
-		if iorder.direction == ORDER_BUY:
-			direction = self.ApiStruct.D_Buy
-		else:
-			direction = self.ApiStruct.D_Sell
-			
-		if iorder.price_type == OPT_MARKET_ORDER:
-			price_type = self.ApiStruct.OPT_AnyPrice
-		elif iorder.price_type == OPT_LIMIT_ORDER:
-			price_type = self.ApiStruct.OPT_LimitPrice
-		
-		if iorder.action_type == OF_OPEN:
-			action_type = self.ApiStruct.OF_Open
-		elif iorder.action_type == OF_CLOSE:
-			action_type = self.ApiStruct.OF_Close
-		elif iorder.action_type == OF_CLOSE_TDAY:
-			action_type = self.ApiStruct.OF_CloseToday
-		elif iorder.action_type == OF_CLOSE_YDAY:
-			action_type = self.ApiStruct.OF_CloseYesterday
-			
-		req = self.ApiStruct.InputOrder(
+        if iorder.direction == ORDER_BUY:
+            direction = self.ApiStruct.D_Buy
+        else:
+            direction = self.ApiStruct.D_Sell
+            
+        if iorder.price_type == OPT_MARKET_ORDER:
+            price_type = self.ApiStruct.OPT_AnyPrice
+        elif iorder.price_type == OPT_LIMIT_ORDER:
+            price_type = self.ApiStruct.OPT_LimitPrice
+        
+        if iorder.action_type == OF_OPEN:
+            action_type = self.ApiStruct.OF_Open
+        elif iorder.action_type == OF_CLOSE:
+            action_type = self.ApiStruct.OF_Close
+        elif iorder.action_type == OF_CLOSE_TDAY:
+            action_type = self.ApiStruct.OF_CloseToday
+        elif iorder.action_type == OF_CLOSE_YDAY:
+            action_type = self.ApiStruct.OF_CloseYesterday
+            
+        req = self.ApiStruct.InputOrder(
                 InstrumentID = iorder.instrument.name,
                 Direction = direction,
                 OrderRef = str(iorder.order_ref),
@@ -300,10 +300,10 @@ class CTPTraderRspMixin(object):
         else:
             self.logger.info(u"TD:%s结果: 等待数据接收完全..." % name)
             return 0
-		
+        
     def OnRspQryDepthMarketData(self, depth_market_data, pRspInfo, nRequestID, bIsLast):
         pass
-		
+        
     ###交易准备
     def OnRspQryInstrumentMarginRate(self, pInstMarginRate, pRspInfo, nRequestID, bIsLast):
         '''
@@ -490,7 +490,7 @@ class CTPTraderRspMixin(object):
         '''
         self.logger.warning(u'TD:交易所撤单录入错误回报, 可能已经成交,rspInfo=%s'%(str(pRspInfo),))
         self.agent.err_order_action(pOrderAction.OrderRef,pOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
-				
+                
 class Instrument(object):
     @staticmethod
     def create_instruments(names):
@@ -505,9 +505,13 @@ class Instrument(object):
         return objs
     
     def __init__(self,name):
-        self.name = name
-        self.exchange = 'CFFEX'
-        self.product = 'IF'
+        if '.' in name:
+            self.name, self.exchange = name.split('.')
+            self.product = 'Stock'
+        else: 
+            self.name = name
+            self.exchange = 'CFFEX'
+            self.product = 'IF'
         self.broker_fee = 0.0
         #保证金率
         self.marginrate = (0,0) #(多,空)
@@ -532,18 +536,28 @@ class Instrument(object):
         self.is_busy = False
     
     def get_inst_info(self):
-        self.product = inst2product(self.name)
-        prod_info = mysqlaccess.load_product_info(self.product)
-        self.exchange = prod_info['exch']
-        self.start_tick_id =  prod_info['start_min'] * 1000
-        self.last_tick_id =  prod_info['end_min'] * 1000     
-        self.multiple = prod_info['lot_size']
-        self.tick_base = prod_info['tick_size']
-        self.broker_fee = prod_info['broker_fee']
+        if self.product == 'Stock':
+            self.start_tick_id = 1530000
+            self.last_tick_id = 2100000
+            self.multiple = 0
+            self.tick_base = 0.01
+            self.broker_fee = 0
+        else:
+            self.product = inst2product(self.name)
+            prod_info = mysqlaccess.load_product_info(self.product)
+            self.exchange = prod_info['exch']
+            self.start_tick_id =  prod_info['start_min'] * 1000
+            self.last_tick_id =  prod_info['end_min'] * 1000     
+            self.multiple = prod_info['lot_size']
+            self.tick_base = prod_info['tick_size']
+            self.broker_fee = prod_info['broker_fee']
         return
     
     def get_margin_rate(self):
-        self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
+        if self.product == 'Stock':
+            self.marginrate = (1,0)
+        else:
+            self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
 
     def calc_margin_amount(self,price,direction):   
         my_marginrate = self.marginrate[0] if direction == ORDER_BUY else self.marginrate[1]
@@ -1056,12 +1070,12 @@ class Agent(AbsAgent):
          
     def day_switch(self,scur_day):  #重新初始化opener
         self.logger.info('switching the trading day from %s to %s' % (self.scur_day, scur_day))
-        self.scur_day = scur_day
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
         if not self.eod_flag:
             self.eod_flag = True
             self.run_eod()
+        self.scur_day = scur_day
         self.eod_flag = False
                 
     def init_init(self):    #init中的init,用于子类的处理
@@ -1469,4 +1483,4 @@ class SaveAgent(Agent):
 
 if __name__=="__main__":
     pass
-	
+    

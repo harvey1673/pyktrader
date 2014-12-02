@@ -1,5 +1,6 @@
-#-*- coding:utf-8 -*-
+﻿# coding=utf-8
 import agent
+import fut_api
 import time
 import logging 
 import mysqlaccess as mdb
@@ -9,10 +10,11 @@ from misc import *
 import strategy as strat
 import data_handler
 import itertools
-from ctp.futures import ApiStruct
+import ctp.futures
 
 class TraderMock(agent.CTPTraderQryMixin):
-	logger = logging.getLogger('ctp.MockTrader') 
+    ApiStruct = ctp.futures.ApiStruct
+    logger = logging.getLogger('ctp.MockTrader') 
     def __init__(self,myagent):
         self.broker_id = '0'
         self.investor_id = '0'
@@ -25,7 +27,7 @@ class TraderMock(agent.CTPTraderQryMixin):
     def ReqOrderInsert(self, order, request_id):
         logging.info(u'报单')
         oid = order.OrderRef
-        trade = ApiStruct.Trade(
+        trade = self.ApiStruct.Trade(
                     InstrumentID = order.InstrumentID,
                     Direction=order.Direction,
                     Price = order.LimitPrice,
@@ -38,7 +40,7 @@ class TraderMock(agent.CTPTraderQryMixin):
                     TradeTime = time.strftime('%H%M%S')
                 )
         inst = self.agent.instruments[order.InstrumentID]
-        if order.CombOffsetFlag == ApiStruct.OF_Open:
+        if order.CombOffsetFlag == self.ApiStruct.OF_Open:
             self.available -= order.LimitPrice * inst.multiple * inst.marginrate[0]
         else:
             self.available += order.LimitPrice * inst.multiple * inst.marginrate[0]
@@ -54,10 +56,10 @@ class TraderMock(agent.CTPTraderQryMixin):
     def ReqOrderAction(self, corder, request_id):
         #print u'in cancel'
         oid = corder.OrderRef
-        rorder = ApiStruct.Order(
+        rorder = self.ApiStruct.Order(
                     InstrumentID = corder.InstrumentID,
                     OrderRef = corder.OrderRef,
-                    OrderStatus = ApiStruct.OST_Canceled,
+                    OrderStatus = self.ApiStruct.OST_Canceled,
                 )
         #self.agent.rtn_order(rorder)
         self.agent.err_order_action(rorder.OrderRef,rorder.InstrumentID,u'26',u'测试撤单--报单已成交')
@@ -94,6 +96,7 @@ class TraderMock(agent.CTPTraderQryMixin):
 class MarketDataMock(object):
     '''简单起见，只模拟一个合约，用于功能测试
     '''
+    ApiStruct = ctp.futures.ApiStruct
     def __init__(self,myagent):
         self.instIDs = myagent.instruments.keys()
         self.data_freq = 'tick'
@@ -174,7 +177,7 @@ def semi_mock(curr_date, user_cfg, insts = [['IF1412', 'IF1503']]):
     agent_name = "Test" 
     tday = curr_date
     my_agent, my_trader = create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
-    agent.make_user(my_agent,user_cfg)
+    fut_api.make_user(my_agent,user_cfg)
     
     req = BaseObject(InstrumentID='cu1502')
     my_trader.ReqQryInstrumentMarginRate(req)

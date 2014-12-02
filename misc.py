@@ -49,6 +49,23 @@ TEST_TRADER = BaseObject( broker_id="8000",
                              passwd ="121862", 
                              ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305"])
 
+LTS_SO_USER = BaseObject(    broker_id="2011", 
+                             investor_id="1111111", 
+                             passwd="111111", 
+                             ports=["tcp://211.144.195.163:34513"])
+LTS_SO_TRADER = BaseObject(    broker_id="2011", 
+                               investor_id="1111111", 
+                               passwd="111111", 
+                               ports= ["tcp://211.144.195.163:34505"])
+LTS_AS_USER = BaseObject(    broker_id="2011", 
+                             investor_id="11111", 
+                             passwd="11111", 
+                             ports=["tcp://211.144.195.163:44513"])
+LTS_AS_TRADER = BaseObject(    broker_id="2011", 
+                               investor_id="11111", 
+                               passwd="11111", 
+                               ports= ["tcp://211.144.195.163:44505"])
+
 month_code_map = {'f': 1,
                   'g': 2,
                   'h': 3,
