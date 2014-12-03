@@ -131,16 +131,9 @@ def save_sim_results(file_prefix, res, trades):
     
 if __name__=="__main__":
     rollrule = '-30b'
-    commod_list1= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
-    start_dates1 = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
-                [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH']
-    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
-    commod_list = commod_list1+commod_list2
-    start_dates = start_dates1 + start_dates2
+    start_dates = datetime.date(2010,9,1)
+    asset = 'm'
     end_date = datetime.date(2014,11,7)
-    systems = [[20,10],[15,7],[40,20],[55,20]]
     for sys in systems:
         file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_R20b_%s' % sys[0]
         for cmd,sdate in zip(commod_list, start_dates):
@@ -151,4 +144,5 @@ if __name__=="__main__":
             (res, trades) = turtle_sim( [cmd], sdate, end_date, nearby = nearby, rollrule = rollrule, signals = sys )
             print 'saving results for cmd = %s, sys= %s' % (cmd, sys[0])
             save_sim_results(file_prefix, res, trades)
-    
+            
+            
