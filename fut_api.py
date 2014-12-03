@@ -44,7 +44,7 @@ class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
                            bidPrice1=dp.BidPrice1, bidVol1=dp.BidVolume1, 
                            askPrice1=dp.AskPrice1, askVol1=dp.AskVolume1)
         except Exception,inst:
-            self.logger.warning(u'MD:%s 行情数据转换错误:updateTime="%s",msec="%s",tday="%s"' % (dp.InstrumentID, timestamp))
+            self.logger.warning(u'MD:%s 行情数据转换错误:updateTime="%s"' % (dp.InstrumentID, timestamp))
         return rev
 
 class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.TraderApi):

@@ -6,7 +6,6 @@ from misc import *
 import logging
 import order
 
-
 class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
     '''
         将行情信息转发到Agent
@@ -29,14 +28,14 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
         self.session_id = None
         self.agent = agent
         ##必须在每日重新连接时初始化它. 这一点用到了生产行情服务器收盘后关闭的特点(模拟的不关闭)
-        self.last_day = 0
+        self.last_day = datetime.date.today().strftime('%Y%m%d')
         agent.add_mdapi(self)
         pass
 
     def subscribe_market_data(self, instruments):
-		inst_set = set(instruments)
-		for exch in CHN_Stock_Exch:
-			insts = list(inst_set & set(CHN_Stock_Exch[exch]))
+        inst_set = set(instruments)
+        for exch in CHN_Stock_Exch:
+            insts = list(inst_set & set(CHN_Stock_Exch[exch]))
             if len(insts)>0:
                 self.SubscribeMarketData(insts, exch)
 
@@ -45,23 +44,15 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
         #market_data的格式转换和整理, 交易数据都转换为整数
         try:
             #rev的后四个字段在模拟行情中经常出错
-            rev = StockTick(instID=dp.InstrumentID, timestamp=timestamp, openInterest=dp.OpenInterest, 
-                           volume=dp.Volume, turnover=dp.Turnover, price=dp.LastPrice, 
-						   open=dp.OpenPrice, close=dp.ClosePrice,
-                           high=dp.HighestPrice, low=dp.LowestPrice, 
-                           bidPrice1=dp.BidPrice1, bidVol1=dp.BidVolume1, 
-                           askPrice1=dp.AskPrice1, askVol1=dp.AskVolume1,
-                           bidPrice1=dp.BidPrice2, bidVol1=dp.BidVolume2, 
-                           askPrice1=dp.AskPrice2, askVol1=dp.AskVolume2,
-                           bidPrice1=dp.BidPrice3, bidVol1=dp.BidVolume3, 
-                           askPrice1=dp.AskPrice3, askVol1=dp.AskVolume3,
-                           bidPrice1=dp.BidPrice4, bidVol1=dp.BidVolume4, 
-                           askPrice1=dp.AskPrice4, askVol1=dp.AskVolume4,
-                           bidPrice1=dp.BidPrice5, bidVol1=dp.BidVolume5, 
-                           askPrice1=dp.AskPrice5, askVol1=dp.AskVolume5 )
-
+            rev = StockTick(instID=dp.InstrumentID, timestamp=timestamp, openInterest=dp.OpenInterest, volume=dp.Volume, turnover=dp.Turnover, 
+                            price=dp.LastPrice, open=dp.OpenPrice, close=dp.ClosePrice, high=dp.HighestPrice, low=dp.LowestPrice,
+                            bidPrice1=dp.BidPrice1, bidVol1=dp.BidVolume1,askPrice1=dp.AskPrice1, askVol1=dp.AskVolume1,
+                            bidPrice2=dp.BidPrice2, bidVol2=dp.BidVolume2, askPrice2=dp.AskPrice2, askVol2=dp.AskVolume2,
+                            bidPrice3=dp.BidPrice3, bidVol3=dp.BidVolume3, askPrice3=dp.AskPrice3, askVol3=dp.AskVolume3,
+                            bidPrice4=dp.BidPrice4, bidVol4=dp.BidVolume4, askPrice4=dp.AskPrice4, askVol4=dp.AskVolume4,
+                            bidPrice5=dp.BidPrice5, bidVol5=dp.BidVolume5, askPrice5=dp.AskPrice5, askVol5=dp.AskVolume5 )
         except Exception,inst:
-            self.logger.warning(u'MD:%s 行情数据转换错误:updateTime="%s",msec="%s",tday="%s"' % (dp.InstrumentID, timestamp))
+            self.logger.warning(u'MD:%s 行情数据转换错误:updateTime="%s"' % (dp.InstrumentID, timestamp))
         return rev
 
 class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):
@@ -143,8 +134,8 @@ def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.
                              agent = myagent,
                        )
     trader.Create('trader')
-    trader.SubscribePublicTopic(trader.ApiStruct.THOST_TERT_QUICK)
-    trader.SubscribePrivateTopic(trader.ApiStruct.THOST_TERT_QUICK)
+    trader.SubscribePublicTopic(trader.ApiStruct.TERT_QUICK)
+    trader.SubscribePrivateTopic(trader.ApiStruct.TERT_QUICK)
     for port in trader_cfg.ports:
         trader.RegisterFront(port)
     trader.Init()
@@ -157,15 +148,23 @@ def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = dateti
 
 def test_main():
     logging.basicConfig(filename="save_lts_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    app_name = 'SaveAgent'
-    insts = ['600104', '000300', '510180']
-    my_agent = SaveAgent(name = app_name, trader = None, cuser = None, instruments=insts, daily_data_days=0, min_data_days=0)
-    my_agent.save_flag = False
-    make_user(my_agent,LTS_SO_USER, insts)
+    app_name = 'lts_agent'
+    insts = ['600104', '000300', '510180','399001', '399004']
+    tday = datetime.date(2014,12,2)
+    strategies = []
+    trader_cfg = LTS_AS_TRADER
+    user_cfg = LTS_AS_USER
+    strat_cfg = {'strategies': strategies, \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':0, \
+                 'min_data_days':0 }
+    #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
+    myagent = create_agent(app_name, user_cfg, trader_cfg, insts, strat_cfg, tday)
+    
     try:
         while 1: time.sleep(1)
     except KeyboardInterrupt:
-        my_agent.mdapis = []; my_agent.trader = None
+        myagent.mdapis = []; myagent.trader = None
 
 if __name__=="__main__":
     test_main()

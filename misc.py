@@ -66,6 +66,14 @@ LTS_AS_TRADER = BaseObject(    broker_id="2011",
                                passwd="11111", 
                                ports= ["tcp://211.144.195.163:44505"])
 
+LTS_OP_USER = BaseObject(    broker_id="2011", 
+                             investor_id="11111", 
+                             passwd="11111", 
+                             ports=["tcp://211.144.195.163:24513"])
+LTS_OP_TRADER = BaseObject(    broker_id="2011", 
+                               investor_id="11111", 
+                               passwd="11111", 
+                               ports= ["tcp://211.144.195.163:24505"])
 month_code_map = {'f': 1,
                   'g': 2,
                   'h': 3,
@@ -113,7 +121,7 @@ product_code = {'SHFE':['cu', 'al', 'zn', 'pb', 'wr', 'rb', 'fu', 'ru', 'bu', 'h
                 'ZCE': ['WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'ME', 'FG', 'RS', 'RM', 'TC', 'JR', 'LR', 'MA', 'SM', 'SF']} 
 
 CHN_Stock_Exch = { 'SSE': ['600104', '000300', '510180'], 
-				   'SZE': ['399001', '399004', '399007'] }
+                   'SZE': ['399001', '399004', '399007'] }
 
 night_session_markets = [] #['cu', 'al', 'zn', 'pb', 'ag','au']
 
