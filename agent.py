@@ -1,4 +1,4 @@
-﻿#-*- coding:utf-8 -*-
+#-*- coding:utf-8 -*-
 import workdays
 import time
 import datetime
@@ -41,6 +41,39 @@ class TickData:
         self.date = timestamp.date().strftime('%Y%m%d')
         pass
 
+class StockTick(TickData):
+    def __init__(self, instID='IF1412', high=0.0, low=0.0, price=0.0, open=0.0, close=0.0,
+				 volume=0, openInterest=0, turnover=0, timestamp=datetime.datetime.now(),
+                 bidPrice1=0.0, bidVol1=0, askPrice1=0.0, askVol1=0, 
+				 bidPrice2=0.0, bidVol2=0, askPrice2=0.0, askVol2=0, 
+				 bidPrice3=0.0, bidVol3=0, askPrice3=0.0, askVol3=0, 
+				 bidPrice4=0.0, bidVol4=0, askPrice4=0.0, askVol4=0, 
+				 bidPrice5=0.0, bidVol5=0, askPrice5=0.0, askVol5=0):
+		TickData.__init__(instID, high, low, price, volume, openInterest, bidPrice1, bidVol1, askPrice1, askVol1, timestamp)
+        self.turnover = turnover
+        self.open = open
+        self.close = close
+        self.bidPrice2 = bidPrice2
+        self.bidVol2 = bidVol2
+        self.askPrice2 = askPrice2
+        self.askVol2 = askVol2
+		
+        self.bidPrice3 = bidPrice3
+        self.bidVol3 = bidVol3
+        self.askPrice3 = askPrice3
+        self.askVol3 = askVol3
+		
+        self.bidPrice4 = bidPrice4
+        self.bidVol4 = bidVol4
+        self.askPrice4 = askPrice4
+        self.askVol4 = askVol4
+		
+        self.bidPrice5 = bidPrice5
+        self.bidVol5 = bidVol5
+        self.askPrice5 = askPrice5
+        self.askVol5 = askVol5
+        pass
+		
 class CTPMdMixin(object):
     def checkErrorRspInfo(self, info):
         if info.ErrorID !=0:
@@ -505,13 +538,9 @@ class Instrument(object):
         return objs
     
     def __init__(self,name):
-        if '.' in name:
-            self.name, self.exchange = name.split('.')
-            self.product = 'Stock'
-        else: 
-            self.name = name
-            self.exchange = 'CFFEX'
-            self.product = 'IF'
+        self.name = name
+        self.exchange = 'CFFEX'
+        self.product = 'IF'
         self.broker_fee = 0.0
         #保证金率
         self.marginrate = (0,0) #(多,空)
@@ -536,28 +565,33 @@ class Instrument(object):
         self.is_busy = False
     
     def get_inst_info(self):
-        if self.product == 'Stock':
-            self.start_tick_id = 1530000
-            self.last_tick_id = 2100000
-            self.multiple = 0
-            self.tick_base = 0.01
-            self.broker_fee = 0
-        else:
-            self.product = inst2product(self.name)
-            prod_info = mysqlaccess.load_product_info(self.product)
-            self.exchange = prod_info['exch']
-            self.start_tick_id =  prod_info['start_min'] * 1000
-            self.last_tick_id =  prod_info['end_min'] * 1000     
-            self.multiple = prod_info['lot_size']
-            self.tick_base = prod_info['tick_size']
-            self.broker_fee = prod_info['broker_fee']
+		for exch in CHN_Stock_Exch:
+			if self.name in CHN_Stock_Exch[exch]:
+				self.product = 'Stock'
+				self.exchange = exch
+				self.start_tick_id = 1530000
+				self.last_tick_id = 2100000
+				self.multiple = 0
+				self.tick_base = 0.01
+				self.broker_fee = 0
+				return
+		self.product = inst2product(self.name)
+		prod_info = mysqlaccess.load_product_info(self.product)
+		self.exchange = prod_info['exch']
+		self.start_tick_id =  prod_info['start_min'] * 1000
+		self.last_tick_id =  prod_info['end_min'] * 1000     
+		self.multiple = prod_info['lot_size']
+		self.tick_base = prod_info['tick_size']
+		self.broker_fee = prod_info['broker_fee']
         return
     
     def get_margin_rate(self):
-        if self.product == 'Stock':
-            self.marginrate = (1,0)
-        else:
-            self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
+		for exch in CHN_Stock_Exch:
+			if self.name in CHN_Stock_Exch[exch]:
+				self.marginrate = (1,0)
+				return
+        self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
+		return
 
     def calc_margin_amount(self,price,direction):   
         my_marginrate = self.marginrate[0] if direction == ORDER_BUY else self.marginrate[1]
