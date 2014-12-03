@@ -110,7 +110,10 @@ CHN_Holidays = [datetime.date(2014,1,1),  datetime.date(2014,1,2), datetime.date
 product_code = {'SHFE':['cu', 'al', 'zn', 'pb', 'wr', 'rb', 'fu', 'ru', 'bu', 'hc', 'ag', 'au'], 
                 'CFFEX': ['IF', 'TF', 'IO'],
                 'DCE': ['c', 'j', 'jd', 'a', 'b', 'm', 'y', 'p', 'l', 'v', 'jm', 'i', 'fb', 'bb', 'pp'],
-                'ZCE': ['WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'ME', 'FG', 'RS', 'RM', 'TC', 'JR', 'LR', 'MA', 'SM', 'SF'] }
+                'ZCE': ['WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'ME', 'FG', 'RS', 'RM', 'TC', 'JR', 'LR', 'MA', 'SM', 'SF']} 
+
+CHN_Stock_Exch = { 'SSE': ['600104', '000300', '510180'], 
+				   'SZE': ['399001', '399004', '399007'] }
 
 night_session_markets = [] #['cu', 'al', 'zn', 'pb', 'ag','au']
 
