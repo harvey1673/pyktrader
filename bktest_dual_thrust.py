@@ -18,16 +18,24 @@ def dual_thrust_sim( asset, start_date, end_date, nearby=1, rollrule='-20b', k_b
     curr_pos = []
     closed_trades = []
 	start_d = ddf.index[0]
+	prev_d = start_d
     for idx, dd in enumerate(mdf.index):
         mslice = mdf.ix[dd]
         d = dd.date()
         dslice = ddf.ix[d]
         if d < start_d + datetime.timedelta(days=1):
             continue
+		
+		if (dslice.open == 0):
+			if (prev_d < d):
+				d_open = mslice.open
+		else:
+			d_open = dslice.open
+		prev_d = d
 		buytrig  = dslice.open + dslice.TR * k_buy
 		selltrig = dslice.open - dslice.TR * k_sell
 		if mslice.close >= buytrig:
-			
+			if len(curr_pos) == 0:
 
                 if len(curr_pos) == 0 and idx < len(mdf.index)-NO_OPEN_POS_PROTECT:
                     direction = 0
@@ -131,9 +139,16 @@ def save_sim_results(file_prefix, res, trades):
     
 if __name__=="__main__":
     rollrule = '-30b'
-    start_dates = datetime.date(2010,9,1)
-    asset = 'm'
+    commod_list1= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
+    start_dates1 = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
+                [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
+    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH']
+    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
+                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
+    commod_list = commod_list1+commod_list2
+    start_dates = start_dates1 + start_dates2
     end_date = datetime.date(2014,11,7)
+    systems = [[20,10],[15,7],[40,20],[55,20]]
     for sys in systems:
         file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_R20b_%s' % sys[0]
         for cmd,sdate in zip(commod_list, start_dates):
