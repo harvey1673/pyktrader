@@ -903,11 +903,13 @@ class Agent(AbsAgent):
             return False
         
         if self.scur_day < tick.timestamp.date():
-            self.scur_day = tick.timestamp.date()
             self.day_finalize(self.instruments.keys())
             if not self.eod_flag:
                 self.eod_flag = True
                 self.run_eod()
+            self.scur_day = tick.timestamp.date()
+            for inst in self.instruments:
+                self.cur_day[inst]['date'] = self.scur_day
             self.eod_flag = False
         
         if (curr_tick < self.instruments[inst].start_tick_id-5):
@@ -1038,8 +1040,8 @@ class Agent(AbsAgent):
                 strat.run_min(inst)
             self.proc_lock = False
         if self.save_flag:
-            mysqlaccess.bulkinsert_tick_data('fut_tick', self.tick_data[inst])
-            mysqlaccess.insert_min_data('fut_min', inst, self.cur_min[inst])
+            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst])
+            mysqlaccess.insert_min_data(inst, self.cur_min[inst])
         
     def day_finalize(self, insts):
         self.logger.info('finalizing the day for market data')
@@ -1057,7 +1059,7 @@ class Agent(AbsAgent):
                 for fobj in self.day_data_func:
                     fobj.rfunc(df)
                 if self.save_flag:
-                    mysqlaccess.insert_daily_data('fut_daily', inst, self.cur_day[inst])
+                    mysqlaccess.insert_daily_data(inst, self.cur_day[inst])
             
             self.tick_data[inst] = []
             self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
@@ -1112,6 +1114,8 @@ class Agent(AbsAgent):
             self.eod_flag = True
             self.run_eod()
         self.scur_day = scur_day
+        for inst in self.instruments:
+            self.cur_day[inst]['date'] = self.scur_day
         self.eod_flag = False
                 
     def init_init(self):    #init中的init,用于子类的处理

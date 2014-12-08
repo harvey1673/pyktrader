@@ -169,7 +169,7 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
 def make_user(my_agent,hq_user):
     #print my_agent.instruments
     for port in hq_user.ports:
-        user = MdSpiDelegate(instruments=my_agent.instruments, 
+        user = MdSpiDelegate(instruments=my_agent.instruments.keys(), 
                              broker_id=hq_user.broker_id,
                              investor_id= hq_user.investor_id,
                              passwd= hq_user.passwd,

@@ -127,7 +127,7 @@ def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.
     daily_days = strat_cfg['daily_data_days']
     min_days = strat_cfg['min_data_days']
     myagent = Agent(agent_name, None, None, instruments, strategies, tday, folder, daily_days, min_days) 
-    myagent.trader = trader = LtsTraderSpi(instruments=myagent.instruments, 
+    myagent.trader = trader = LtsTraderSpi(instruments=myagent.instruments.keys(), 
                              broker_id=trader_cfg.broker_id,
                              investor_id= trader_cfg.investor_id,
                              passwd= trader_cfg.passwd,
@@ -149,11 +149,11 @@ def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = dateti
 def test_main():
     logging.basicConfig(filename="save_lts_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     app_name = 'lts_agent'
-    insts = ['600104', '000300', '510180','399001', '399004']
-    tday = datetime.date(2014,12,2)
+    insts = ['600104', '600104C1412M01400', '600104C1412A01400']
+    tday = datetime.date(2014,12,3)
     strategies = []
-    trader_cfg = LTS_AS_TRADER
-    user_cfg = LTS_AS_USER
+    trader_cfg = LTS_SO_TRADER
+    user_cfg = LTS_SO_USER
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
                  'daily_data_days':0, \
@@ -162,7 +162,31 @@ def test_main():
     myagent = create_agent(app_name, user_cfg, trader_cfg, insts, strat_cfg, tday)
     
     try:
-        while 1: time.sleep(1)
+        myagent.resume()
+
+# position/trade test        
+        myagent.positions['600104'].pos_tday.long  = 2
+        myagent.positions['600104'].pos_tday.short = 2
+        #myagent.positions['cu1502'].pos_yday.long  = 0
+        #myagent.positions['cu1502'].pos_yday.short = 0
+        
+        myagent.positions['600104'].re_calc()
+        myagent.positions['600104'].re_calc()        
+        
+        valid_time = myagent.tick_id + 10000
+        etrade =  order.ETrade( ['600104','600104'], [1, -1], [OPT_LIMIT_ORDER, OPT_LIMIT_ORDER], 50, [0, 0], valid_time, 'test', myagent.name)
+        myagent.submit_trade(etrade)
+        myagent.process_trade_list() 
+        
+        #myagent.tick_id = valid_time - 10
+        #for o in myagent.positions['cu1501'].orders:
+            #o.on_trade(2000,o.volume,141558400)
+            #o.on_trade(2010,1,141558500)
+        myagent.process_trade_list() 
+        myagent.positions['600104'].re_calc()
+        myagent.positions['600104'].re_calc()
+        
+        #while 1: time.sleep(1)
     except KeyboardInterrupt:
         myagent.mdapis = []; myagent.trader = None
 

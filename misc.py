@@ -54,16 +54,16 @@ LTS_SO_USER = BaseObject(    broker_id="2011",
                              passwd="111111", 
                              ports=["tcp://211.144.195.163:34513"])
 LTS_SO_TRADER = BaseObject(    broker_id="2011", 
-                               investor_id="1111111", 
-                               passwd="111111", 
+                               investor_id="060000004750", 
+                               passwd="250015", 
                                ports= ["tcp://211.144.195.163:34505"])
 LTS_AS_USER = BaseObject(    broker_id="2011", 
                              investor_id="11111", 
                              passwd="11111", 
                              ports=["tcp://211.144.195.163:44513"])
 LTS_AS_TRADER = BaseObject(    broker_id="2011", 
-                               investor_id="11111", 
-                               passwd="11111", 
+                               investor_id="020090030246", 
+                               passwd="123321", 
                                ports= ["tcp://211.144.195.163:44505"])
 
 LTS_OP_USER = BaseObject(    broker_id="2011", 
@@ -120,7 +120,7 @@ product_code = {'SHFE':['cu', 'al', 'zn', 'pb', 'wr', 'rb', 'fu', 'ru', 'bu', 'h
                 'DCE': ['c', 'j', 'jd', 'a', 'b', 'm', 'y', 'p', 'l', 'v', 'jm', 'i', 'fb', 'bb', 'pp'],
                 'ZCE': ['WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'ME', 'FG', 'RS', 'RM', 'TC', 'JR', 'LR', 'MA', 'SM', 'SF']} 
 
-CHN_Stock_Exch = { 'SSE': ['600104', '000300', '510180'], 
+CHN_Stock_Exch = { 'SSE': ['600104', '000300', '510180', '600104C1412M01400', '600104C1412A01400'], 
                    'SZE': ['399001', '399004', '399007'] }
 
 night_session_markets = [] #['cu', 'al', 'zn', 'pb', 'ag','au']

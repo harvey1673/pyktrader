@@ -21,7 +21,11 @@ tick_columns = ['instID', 'date','hour','min','sec','msec','openInterest','volum
 min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
 daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
-def insert_tick_data(dbtable, tick):
+def insert_tick_data(inst, tick):
+    if inst.isdigit():
+        dbtable = 'stock_tick'
+    else:
+        dbtable = 'fut_tick'
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     col_list = tick.__dict__.keys()
@@ -35,7 +39,11 @@ def insert_tick_data(dbtable, tick):
     cnx.close()
     pass
     
-def bulkinsert_tick_data(dbtable, ticks):
+def bulkinsert_tick_data(inst, ticks):
+    if inst.isdigit():
+        dbtable = 'stock_tick'
+    else:
+        dbtable = 'fut_tick'
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     col_list = ticks[0].__dict__.keys()
@@ -49,7 +57,11 @@ def bulkinsert_tick_data(dbtable, ticks):
     cnx.close()
     pass
 
-def insert_min_data(dbtable, inst, min_data):
+def insert_min_data(inst, min_data):
+    if inst.isdigit():
+        dbtable = 'stock_min'
+    else:
+        dbtable = 'fut_min'    
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     col_list = min_data.keys()
@@ -61,7 +73,11 @@ def insert_min_data(dbtable, inst, min_data):
     cnx.close()
     pass
 
-def insert_daily_data(dbtable, inst, daily_data):
+def insert_daily_data(inst, daily_data):
+    if inst.isdigit():
+        dbtable = 'stock_daily'
+    else:
+        dbtable = 'fut_daily'
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     col_list = daily_data.keys()

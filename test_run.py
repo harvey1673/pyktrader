@@ -1,4 +1,6 @@
-import newagent as agent
+import agent
+import fut_api
+import lts_api
 import base
 import time
 import logging
@@ -66,16 +68,25 @@ test_trader = base.BaseObject( broker_id="8000",
 def save_main(user, insts):
     app_name = 'SaveAgent'
     my_agent = agent.SaveAgent(name = app_name, trader = None, cuser = None, instruments=insts, daily_data_days=0, min_data_days=0)
-    agent.make_user(my_agent,user)
+    fut_api.make_user(my_agent,user)
     try:
         while 1: time.sleep(1)
     except KeyboardInterrupt:
         my_agent.mdapis = []; my_agent.trader = None
 
+def save_LTS(user, insts):
+    app_name = 'SaveAgent'
+    my_agent = agent.SaveAgent(name = app_name, trader = None, cuser = None, instruments=insts, daily_data_days=0, min_data_days=0)
+    lts_api.make_user(my_agent, user, insts)
+    try:
+        while 1: time.sleep(1)
+    except KeyboardInterrupt:
+        my_agent.mdapis = []; my_agent.trader = None
+		
 def create_agent(usercfg, tradercfg, insts):
     agent_name = 'TradeAgent'
     trader, my_agent = agent.create_trader(tradercfg, insts)
-    agent.make_user(my_agent,usercfg,agent_name)
+    fut_api.make_user(my_agent,usercfg,agent_name)
     return my_agent
 
 def filter_main_cont(sdate):
@@ -98,6 +109,12 @@ def save_all():
     save_main(prod_user,save_insts)
     pass
 
+def save_lts_test():
+    logging.basicConfig(filename="save_lts_test.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    save_insts = ['600104', '000300', '510180', '600104C1412M01400', '600104C1412A01400', '399001', '399004', '399007']
+    save_LTS(misc.LTS_SO_USER,save_insts)
+    pass
+	
 def save_option():
     logging.basicConfig(filename="save_option_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     save_main(test_user,option_insts)
@@ -105,9 +122,6 @@ def save_option():
 
 if __name__ == '__main__':
     save_all()
-    insts = ['ag1412','au1412']
-    my_agent = create_agent(prod_user, prod_trader, insts)
-    
     try:
         while 1: time.sleep(1)
     except KeyboardInterrupt:
