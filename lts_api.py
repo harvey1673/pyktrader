@@ -53,6 +53,7 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
                             bidPrice5=dp.BidPrice5, bidVol5=dp.BidVolume5, askPrice5=dp.AskPrice5, askVol5=dp.AskVolume5 )
         except Exception,inst:
             self.logger.warning(u'MD:%s 行情数据转换错误:updateTime="%s"' % (dp.InstrumentID, timestamp))
+        #print rev
         return rev
 
 class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):

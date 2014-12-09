@@ -18,15 +18,16 @@ def dual_thrust_sim( asset, start_date, end_date, nearby=1, rollrule='-20b', k_b
     curr_pos = []
     closed_trades = []
 	start_d = ddf.index[0]
-	prev_d = start_d
+	prev_d = start_d - datetime.timedelta(days=1)
+    tradeid = 0
     for idx, dd in enumerate(mdf.index):
         mslice = mdf.ix[dd]
         d = dd.date()
         dslice = ddf.ix[d]
         if d < start_d + datetime.timedelta(days=1):
             continue
-		
-		if (dslice.open == 0):
+		d_open = dslice.open
+		if (d.open == 0):
 			if (prev_d < d):
 				d_open = mslice.open
 		else:
@@ -34,8 +35,15 @@ def dual_thrust_sim( asset, start_date, end_date, nearby=1, rollrule='-20b', k_b
 		prev_d = d
 		buytrig  = dslice.open + dslice.TR * k_buy
 		selltrig = dslice.open - dslice.TR * k_sell
-		if mslice.close >= buytrig:
-			if len(curr_pos) == 0:
+        if len(curr_pos) == 0:
+            pos = 0
+        else:
+            pos = curr_pos[0].pos
+		if (mslice.close >= buytrig) and (pos <=0 ):
+            if len(curr_pos) > 0:
+                curr_pos[0].close(mslice.close, dd)
+
+
 
                 if len(curr_pos) == 0 and idx < len(mdf.index)-NO_OPEN_POS_PROTECT:
                     direction = 0
