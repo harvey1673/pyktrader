@@ -24,26 +24,35 @@ def get_pnl_stats(df, start_capital, marginrate, freq):
 		res['profit_dd_ratio'] = res['all_profit']/abs(max_dd)
 	else:
 		res['profit_dd_ratio'] = 0
-	return res, daily_pnl 
+	return res, cum_pnl 
 
 def get_trade_stats(trade_list):
 	res = {}
 	res['n_trades'] = len(trade_list)
 	res['all_profit'] = sum([trade.profit for trade in trade_list])
-	res['win_profit'] = sum([trade.profit for trade in trade_list if trade.profit>0])
-	res['loss_profit'] = sum([trade.profit for trade in trade_list if trade.profit<0])
-	res['num_win'] = len([trade.profit for trade in trade_list if trade.profit>0])
-	res['num_loss'] = len([trade.profit for trade in trade_list if trade.profit<0])
+	win_trades = [trade.profit for trade in trade_list if trade.profit>0]
+	loss_trades = [trade.profit for trade in trade_list if trade.profit<0]
+	res['win_profit'] = sum(win_trades)
+	res['loss_profit'] = sum(loss_trades)
+	res['num_win'] = len(win_trades)
+	res['num_loss'] = len(loss_trades)
+	res['max_win'] = max(win_trades)
+	res['max_loss'] = min(loss_trades)
+	long_trades = [trade.profit for trade in trade_list if trade.pos>0]
+	short_trades = [trade.profit for trade in trade_list if trade.pos<0]
+	res['num_long'] = len(long_trades)
+	res['num_short'] = len(short_trades)
+	res['avg_long_profit'] = sum(long_trades)/res['num_long']
+	res['avg_short_profit'] = sum(short_trades)/res['num_short']
 	res['win_ratio'] = 0
 	if res['n_trades'] > 0:
 		res['win_ratio'] = float(res['num_win'])/float(res['n_trades'])
-	res['profit_per_win'] = 0
+	res['pnl_per_win'] = 0
 	if res['num_win'] > 0:
 		res['profit_per_win'] = res['win_profit']/float(res['num_win'])
-	res['profit_per_loss'] = 0
+	res['pnl_per_loss'] = 0
 	if res['num_loss'] > 0:	
 		res['profit_per_loss'] = res['loss_profit']/float(res['num_loss'])
-	
 	return res
 
 def create_drawdowns(ts):
@@ -51,10 +60,8 @@ def create_drawdowns(ts):
     Calculate the largest peak-to-trough drawdown of the PnL curve
     as well as the duration of the drawdown. Requires that the 
     pnl_returns is a pandas Series.
-
     Parameters:
     pnl - A pandas Series representing period percentage returns.
-
     Returns:
     drawdown, duration - Highest peak-to-trough drawdown and duration.
     """
