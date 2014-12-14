@@ -25,6 +25,8 @@ OST_UNKNOWN = 'a' #未知
 OST_NOTOUCH = 'b' #尚未触发
 OST_TOUCHED = 'c' #已触
 
+sign = lambda x: math.copysign(1, x)
+
 PROD_USER = BaseObject( broker_id="8070", 
                              investor_id="*", 
                              passwd="*", 

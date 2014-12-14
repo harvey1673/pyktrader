@@ -1,0 +1,167 @@
+TB代码_R-Breaker (2012-04-25 16:07:20)转载▼
+标签： 杂谈	分类： 交易策略
+根据昨日波幅算出几个区间
+突破上区间，做多
+破下区间，做空
+做多后，回撤至次上区间，则认为假突破，反手
+做空类似
+收盘前平仓，notaft(14.55)设置为14.55为出场时间，14点55分，适用1分钟和5分钟周期，其它周期自己手动修改参数
+//------------------------------------------------------------------------
+// 简称: R_Breaker
+// 名称:
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出: 穿堂风
+//------------------------------------------------------------------------
+
+
+
+
+Params
+Numeric notbef(9.00);
+Numeric notaft(14.55);
+Numeric f1(0.35);
+Numeric f2(0.07);
+Numeric f3(0.25);
+Numeric reverse(1.00);
+Numeric rangemin(0.2);
+Numeric xdiv(3);
+
+Vars
+NumericSeries ssetup(0);
+NumericSeries bsetup(0);
+NumericSeries senter(0);
+NumericSeries benter(0);
+NumericSeries bbreak(0);
+NumericSeries sbreak(0);
+NumericSeries ltoday(0);
+NumericSeries hitoday(9999);
+NumericSeries startnow(0);
+NumericSeries div(0);
+BoolSeries rfilter(false);
+Numeric i_reverse;
+Numeric i_rangemin;
+Numeric i_vB;
+Numeric i_vS;
+
+Begin
+i_reverse = reverse*(OpenD(0)/100);
+i_rangemin = rangemin*(OpenD(0)/100);
+if(BarStatus==0)
+{
+        startnow=0;
+        div=max(xdiv,1);
+}
+
+if(Date != Date[1])
+{
+        SetGlobalVar(0,0);
+        SetGlobalVar(1,0);
+        startnow=startnow+1;
+        ssetup=hitoday[1]+f1*(Close[1]-ltoday[1]);
+        senter=((1+f2)/2)*(hitoday[1]+Close[1])-(f2)*ltoday[1];
+        benter=((1+f2)/2)*(ltoday[1]+Close[1])-(f2)*hitoday[1];
+        bsetup=ltoday[1]-f1*(hitoday[1]-Close[1]);
+        bbreak=ssetup+f3*(ssetup-bsetup);
+        sbreak=bsetup-f3*(ssetup-bsetup);
+
+        hitoday=High;
+        ltoday=Low;
+
+        rfilter=(hitoday[1]-ltoday[1])>=i_rangemin;
+}
+
+if(High>hitoday)
+{
+        hitoday=High;
+}
+if(Low<ltoday)
+{
+        ltoday=Low;
+}
+if(Time*100>=notbef and Time*100<notaft and startnow>=2 and rfilter)
+{
+
+        if(Time != GetGlobalVar(1) and GetGlobalVar(1) != 0)
+        {
+                SetGlobalVar(1,10000);
+        }
+        if(hitoday>=ssetup and marketposition>-1 and GetGlobalVar(1)<1)
+        {
+                If(Low<=(senter+(hitoday-ssetup)/div))
+                {
+                        SellShort(1,senter+(hitoday-ssetup)/div);
+                        SetGlobalVar(1,Time);
+                        Return;
+                }
+        }
+        if(ltoday<=bsetup and marketposition<1  and GetGlobalVar(1)<1)
+        {
+                If(High>=(benter-(bsetup-ltoday)/div))
+                {
+                        Buy(1,benter-(bsetup-ltoday)/div);
+                        SetGlobalVar(1,Time);
+                        Return;
+                }
+        }
+
+        if(marketposition==-1)
+        {
+                SetGlobalVar(0,1);
+                if(High-EntryPrice>=i_reverse)
+                {
+                        BuyToCover(1,entryprice+i_reverse);
+                        Return;
+                }
+        }
+        if(marketposition==1)
+        {
+                SetGlobalVar(0,1);
+                if(EntryPrice-Low>=i_reverse)
+                {
+                        Sell(1,entryprice-i_reverse);
+                        Return;
+                }
+        }
+
+        if(marketposition==0)
+        {
+                if(High>=bbreak and GetGlobalVar(0) == 0)
+                {
+                        Buy(1,bbreak);
+                        Return;
+                }
+        }
+        if(marketposition==0)
+        {
+                if(low<=sbreak  and GetGlobalVar(0) == 0)
+                {
+                        SellShort(1,sbreak);
+                        Return;
+                }
+        }
+
+}
+
+if(Time*100>=notaft and Time<0.1600)
+{
+
+        if(marketposition==-1)
+        {
+                BuyToCover(1,Open);
+        }
+        if(marketposition==1)
+        {
+                Sell(1,Open);
+        }
+
+}
+End
+
+//------------------------------------------------------------------------
+// 编译版本        GS2010.12.08
+// 用户版本        2011/06/27 14:29
+// 版权所有       
+// 更改声明        TradeBlazer Software保留对TradeBlazer平台
+//                        每一版本的TrabeBlazer公式修改和重写的权利
+//------------------------------------------------------------------------

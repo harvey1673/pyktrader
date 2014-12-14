@@ -8,10 +8,13 @@ import openpyxl
 import os
 import backtest
 
-def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals = [20,10] ):
-    NN = 2
-    histdays = '-' + str(signals[0]+5) + 'd'
-    NO_OPEN_POS_PROTECT = 30
+NO_OPEN_POS_PROTECT = 30
+
+def turtle_sim( asset, start_date, end_date, config):
+    rollrule = config['rollrule']
+    nearby   = config['nearby']
+    signals  = config['signals']
+    NN = 2 
     start_idx = 0
     ddata = {}
     mdata = {}
@@ -19,95 +22,84 @@ def turtle_sim( assets, start_date, end_date, nearby=1, rollrule='-20b', signals
     trades = {}
     atr_dict = {}
     tradeid = 0
-    for pc in assets:
-        ddata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, rollrule, 'd', histdays)
-        mdata[pc] = misc.rolling_hist_data(pc, nearby, start_date, end_date, rollrule, 'm', '-1b')
-        res = {}
-        all_trades = {}
-        for i in range(len(ddata[pc])):
-            ddf = ddata[pc][i]['data']
-            if len(ddf) <= signals[0]:
-                continue 
-            mdf = mdata[pc][i]['data']
-            cont = ddata[pc][i]['contract']
-            res[cont] = {}
-#             ts = dh.ATR(ddf, n=20)
-#             ddf = ddf.join(ts)
-#             ts = dh.DONCH_H(ddf, 55)
-#             ddf = ddf.join(ts)
-#             ts = dh.DONCH_L(ddf, 55)
-#             ddf = ddf.join(ts)
-#             ts = dh.DONCH_H(ddf, 20)
-#             ddf = ddf.join(ts)
-#             ts = dh.DONCH_L(ddf, 20)
-            ddf['ATR_20'] = pd.Series(dh.ATR(ddf, n=20).shift(1))
-            ddf['OL_1'] = pd.Series(dh.DONCH_H(ddf, signals[0]).shift(1))
-            ddf['OS_1'] = pd.Series(dh.DONCH_L(ddf, signals[0]).shift(1))
-            ddf['CL_1'] = pd.Series(dh.DONCH_L(ddf, signals[1]).shift(1))
-            ddf['CS_1'] = pd.Series(dh.DONCH_H(ddf, signals[1]).shift(1))
-            #df['OL_2'] = pd.concat([df.DONCH_H55.shift(1), df.open], join='outer', axis=1).max(axis=1)
-            #df['OS_2'] = pd.concat([df.DONCH_L55.shift(1), df.open], join='outer', axis=1).min(axis=1)
-            #df['CL_2'] = pd.concat([df.DONCH_L20.shift(1), df.open], join='outer', axis=1).min(axis=1)
-            #df['CS_2'] = pd.concat([df.DONCH_H20.shift(1), df.open], join='outer', axis=1).max(axis=1)
-            ll = mdf.shape[0]
-            mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
-            curr_pos = []
-            closed_trades = []
-            for idx, dd in enumerate(mdf.index):
-                mslice = mdf.ix[dd]
-                d = dd.date()
-                dslice = ddf.ix[d]
-                if idx < start_idx:
-                    continue
-                if len(curr_pos) == 0 and idx < len(mdf.index)-NO_OPEN_POS_PROTECT:
-                    direction = 0
-                    if mslice.close > dslice.OL_1:
-                        #n_unit = min(max(int((u.close - u.OL_1)*2.0/u.ATR_20 + 1),0),4)
-                        direction = 1
-                    elif mslice.close < dslice.OS_1:
-                        #n_unit = min(max(int((u.OS_1 - u.low) *2.0/u.ATR_20 + 1),0),4)
-                        direction = -1
-                    mdf.ix[dd, 'pos'] = direction
-                    if direction != 0:
-                        trade = strat.TradePos([cont], [1], direction, mslice.close, mslice.close- direction * dslice.ATR_20 * NN)
-                        tradeid += 1
-                        trade.open(mslice.close, dd, tradeid)
-                        curr_pos.append(trade)
-                        atr_dict[cont] = dslice.ATR_20
-                elif (idx >= len(mdf.index)-NO_OPEN_POS_PROTECT):
-                    if len(curr_pos)>0:
-                        for trade in curr_pos:
-                            trade.close( mslice.close, dd, trade.entry_tradeid)
-                            closed_trades.append(trade)
-                        curr_pos = []
-                else:
-                    direction = curr_pos[0].direction
-                    tot_pos = sum([trade.pos * trade.direction for trade in curr_pos])
-                    #exit position out of channel
-                    if (direction == 1 and mslice.close < dslice.CL_1) or \
-                            (direction == -1 and mslice.close > dslice.CS_1):
-                        for trade in curr_pos:
-                            trade.close( mslice.close, dd, trade.entry_tradeid )
-                            closed_trades.append(trade)
-                        curr_pos = []
-                    #stop loss position partially
-                    elif (curr_pos[-1].exit_target - mslice.close) * direction >= 0:
-                        for trade in curr_pos:
-                            if (trade.exit_target - mslice.close) * direction > 0:
-                                trade.close(mslice.close, dd, trade.entry_tradeid)
-                                closed_trades.append(trade)
-                        curr_pos = [trade for trade in curr_pos if not trade.is_closed]
-                    #add positions
-                    elif (tot_pos < 4) and (mslice.close - curr_pos[-1].entry_price)*direction > atr_dict[cont]/2.0:
-                        for trade in curr_pos:
-                            trade.exit_target += atr_dict[cont]/2.0*direction
-                        trade = strat.TradePos([cont], [1], direction, mslice.close, mslice.close - direction * atr_dict[cont] * NN)
-                        tradeid += 1
-                        trade.open(mslice.close, dd, tradeid)
-                        curr_pos.append(trade)
-                    mdf.ix[dd, 'pos'] = sum( [trade.pos for trade in curr_pos] )    
-            mdf['pnl'] = mdf['pos'].shift(1)*(mdf['close'] - mdf['close'].shift(1))
-            mdf['cum_pnl'] = mdf['pnl'].cumsum()
+    ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
+    mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    res = {}
+    all_trades = {} 
+    ddf['ATR_20'] = pd.Series(dh.ATR(ddf, n=20).shift(1))
+    ddf['OL_1'] = pd.Series(dh.DONCH_H(ddf, signals[0]).shift(1))
+    ddf['OS_1'] = pd.Series(dh.DONCH_L(ddf, signals[0]).shift(1))
+    ddf['CL_1'] = pd.Series(dh.DONCH_L(ddf, signals[1]).shift(1))
+    ddf['CS_1'] = pd.Series(dh.DONCH_H(ddf, signals[1]).shift(1))
+    #df['OL_2'] = pd.concat([df.DONCH_H55.shift(1), df.open], join='outer', axis=1).max(axis=1)
+    #df['OS_2'] = pd.concat([df.DONCH_L55.shift(1), df.open], join='outer', axis=1).min(axis=1)
+    #df['CL_2'] = pd.concat([df.DONCH_L20.shift(1), df.open], join='outer', axis=1).min(axis=1)
+    #df['CS_2'] = pd.concat([df.DONCH_H20.shift(1), df.open], join='outer', axis=1).max(axis=1)
+    ll = mdf.shape[0]
+    mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
+    curr_pos = []
+    tradeid = 0
+    closed_trades = []
+    for idx, dd in enumerate(mdf.index):
+        mslice = mdf.ix[dd]
+        d = dd.date()
+        dslice = ddf.ix[d]
+        if idx < start_idx:
+            continue
+        if len(curr_pos) == 0 and idx < len(mdf.index)-NO_OPEN_POS_PROTECT:
+            direction = 0
+            if mslice.close > dslice.OL_1:
+                #n_unit = min(max(int((u.close - u.OL_1)*2.0/u.ATR_20 + 1),0),4)
+                direction = 1
+            elif mslice.close < dslice.OS_1:
+                #n_unit = min(max(int((u.OS_1 - u.low) *2.0/u.ATR_20 + 1),0),4)
+                direction = -1
+            mdf.ix[dd, 'pos'] = direction
+            if direction != 0:
+                new_pos = strat.TradePos([mslice.contract], [1], direction, mslice.close, 0)
+                tradeid += 1
+                new_pos.set_tradeid(tradeid, 1)
+                new_pos.open(mslice.close, dd)
+                curr_pos.append(new_pos)
+                atr_dict[cont] = dslice.ATR_20
+        elif (idx >= len(mdf.index)-NO_OPEN_POS_PROTECT):
+            if len(curr_pos)>0:
+                for trade_pos in curr_pos:
+                    trade_pos.close(mslice.close, dd)
+                    tradeid += 1
+                    trade_pos.set_tradeid(tradeid, -pos)
+                    closed_trades.append(curr_pos[0])
+                    trade.close( mslice.close, dd, trade.entry_tradeid)
+                    closed_trades.append(trade)
+                curr_pos = []
+        else:
+            direction = curr_pos[0].direction
+            tot_pos = sum([trade.pos * trade.direction for trade in curr_pos])
+            #exit position out of channel
+            if (direction == 1 and mslice.close < dslice.CL_1) or \
+                    (direction == -1 and mslice.close > dslice.CS_1):
+                for trade in curr_pos:
+                    trade.close( mslice.close, dd, trade.entry_tradeid )
+                    closed_trades.append(trade)
+                curr_pos = []
+            #stop loss position partially
+            elif (curr_pos[-1].exit_target - mslice.close) * direction >= 0:
+                for trade in curr_pos:
+                    if (trade.exit_target - mslice.close) * direction > 0:
+                        trade.close(mslice.close, dd, trade.entry_tradeid)
+                        closed_trades.append(trade)
+                curr_pos = [trade for trade in curr_pos if not trade.is_closed]
+            #add positions
+            elif (tot_pos < 4) and (mslice.close - curr_pos[-1].entry_price)*direction > atr_dict[cont]/2.0:
+                for trade in curr_pos:
+                    trade.exit_target += atr_dict[cont]/2.0*direction
+                trade = strat.TradePos([cont], [1], direction, mslice.close, mslice.close - direction * atr_dict[cont] * NN)
+                tradeid += 1
+                trade.open(mslice.close, dd, tradeid)
+                curr_pos.append(trade)
+            mdf.ix[dd, 'pos'] = sum( [trade.pos for trade in curr_pos] )    
+    mdf['pnl'] = mdf['pos'].shift(1)*(mdf['close'] - mdf['close'].shift(1))
+    mdf['cum_pnl'] = mdf['pnl'].cumsum()
             #max_dd, max_dur = backtest.max_drawdown(mdf['cum_pnl'])
             #drawdown_j = np.argmax(mdf['cum_pnl'][:drawdown_i])
             daily_pnl = pd.Series(mdf['pnl']).resample('1d',how='sum').dropna()
@@ -160,7 +152,10 @@ def save_sim_results(file_prefix, res, trades):
     return
     
 if __name__=="__main__":
-    rollrule = '-30b'
+    config = {}
+    config['rollrule'] = '-30b'
+    config['nearby'] = 1
+    config['signals'] = (20,10)
     commod_list1= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
@@ -169,10 +164,10 @@ if __name__=="__main__":
                 [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
     commod_list = commod_list1+commod_list2
     start_dates = start_dates1 + start_dates2
-    end_date = datetime.date(2014,11,7)
+    end_date = datetime.date(2014,12,10)
     systems = [[20,10],[15,7],[40,20],[55,20]]
     for sys in systems:
-        file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_R20b_%s' % sys[0]
+        file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\turtle_%s' % sys[0]
         for cmd,sdate in zip(commod_list, start_dates):
             nearby = 1
             if cmd in ['cu','al','zn']:

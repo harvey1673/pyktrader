@@ -1,0 +1,937 @@
+MATLAB因素模型的一个范例 (2012-03-16 11:20:06)转载▼
+标签： 杂谈	分类： 工具方法
+一、因素模型的一个范例：主成分分析
+clear;
+% use lookback days as estimation (training) period for determining factor exposures.
+lookback=252;   numFactors=5;
+% Use only 5 factors for trading strategy, long stocks with topN expected 1-day returns.
+topN=50;
+% test on SP600 smallcap stocks. (This MATLAB binary input file contains tday, stocks, op, hi, lo, cl arrays.)
+load('IJR_20080114);
+mycls=fillMissingData(cl);
+positionsTable=zeros(size(cl));
+% note the rows of dailyret are the observations at different time periods
+dailyret= (mycls-lag1(mycls))/lag1(mycls);
+for t=lookback+1:length(tday)
+    % here the columns of R are the different observations.
+    R=dailyret(t-lookback+1:t,:)';
+    % avoid any stocks with missing returns
+    hasData=find(all(isfinite(R), 2));
+    R=R(hasData,:);
+    avgR=smartmean(R, 2);
+    % subtract mean from returns
+    R=R-repmat(avgR, [1 size(R, 2)]);
+    % compute covariance matrix, with observations in rows.
+    covR=smartcov(R');
+    % X is the factor exposures matrix, B the variances of factor returns.
+    % Use the eigenvectors of covR as column vectors for X.
+    [X, B]=eig(covR);
+    % Retain only numFactors
+    X(:, 1:size(X, 2)-numFactors)=[];
+    % b are the factor returns for time period t-1 to t.
+    results=ols(R(:, end), X);
+    b=results.beta;
+    % Rexp is the expected return for next period assuming factor returns remain constant.
+    Rexp=avgR+X*b;
+    [foo idxSort]=sort(Rexp, 'ascend');
+    % short topN stocks with lowest expected returns
+    positionsTable(t, hasData(idxSort(1:topN)))=-1;
+    % buy topN stocks with highest expected returns
+    positionsTable(t, hasData(idxSort(end-topN+1:end)))=1;
+end
+% compute daily returns of trading strategy
+ret=smartsum(backshift(1, positionsTable).*dailyret, 2);
+% compute annualized average return of trading strategy
+avgret=smartmean(ret)*252;
+% A very poor return!
+% avgret =
+%
+% -1.8099
+ 
+二、函数smartcov,与MATLAB自带的函数相比，忽略了没有报酬的日子 
+function y = smartcov(x)
+% Covariance n of finite elements.
+% Rows of observations, columns of variables
+% Normalizes by N, not N-1
+y=NaN(size(x, 2), size(x, 2));
+xc=NaN(size(x));
+goodstk=find(~all(isnan(x), 1));
+xc(:, goodstk)=x(:, goodstk)-repmat(smartmean(x(:, goodstk),1), [size(x, 1) 1]); % Remove mean
+for m=1:length(goodstk)
+    for n=m:length(goodstk)
+        y(goodstk(m), goodstk(n))=smartmean(xc(:, goodstk(m)).*xc(:, goodstk(n)));
+        y(goodstk(n), goodstk(m))=y(goodstk(m), goodstk(n));
+    end
+end
+ 
+注：代码摘自《计量交易》一书，英文名《Quantitative Trading》
+
+
+MATLAB计算配对比例和均值回复时间序列半衰期 (2012-03-16 11:17:31)转载▼
+标签： 杂谈	分类： 工具方法
+一、如何计算配对比例，以组合成具有协整特性（也就是具有均值回归特性）的价差组合
+% make sure previously defined variables are erased.
+clear;
+% read a spredsheet named "GLD.xls" into MATLAB.
+[num, txt]=xlsread('GLD');
+% the first colum(starting from the second row) is the trading days in format mmm/ddd/yyyy.
+tday1=txt(2:end,1);
+% convert the format into yyyymmdd.
+tday1=datestr(datenum(tday1, 'mm/dd/yyyy'), 'yyyymmdd');
+% convert the date strings first into cell arrays and then into numeric format.
+tday1=str2double(cellstr(tday1));
+% the last column contains the adjusted close prices.
+adjclsl=num(:, end);
+% read a spreadsheet named "GDX.xls" into MATLAB.
+[num2, txt2]=xlsread('GDX');
+% the first column(starting from the second row) is the trading days in format mm/dd/yyyy.
+tday2=txt2(2:end, 1);
+% convert the format into yyyymmdd.
+tday2=datestr(datenum(tday2, 'mm/dd/yyyy'), 'yyyymmdd');
+% convert the date strings first into cell arrays and then into numeric format.
+tday2=str2double(cellstr(tday2));
+% the last column contains the adjusted close prices.
+adjcls2=num2(:, end);
+% find all the days when either GLD or GDX has data.
+tday=union(tday1,tday2);
+[foo idx idx1]=intersect(tday,tday1);
+% combining the two price series
+adjcls=NaN(length(tday), 2);
+adjcls(idx, 1)=adjclsl(idx1);
+[foo idx idx2]=intersect(tday, tday2);
+adjcls(idx, 2)=adjcls2(idx2);
+% days where any one price is missing
+baddata=find(any(~isfinite(adjcls), 2));
+tday(baddata)=[];
+adjcls(baddata,:)=[];
+vnames=strvcat('GLD', 'GDX');
+% run cointegration check using augmented Dickey-Fuller test
+res=cadf(adjcls(:, 1), adjcls(:, 2), 0, 1);
+prt(res, vnames);
+% Output from cadf function:
+% Augmented DF test for co-integration variables: GLD,GDX
+% CADF t-statistic        # of lags        AR(1) estimate
+%      -3.35698533            1               -0.060892
+%
+%    1% Crit Value      5% Crit Value      10% Crit Value
+%       -3.819             -3.343              -3.042
+% The t-statistic of -3.36 which is in between the 1% Crit Value of -3.819 and the 5% Crit Value of -3.343 means that
+% there is a better than 95% probability that these 2 time series are cointegrated.
+results=ols(adjcls(:, 1), adjcls(:, 2));
+hedgeRatio=results.beta
+z=results.resid;
+% A hedgeRatio of 1.6766 was found.
+% I.e. GLD=1.6766*GDX + z, where z can be interpreted as the spread GLD-1.6766*GDX and should be stationary.
+% This should produce a chart similar to Figure 7.4.
+plot(z);
+ 
+二、测试KO与PEP的协整与相关性
+% A test for correlation.
+dailyReturns=(adjcls-lag1(adjcls))./lag1(adjcls);
+[R,P]=corrcoef(dailyReturns(2:end,:));
+% R =
+%
+%   1.0000   0.4849
+%   0.4849   1.0000
+% P =
+%
+%  1  0
+%  0  1
+% The P value of 0 indicates that the two time series are significantly correlated.
+ 
+三、计算平均回归时间序列的半衰期
+% === Insert 如何计算配对比例 in the beginning here ===
+prevz=backshift(1, z); % z at a previous time-step
+dz=z-prevz;
+dz(1)=[];
+prevz(1)=[];
+% assumes dz=theta*(z-mean(z))dt+w,
+% where w is error term
+results=ols(dz, prevz-mean(prevz));
+theta=results.beta;
+halflife=-log(2)/theta
+% halflife =
+%
+% 10.0037
+ 
+注：代码摘自《计量交易》一书，英文名《Quantitative Trading》
+
+MATLAB回测一月效应 (2012-03-16 11:15:38)转载▼
+标签： 杂谈	分类： 工具方法
+一、回测一月效应
+clear;
+load('IJR 20080131');
+onewaytcost=0.0005;  % 5bp one way transaction cost
+years=year(cellstr(datestr(datenum(cellstr(num2str(tday)), 'yyyymmdd'))));
+months=month(cellstr(datestr(datenum(cellstr(num2str(tday)), 'yyyymmdd'))));
+nextdayyear=fwdshift(1, years);
+nextdaymonth=fwdshift(1, months);
+lastdayofDec=find(months==12 & nextdaymonth==1);
+lastdayofJan=find(months==1 & nextdaymonth==2);
+% lastdayofDec starts in 2004, so remove 2004 from lastdayofJan
+lastdayofJan(1)=[];
+% Ensure each lastdayofJan date after each lastdayofDec date
+assert(all(tday(lastdayofJan) > tday(lastdayofDec)));
+eoy=find(years~=nextdayyear); % End Of Year indices
+eoy(end)=[]; % last index is not End of Year
+% Ensure eoy dates match lastdayofDec dates
+assert(all(tday(eoy)==tday(lastdayofDec)));
+annret=(cl(eoy(2:end),:)-cl(eoy(1:end-1),:))./cl(eoy(1:end-1),:); % annual returns
+janret=(cl(lastdayofJan(2:end),:)-cl(lastdayofDec(2:end),:))./cl(lastdayofDec(2:end),:);
+% January returns
+for y=1:size(annret, 1)
+    % pick those stocks with valid annual returns
+    hasData=find(isfinite(annret(y,:)));
+    % sort stocks based on prior year’s returns
+    [foo sortidx]=sort(annret(y, hasData), ’ascend’);
+    % buy stocks with lowest decile of returns,
+    % and vice versa for highest decile
+    topN=round(length(hasData)/10);
+    % portfolio returns
+    portRet=(smartmean(janret(y, hasData(sortidx(1:topN))))-smartmean(janret(y, hasData(sortidx(end-topN+1:end)))))/2-2*onewaytcost;
+    fprintf(1,'Last holding date %i: Portfolio
+    return=%7.4f\n', tday(lastdayofDec(y+1)), portRet);
+end
+% These should be the output
+% Last holding date 20051230: Portfolio return=-0.0244
+% Last holding date 20061229: Portfolio return=-0.0068
+% Last holding date 20071231: Portfolio return= 0.0881
+ 
+二、函数assert
+function assert(pred, str)
+% ASSERT Raise an error if the predicate is not true.
+% assert(pred, string)
+if nargin<2, str = '';  end
+if ~pred
+    s = sprintf(’assertion violated: %s’, str);
+    error(s);
+end
+ 
+三、函数fwdshift
+function y=fwdshift(day,x)
+assert(day>=0);
+y=[x(day+1:end,:,:); NaN*ones(day,size(x,2), size(x, 3))];
+ 
+注：代码摘自《计量交易》一书，英文名《Quantitative Trading》
+
+MATLAB前一年同期季节性趋势策略的回测 (2012-03-16 11:12:17)转载▼
+标签： 杂谈	分类： 工具方法
+一、前一年同期季节性趋势策略回测
+clear;
+load('SPX 20071123', 'tday','stocks', 'cl');
+% find the indices of the days that are at month ends.
+monthEnds=find(isLastTradingDayOfMonth(tday));
+monthlyRet=(cl(monthEnds,:)-lag1(cl(monthEnds,:)))./lag1(cl(monthEnds,:));
+mycl=fillMissingData(cl);
+% sort stocks by monthly returns in ascending order
+[monthlyRetSorted sortIndex]=sort(monthlyRet, 2);
+% these are the sorted monthly returns of the previous year
+prevYearMonthlyRetSorted=backshift(12,monthlyRetSorted);
+% the sort index of the previous year
+prevYearSortIndex=backshift(12, sortIndex);
+positions=zeros(size(monthlyRet));
+for m=13:size(monthlyRet, 1)
+    hasReturns=isfinite(prevYearMonthlyRetSorted(m,:)) & isfinite(cl(monthEnds(m-1),:));
+    mySortIndex=prevYearSortIndex(m, hasReturns);
+    % take top decile of stocks as longs,
+    % bottom decile as shorts
+    topN=floor(length(mySortIndex)/10);
+    positions(m-1, mySortIndex(1:topN))=-1;
+    positions(m-1, mySortIndex(end-topN+1:end))=1;
+end
+ret=smartsum(lag1(positions).*monthlyRet, 2);
+avgannret=12*smartmean(ret);
+sharpe=sqrt(12)*smartmean(ret)/smartstd(ret);
+fprintf(1, 'Avg ann return=%7.4f Sharpe ratio=%7.4f\n', avgannret, sharpe);
+% Output should be
+% Avg ann return=-0.9167 Sharpe ratio=-0.1055
+ 
+二、函数LastTradingDayOfMonth
+function isLastTradingDayOfMonth=isLastTradingDayOfMonth(tday)
+% isLastTradingDayOfMonth=isLastTradingDayOfMonth(tday) returns a logical array. True if tday(t) is last trading day of month.
+tdayStr=datestr(datenum(num2str(tday), 'yyyymmdd'));
+todayMonth=month(tdayStr);
+tmrMonth=fwdshift(1, todayMonth);   
+% tomorrow's month
+isLastTradingDayOfMonth=false(size(tday));
+isLastTradingDayOfMonth(todayMonth?=tmrMonth & isfinite(todayMonth) & isfinite(tmrMonth))=true;
+ 
+三、函数backshift
+function y=backshift(day,x)
+% y=backshift(day,x)
+assert(day>=0);
+y=[NaN(day,size(x,2), size(x, 3));x(1:end-day,:,:)];
+ 
+注：代码摘自《计量交易》一书，英文名《Quantitative Trading》
+
+MATLAB使用凯利公式计算资金最佳配置 (2012-03-16 11:09:34)转载▼
+标签： 杂谈	分类： 工具方法
+取三个特定区段的ETF，看如何配置资金，以达到投资组合的最大成长率
+% make sure previously defined variables are erased.
+clear;
+% read a spreadsheet named "OIH.xls" into MATLAB.
+[num1, txt1]=xlsread('OIH');
+% the first column (starting from the second row) is the trading days in format mm/dd/yyyy.
+tday1=txt1(2:end, 1);
+% convert the format into yyyymmdd.
+tday1=datestr(datenum(tday1, 'mm/dd/yyyy'), 'yyyymmdd');
+% convert the date strings first into cell arrays and then into numeric format.
+tday1=str2double(cellstr(tday1));
+% the last column contains the adjusted close prices.
+adjcls1=num1(:, end);
+% read a spreadsheet named "RKH.xls" into MATLAB.
+[num2, txt2]=xlsread('RKH');
+% the first column (starting from the second row) is the trading days in format mm/dd/yyyy.
+tday2=txt2(2:end, 1);
+% convert the format into yyyymmdd.
+tday2=datestr(datenum(tday2, 'mm/dd/yyyy'), 'yyyymmdd');
+% convert the date strings first into cell arrays and then into numeric format.
+tday2=str2double(cellstr(tday2));
+adjcls2=num2(:, end);
+% read a spreadsheet named "RTH.xls" into MATLAB.
+[num3, txt3]=xlsread('RTH');
+% the first column (starting from the second row) is the trading days in format mm/dd/yyyy.
+tday3=txt3(2:end, 1);
+% convert the format into yyyymmdd.
+tday3=datestr(datenum(tday3, 'mm/dd/yyyy'), 'yyyymmdd');
+% convert the date strings first into cell arrays and then into numeric format.
+tday3=str2double(cellstr(tday3));
+adjcls3=num3(:, end);
+% merge these data
+tday=union(tday1, tday2);
+tday=union(tday, tday3);
+adjcls=NaN(length(tday), 3);
+[foo idx1 idx]=intersect(tday1, tday);
+adjcls(idx, 1)=adjcls1(idx1);
+[foo idx2 idx]=intersect(tday2, tday);
+adjcls(idx, 2)=adjcls2(idx2);
+[foo idx3 idx]=intersect(tday3, tday);
+adjcls(idx, 3)=adjcls3(idx3);
+ret=(adjcls-lag1(adjcls))./lag1(adjcls); % returns
+% days where any one return is missing
+baddata=find(any(~isfinite(ret), 2));
+% eliminate days where any one return is missing
+ret(baddata,:)=[];
+% excess returns: assume annualized risk free rate is 4%
+excessRet=ret-repmat(0.04/252, size(ret));
+% annualized mean excess returns
+M=252*mean(excessRet, 1)'
+% M =
+%
+%   0.1396
+%   0.0294
+%   -0.0073
+C=252*cov(excessRet)       % annualized covariance matrix
+% C=
+%
+%   0.1109   0.0200   0.0183
+%   0.0200   0.0372   0.0269
+%   0.0183   0.0269   0.0420
+F=inv(C)*M     % Kelly optimal leverages
+% F=
+%
+%   1.2919
+%   1.1723
+%   -1.4882
+% Maximum annualized compounded growth rate
+g=0.04+F'*C*F/2
+% g =
+%
+% 0.1529
+S=sqrt(F'*C*F)
+% Sharpe ratio of portfolio
+% S=
+%
+% 0.4751
+ 
+注：代码摘自《计量交易》一书，英文名《Quantitative Trading》
+
+MATLAB配对交易及未来数据检测 (2012-03-16 11:06:31)转载▼
+标签： 杂谈	分类： 工具方法
+一、GLD和GDX配对交易
+% make sure previously defined variables are erased.
+clear;
+% read a spreadsheet named "GLD.xls" into MATLAB.
+[num, txt]=xlsread('GLD');
+% the first column (starting from the second row) is the trading days in format mm/dd/yyyy.
+tday1=txt(2:end, 1);
+% convert the format into yyyymmdd.
+tday1=datestr(datenum(tday1, 'mm/dd/yyyy'), 'yyyymmdd');
+% convert the date strings first into cell arrays and then into numeric format.
+tday1=str2double(cellstr(tday1));
+% the last column contains the adjusted close prices.
+adjcls1=num(:, end);
+% read a spreadsheet named "GDX.xls" into MATLAB.
+[num, txt]=xlsread('GDX');
+% the first column (starting from the second row) is the trading days in format mm/dd/yyyy.
+tday2=txt(2:end, 1);
+% convert the format into yyyymmdd.
+tday2=datestr(datenum(tday2, 'mm/dd/yyyy'), 'yyyymmdd');
+% convert the date strings first into cell arrays and then into numeric format.
+tday2=str2double(cellstr(tday2));
+% the last column contains the adjusted close prices.
+adjcls2=num(:, end);
+% find the intersection of the two data sets, and sort them in ascending order
+[tday, idx1, idx2]=intersect(tday1, tday2);
+cl1=adjcls1(idx1);
+cl2=adjcls2(idx2);
+trainset=1:252;       % define indices for training set
+% define indices for test set
+testset=trainset(end)+1:length(tday);
+% determines the hedge ratio on the trainset use regression function
+results=ols(cl1(trainset), cl2(trainset));
+hedgeRatio=results.beta;
+% spread = GLD - hedgeRatio*GDX
+spread=cl1-hedgeRatio*cl2;
+plot(spread(trainset));
+figure;
+plot(spread(testset));
+figure;
+% mean of spread on trainset
+spreadMean=mean(spread(trainset));
+% standard deviation of spread on trainset
+spreadStd=std(spread(trainset));
+% z-score of spread
+zscore=(spread - spreadMean)./spreadStd;
+% buy spread when its value drops below 2 standard deviations.
+longs=zscore<=-2;
+% short spread when its value rises above 2 standard deviations.
+shorts=zscore >=2;
+% exit any spread position when its value is within 1 standard deviation of its mean.
+exits=abs(zscore)<=1;
+% initialize positions array
+positions=NaN(length(tday), 2);
+% long entries
+positions(shorts, :)=repmat([-1 1], [length(find(shorts)) 1]);
+% short entries
+positions(longs, :)=repmat([1 -1], [length(find(longs)) 1]);
+% exit positions
+positions(exits, :)=zeros(length(find(exits)), 2);
+% ensure existing positions are carried forward
+% unless there is an exit signal positions=
+fillMissingData(positions);
+cl=[cl1 cl2]; % combine the 2 price series
+dailyret=(cl - lag1(cl))./lag1(cl);
+pnl=sum(lag1(positions).*dailyret, 2);
+% the Sharpe ratio on the train-ing set should be about 2.3
+sharpeTrainset=sqrt(252)*mean(pnl(trainset(2:end)))./std(pnl(trainset(2:end)))
+% the Sharpe ratio on the test set should be about 1.5
+sharpeTestset=sqrt(252)*mean(pnl(testset))./std(pnl(testset))
+plot(cumsum(pnl(testset)));
+% save positions file for checking look-ahead bias.
+save example3_6_positions positions;
+ 
+二、函数lag1
+function y=lag1(x)
+% y=lag(x)
+if (isnumeric(x))
+    % populate the first entry with NaN
+    y=[NaN(1,size(x,2));x(1:end-1, :)];elseif (ischar(x))
+    % populate the first entry with "
+    y=[repmat(",[1 size(x,2)]);x(1:end-1, :)];else
+    error(‘Can only be numeric or char array’);
+end
+ 
+三、未来数据检测
+    为了检查回测程序是否存在后见之明，将下面的程式码，插入到原来MATLAB程序中，放在“cl2 =adjcls2(idx2);”这行的前面
+% number of most recent trading days to cut off
+cutoff=60;
+% remove the last cutoff number of days.
+tday(end-cutoff+1:end, :)=[];
+cl1(end-cutoff+1:end, :)=[];
+cl2(end-cutoff+1:end, :)=[];
+    将下面整段程序，加到之前MATLAB程序的最后面，取代“save example3 6 positions positions”这一行
+% step two of look-forward-bias check
+oldoutput=load('example3 6 positions');
+oldoutput.positions(end-cutoff+1:end, :)=[];
+if (any(positions~=oldoutput.positions))
+    fprintf(1, 'Program has look-forward-bias!\n');
+end
+
+注：代码摘自《计量交易》一书，英文名《Quantitative Trading》
+
+日内交易战术 (2011-11-17 15:22:02)转载▼
+标签： 杂谈	分类： 高手云集
+    拉瑞·威廉姆斯和斯坦利·克罗都是我非常喜欢的交易大师，他们的名著《短线交易秘诀》和《克罗谈投资策略》我看过了无数遍。这两个人的交易风格完全不同，前者是崇尚短线交易，他的名言是“短线交易者可以以光速来回变动，改变立场，甚至可以从恐慌中获利”；而后者则是世界著名的长线持仓大师，他的名言是“能够持续不断赚大钱的交易者，是那些建立较长期仓位的人，他们往往是顺着大趋势操作”。从表面来看，这两种理念似乎是矛盾的、冲突的，但毋庸置疑，他们各自都在投资领域取得了令人艳羡的成绩。
+
+    “存在的就是合理的”！我的经验是：要想赚大钱必须学会长线持仓，但如果要赚快钱就要学会日内交易；心理承受能力稍差的人最好使用短线交易策略，心理承受能力较强的人则应该寻找长线持仓的系统；非专职的交易者（指交易时间不能完全专注于交易，而是有其它的工作要做的人）应该使用长线持仓的交易系统，专职的交易者有条件使用短线交易系统.
+
+    从市场分类来看，小资金的交易者比较喜欢日内交易，那是因为日内交易赚钱快，当然，亏钱也快，但是，因为没有隔夜的风险，所以即便亏损也是可以掌控的，眼睛能看到的，任何时候只要觉得情况不对，可以马上离场；而一旦持仓过夜，发生亏损就有可能想逃都无门，比如遇到停板或是大幅跳空等一些极端状况。日内交易和隔夜交易各有利弊，如果一定要分出哪个系统更完美那是没有任何意义的。在这个市场上，有靠做趋势赚大钱的，但同样有靠日内交易积累起财富的。作为交易者首先要确定好自己的交易风格，然后再寻找合适的交易系统。
+
+    我目前的交易风格是以趋势交易为主。趋势交易者在交易时间经常是没事可干，往往是忙在收盘后的分析，这是因为趋势的改变不会一瞬间完成。所以，我日内短线交易也同时操作。我将以往日内交易的一些经验总结下来，供喜欢做日内交易的朋友们参考。
+
+一、选择品种
+
+    不是所有的品种都适合日内交易，要想在日内交易中获得利润，首先要选择好标的物。只有那些波动性大、流动性大的品种能够让交易者迅速赚到利润。我比较喜欢操作的日内交易品种是胶、铜、豆油、糖、锌、PTA、塑料。很多散户喜欢做玉米、小麦，其实这样的品种属于趋势性品种，一旦趋势形成，一般都难以改变，但日内波动都不是很大，看起来总是不死不活、不温不火、不紧不慢，这样的品种还是放弃的比较好。既然是要赚快钱，就要选择活跃的品种。值得注意的是，我如果有长线持仓的头寸，那么这个品种的日内我是绝对不做的，不能让日内短线思维影响你对长线持仓品种趋势的判断。
+
+二、选择时间架构
+
+    日内短线也分好几种，有利用1分钟图表抢帽子的；有利用3分钟图表做小波段的；有利用15分钟图表做日内趋势的。你必须先给自己定下来用多长的时间架构。如果你的精力充沛，心理承受力太差，那只能选择1分钟图表，如果你不想太频繁交易，可以选择3分钟图，如果你只是不希望隔夜，日内每天只需要做一到两次交易足矣，那可以用15分钟图。我的日内交易是寻找3分钟图表上的机会。
+
+三、构建系统
+
+    无论长线短线都必须要有一套系统，这套系统起码要涵盖以下几个方面：
+
+1、进场时机——什么情况下进场？关于这一点，我可以提供一个模型给大家参考：
+
+   A、开盘半小时不操作；
+
+   B、价格突破半小时最高价做多，价格跌破半小时最低价做空；
+
+    这是一个最最简单的关于进场的交易系统，我只是举个例子，再比如这个模型：
+
+   A、价格跳空高开不做多，价格跳空低开不做空；
+
+   B、价格跳空高开跌破昨日最高价放空；价格低开突破昨日最低价做多；
+
+    各位可以根据自己的经验加上C、D、E、F、G等等其它条件，只要条件符合就进去，条件不符合就不做。
+
+2、资金管理——用多少钱开仓？日内交易一般可以比隔夜交易使用的资金数额稍大一点，但却不是像很多赌性大发的交易者所说的满仓杀进。日内交易同样需要资金管理，而且不同的品种资金的管理原则也不能一样。那些按照绝对资金值去开仓的交易者应该说还没有完全掌握资金管理的诀窍。比如说下面这个资金管理模型：“每次开仓总是使用总资金的50%”——这样的模型是不科学的。我更偏向于使用这样的资金管理模型：“单笔亏损不超过总资金的2%”——道理很简单，因为不同的进场点会导致你设置的止损位置不一样，还有就是不同的品种波动的幅度不一样。如果用统一的开仓资金势必会使得在某个品种上赚的钱还不够在另外一个品种上亏的钱多。如果把亏损设置在一个固定范围之内那就不一样了，只要你能保持2：1原则，就是如果一笔交易值得尝试，其获利的目标至少要是止损的2倍，这样哪怕交易员三次交易中只有1次正确，也能够打平（计算上手续费是亏钱的），如果能够做到正确率50%，就赚钱了。如果这样，你想陷入长期亏损都很困难。
+
+3、风险控制——如果做反了怎么办？关于这一点其实不需要多说，不懂得风险控制的交易者或者说不会使用止损单的交易者根本连交易的大门都还没踏进。每当你进场之后，止损单就应该设置好，如果做反，止损单会把你带出场，不会让你亏的受不了，否则就准备有朝一日爆仓吧。
+
+4、出场机制——什么时候离场？止损离场是做错了的状况下，如果做对了什么时候出场呢？日内交易的赢利模式是利用多次的小赢利达到累计财富的目的。所以既然选择了日内，就要时时刻刻提醒自己不要贪婪，赚了钱要懂得走人。赢利必须达到止损的2倍，这是一个离场原则，其次趋势一有停顿的苗头就平仓。很多交易者就是被贪婪所累，明明进场之后是赚了钱的，可总想赚够本。比如做多时，进场后的确连拉阳线，可他就是不走，非得等到阴线出来，但真的阴线出来了又觉得刚才的高价都没走，说不定接下来又是阳线，还是再等等吧，一等两等就等到了亏损。做日内必须要切记一点，有利润就走！有的人会说有利润就走手续费还不够，这完全是瞎说的。试想一下，手续费和价格的变动比起来根本不算什么，就拿橡胶来说吧，手续费是平今单边10元/手，胶最小变动单位是5元，也就是说只要做对了，跳一下就赢利25元，除掉10元的手续费还有15元的赢利。那些每天创造大量手续费的人如果下单的总成绩是赢利的，手续费又算什么呢？虽然说手续费是给交易所和经纪公司创造收入，但这个收入只要不是从你的帐户上创造的又有什么关系？你只要是赚钱的就可以了，你的目的不就是赚钱吗？那些觉得做日内手续费太昂贵的交易者是因为他们一天做下来都是亏钱的，再加上庞大的手续费金额，那的确是让人头晕的。
+
+四、日内交易开盘后的准备工作
+
+1、判断今天的市场是单边还是震荡——价格在3分钟图表上30分钟最高价和最低价之间的区域内上下波动为震荡，突破有可能出现趋势。
+
+2、判断中线趋势——如果60分钟图表上趋势是上涨，尽量从多头下手；反之，则从空头下手。短线高手不必拘泥这一条，对于不熟练的新手来讲多空思维的转换反应没有那么快，所以建议只顺着60分钟图表上的趋势做。
+
+3、分析多空人气——从成交量和持仓量的变化中可以分析出多空的人气强弱情况。放大量价格却不跌，可能就要止跌了，放大量而价格却涨不上去了，短线就可能涨到头了。上涨过程和下跌过程中量的要求是不同的，上涨过程需要持续均匀放量，3分钟K线图中均匀的放量，说明涨势还将继续，如果出现大幅减量或者出现一个非常大的量，上涨就可能告一段落了。下跌就不同，下跌只要在下破一些关键位置的时候放量，下跌趋势就还会继续。价格在涨到某个价位时不涨了，持仓却一直在增加，买卖挂单的价格一个比一个低，说明价格有可能要跌。增仓滞涨，是非常好的抛空时机，或者说增仓滞跌，容易反弹。
+
+4、寻找关键点位——画出图表中的压力、支撑、趋势线以及斐波那契回撤线，在价格达到或是突破这些关键点位时迅速采取行动。
+
+五、日内交易赢利规则
+
+1、交易员在阶段性时间内所操作的品种只能为1个。必须对所操作的品种进行持续性的跟踪，直到该品种不具备投机价值才能放弃。操作时起码要打开3个不同时间周期的行情窗口：一分钟窗口——这是为进场和出场时机把握准备的；3分钟窗口——这是用来监视进场后的波段情况；30分钟或60分钟窗口——用来随时监视日内趋势的转变。
+
+2、交易者在对目标品种进行伏击时，事先和执行之时必须迅速对可能的赢面和输面进行技术上的综合判断和评估，只有在攻击取胜概率大于80%且止损和赢利目标价位起码达到1：2以上的比例时才进行资金布局。
+
+3、在进行短线伏击时必须注意几个要素：
+
+   A、各个不同周期图表上的支撑、阻力、趋势线和斐波那契回撤线的运行状况；
+
+   B、日线图上的位置形态综合测定；
+
+   C、分时图上波浪的健康与稳定性的判断；
+
+   D、K线实体的形态和量能的变化；
+
+   E、交易者要保持冰冷的战略心态：触及止损就离场，达到赢利目标就走人，管它后面涨还是跌，钱赚到了为先。反正随时随地都会有机会出现，千万不要贪婪。
+
+   F、当行情可疑时，出场要果断，没到止损也出来，绝对不可拖泥带水。
+
+   G、当某一个大类的品种集体都很弱时，强的那个品种也不要轻易做多；当某一个大类的品种集体都很强时，弱的那个品种也不要轻易放空；
+
+   H、操作机会天天有，如果被止损了千万不要着急立马要挽回来。止损了这笔单子就完成了，下一笔单子是新单，该赚多少就多少，不要以前面的操作来定制下一次操作的目标，那样会次次都亏。只有每一次都当成新的单子来处理，才能有好的心态投入战斗。
+
+http://shiershao554.blog.hexun.com/27894672_d.html
+
+
+一种新的止损策略——ATR棘轮法 (2011-11-15 13:25:50)转载▼
+分类： 工具方法
+    基本思想是非常简单的，我们先选定一个合理的起始价格，然后每天加某一倍数的ATR，得到一个跟踪止损点。由该方法生成的止损点不仅能随着时间的增加不断上移而且同时也能适应市场波动性增减。与我们以前采用的由抛物转向指标得到的止损点相比，其优点在于：使用ATR棘轮，我们能更自由的选择起始价格和增减速度。此外我们还发现基于ATR的止损点能更快更准确的反映波动性变化，从而使我们能比传统的跟踪止损法锁定更多的利润。
+    下面是一个应用该策略的例子：当我们1ATR以上的盈利目标实现时，我们选择一个近期低点（比如最近十天的最低价）作为起始价格，然后根据我们持仓天数每天将最低价增加零点几倍的ATR（比如0.05ATR）。如果我们已经持有仓位15天了，那么我们把0.05ATR乘以15天，然后将其乘积0.75ATR加到起始价位上。20天后，我们将把1.0ATR（0.05乘以20天）加到最近十天的最低价上。ATR棘轮法在逻辑上是很简单的，但是你马上就能发现有许多运动点能完成一些有趣且有用的功能，比我们想象的要多得多。
+    我们尤其喜欢该策略，因为不象抛物转向指标，ATR棘轮能非常容易的在我们交易过程中的任何时候使用。我们可以在进入交易的第一天就开始使用这种止损策略，也可以等发生某些有利事件后再使用止赢策略。我建议等到实现盈利后再使用该止损策略，原因正如你我都看到的那样，这种止损点会在有利的市场环境中迅速向上移动。
+    ATR棘轮安静的转动着，每天都在向上移动，因为我们每天都在让其增加零点几倍的ATR。此外，我们用于计算止损点的起始价格（比如我们上边例举的最近十天最低价）会随着市场向上运动不断上移。因此随着时间的增加，我们在不断升高的最近十天最低价的基础上增加不断增长的累积ATR。每当10天低价上移，我们的ATR棘轮也跟着向上转动，我们的止损点也跟着每天稳步上移，如果十天低价急剧上移，我们的止损点也跟着向上跳跃。有必要强调一下，该策略是我们能不断的把每日价格变化速度反应在不断上移的起始价格上，从而形成该止损策略独一无二的双重加速因素。不断上移的止损点不仅能被时间因素加速，还能被价格加速。此外，波动性增加也会提高ATR棘轮止损点上移的速度。
+    波动性增加会使止损点上移速度增加，这是ATR棘轮策略的重要特征。在一个快速移动的市场中，你会看到许多缺口和长长的K线图。市场趋势加速时市场波动性也会增加，因而在我们盈利迅速增加时，ATR也会迅速增加。由于我们要往起始价格中增加一定数量的ATR，所以ATR的每一次增加都会使止损点突然向上跳跃，止损点就变得更靠近入场后的最高价。如果我们已经持有仓位40天，那么ATR的任何增加都会对止损点产生40倍的影响。这正是我们想要的。我们发现，当市场给我们丰盛的盈利时，ATR棘轮止损点也会令人惊讶的迅速上移从而很好的为我们锁定浮动盈利。
+    请记住（即是对我们来说）这种止损策略是新的策略，因为我们对它的经验和结论是很有限的。然而我还是打算讨论对一些变量的观察结论，或许这能帮你理解和成功的应用这种止损策略。
+    起始价格：ATR棘轮的一个非常好的特性是我们可以在任何我们中意的地方设置起始价格。例如我们可以象抛物转向指标一样在一些重要的低点设置起始价格，我们还可以在摆动区间的底部，或支撑水平，或某某通道得底部，或者低于入场点一定数量ATR的地方设置起始价格。如果我们等到账面产生数量可观的盈利后，我们可以把起始价格设置在甚至是高于入场点的地方。可行的入场点是无限的，充分发挥你的想象力和逻辑推理能力去寻找一个适合你时间框架的、对你的交易系统也是切实可行的起始价格。与固定的起始价格（比如抛物转向指标中）不同，我们把最近X天低点设置为起始价格，这使得我们的ATR棘轮止损点上升得更快，因为在不断走强的市场中，我们的起始价格也会不断上移。要是你喜欢，你也可以把ATR棘轮的起始价格固定在某一个地方，比如在低于入场点2ATR的地方，在这种情况下，虽然起始价格不会向上移动，但随着持仓时间的延长ATR棘轮止损点还是会上移的，另外ATR值变大也会使ATR棘轮止损点上移。
+    ATR棘轮每天移动量：我们刚开始研究使用的ATR棘轮每天移动量经测试表明太大了。对于我们的交易时间框架来说，太大的ATR棘轮每天移动量（百分之几的ATR）会让我们的止损点向上移动的过分快。经过一段时间的试验和失败后我们发现用我们的持仓天数乘以ATR棘轮每天移动量0.05~0.10ATR（5%至10%ATR(20天期)）能让止损点上移的速度比你想象的要快得多。
+    作为该策略的变通方法，我们可以在最初使用较小的ATR棘轮每天移动量，然后一旦我们获得很大的浮动盈利，我们就可以使用较大的ATR棘轮每天移动量。
+    ATR周期长度：正如我们在以前使用ATR过程中发现的，我们用来计算ATR的时间周期长度是非常重要的。如果我们希望ATR能快速反应市场短期波动区间的变化，我们可以使用较短期的均值（比如4止5根K线）；如果我们希望一个更加平滑的ATR，不会对一两天的异常波动敏感，我们可以使用长期均值（20至50根K线）。我在工作中使用的ATR大部分是20天均值，除非我有充分理由希望ATR变得更敏感或更不敏感。
+    总结：ATR棘轮做为一种赢利工具，我们对其应用潜能及变通用法的理解才触及皮毛。我们尤其喜欢它带给我们的灵活性，我怀疑每个交易者都会想出略微不同的版本。正如你看到的，有许多重要的变量可以修修补补。（以下略）
+译者补充：原文中多次提到ParabolicSAR（韦尔达技术指标）,以下是译者转摘的相关知识。
+    ParabolicSAR(StopandReverse)，抛物转向指标，为一种设定止损点相当有效的韦尔达技术指标，基本原理是将我们股票或商品价格走势假设为抛物线运动。利用价格与指针交*判断趋势反转进行平仓与建立反向新仓。
+公式：
+SAR（t）=SAR（t-1）+AF*(EP–SAR（t-1）)
+    1.一开始AF=0.02，当一个新的极值出现时，AF每次便增加0.02，直到AF值为0.2为止便不再增加；若无新极值，则AF维持前一笔的值。
+    2.EP是指该上涨波段的最高价(ExtremeHigh)，或下跌波段的最低价(ExtremeLow)。计算SARt时，以t-1以前的数据寻找EP，而不含t时的高低点。
+    3.起始值SAR0的设定，首先要先决定一开始是上涨波段或下跌波段，如果，是上涨波段，最高价作为SAR0；反之，如果是下跌波段，则取最低价作为SAR0。
+    而决定是上涨波段或下跌波段的方式，市场上常用的方式有数种，例如：以前n笔资料作为判断，如n=2，则拿第二笔资料的最高价与第一笔最高价相比较，如果第二笔高于第一笔，则视为上涨波段，此时SAR0=Low0；若否，则视为下跌波段，此时SAR0=High0。
+    4.反转时，以前波EP作为SAR的起始值。
+    利用抛物转向点(SAR)的转向去判断买卖策略，方法如下：－
+    1.当抛物转向点(SAR)由价位线之上转到当日价位线之下(由绿点转为红点)，代表市势逆转向好，可视作入货讯号。
+    2.相反，当抛物转向点(SAR)由价位线之下转到价位线之上(由红点转为绿点)，则代表市况转淡，可视作沽货讯号。
+    SAR假设一开始持有多或空部位，当持有多部位时，不论当天价格走势如何，SAR指针每天都会不断上扬，以追赶价格。因此当SAR追上价格时，表示该波段的行情结束了并且发生反转，原持有部位应该在此时作停损操作。由于讯号明显，是相当好用的停损点指标。
+    SAR的设计，是每天用与极值差距的某一比率(即AF值)来追赶目前价格。可以有效的掌握到波段行情。因此可以将反转点视为买进或卖出讯号。
+    ＳＡＲ的使用其实很简单，跟单移动平均线的穿越、跌破交易法则是相同的。它的特色是在我们不必等到收盘再动作。一般指标因为皆以收盘价为计算基准，所以交易者必须承受收盘之前价格的风险。而ＳＡＲ是在盘中就可以决定平仓与否。而它的使用风险在那里呢？就是起始时的停损风险过大了些…在建立仓位约一周内，你如果初次使用ＳＡＲ，我想你睡好觉的机会是很少的。此时ＳＡＲ是标在价格的某一高或低价，也许跟目前价格有许多的距离，特别对期货仓位而言。然后ＡＦ此时又必然是最小的状态﹙反转必须由０．０２起算﹚。所以在约一周以上的时间，你的仓位曝露在比较大的止损风险。ＳＡＲ最难就在进场！
+    抛物转向指标(SAR)的缺点
+    1.运算抛物转向指标(SAR)的缺点是在于公式中的「加速因子」(AccelerationFactor)，它不能巧妙地适应于不同商品或股票，必需由运用者作出不断的尝试，才能在波动节拍中寻找最佳的加速因子(AF)数值。一般使用的加速因子(AF)数值的限度在0.02至0.20之间，以0.02值递增或递减(例如：0.02、0.04、0.06.....等等)。
+    2.在处于盘整市时，抛物转向指标(SAR)转向频率非常高，会导致讯号追随者在高买低卖的情况下造成亏损。因此，在遇到盘整市时，抛物转向指标(SAR)绝不宜使用。
+	
+	
+	会换挡的交易系统（蓝色投机客） (2011-10-21 10:19:59)转载▼
+标签： 杂谈	分类： 交易策略
+    因为市场不会永远存在趋势，所以才会有人想说希望有一种交易系统可以适用在趋势市场和摆荡市场。而Thermostat Trading Strategy(恒温器交易系统)的设计原理，就是在趋势市场中采用顺势系统，在摆荡市场中采用摆荡系统。有点像是换檔的感觉，而决定换檔时机的指标，就是之前报告过的 ChoppyMarketIndex，这个指标是会介于0-100之间，指数越大，代表现在的市场越有趋势。整个系统的架构，可以简化的写成下面这样：
+    If ChoppyMarketIndex < 20 then begin
+        摆荡系统;
+    end;
+    If ChoppyMarketIndex >= 20 then begin
+        趋势系统;
+    End;
+    架构就是这么简单而已，剩下的只是把摆荡系统和顺势系统的内容放进去这个架构里面而已。顺势系统的内容主要是延续使用 Bollinger Bandit系统的内容，而摆荡系统则是加上的简单的型态识别(pattern recognition)的开盘区间突破系统而已。下面份别就这两种系统作报告：
+    摆荡系统：
+    在摆荡市场中，通常会存在一种现象，就是如果今天价格上涨的话，那么明天的价格就比较倾向于会下跌。而今天价格如果下跌的话，哪么明天的价格就比较倾向于上涨，而这也正是摆荡市场的特性。所以我们定义如果今天的收盘价如果高于昨天的 (最高价 最低价 收盘价) / 3的话，那么明天就会一个 sell easier day，代表明天价格应该会比较倾向下跌。相反的，我们也定义如果今天的收盘价低于昨天的 (最高价 最低价 收盘价) / 3的话，哪么明天就会是一个buy easier day，代表明天价格应该会比较倾向上涨。
+    在buy easier day的时候，只有代表着价格比较具有上涨的可能性而已，并不是指价格一定会上涨。所以我们必须设定做多和做空这两边的entry，只是这两边entry的门槛不一样而已，做多的门槛比较低，比较容易。反而做空的门槛比较高，比较难。所以在buy easier day的时候，我们会设定进场的规则是这样的：
+    Initiate a long position at the open price + 50% of the ten-day average true range.
+    Initiate a short position at the open price - 75% of the ten-day average true range.
+    而如果是sell easier day的话，哪我们则会把进场的规则设为这样：
+    Initiate a short position at the open price - 50% of the ten-day average true range.
+    Initiate a long position at the open price + 75% of the ten-day average true range.
+    而在摆荡市场中，有时候市场会有假的，失败的波动，这种假的波动常常会让我们被巴来巴去，所以这里我们加入了一个简单的滤网来避免这种情形。如果我们的buy stop 低于三天的最低价的平均，则就把buy stop提高到三天的最低价的平均。而如果我们的sell stop高于三天最高价的平均，则把sell stop下降到三天最高价的平均。
+    顺势系统：
+    如果当ChoppyMarketIndex的指标高于20的时候，代表现在市场进入趋势了，所以我们也跟着改用顺势系统。这里我们所采用的顺势系统就是之前报告过的Bollinger Bandit系统。当价格突破上通道的时候建立多头部位，当价格跌破下通道的时候则建立空头部位。而当有部位在手上的时候，而价格回到50天移动平均线的时候，我们就平仓出场。
+    而当这个系统在摆荡和趋势这两种模式当中转换的时候，有时候会有部位在手上。当从趋势市场转换成摆荡市场的时候，如果有在趋势市场当中建立的部位，则我们就让摆荡系统的进场讯号发生的时候才来结束这个部位。但是当市场从摆荡市场变成趋势市场的时候，如果我们有在摆荡市场里面建立的部位的话，哪么我们就用三倍ATR的保护性停损来保护我们的部位。因为如果要用50天移动平均线才让我们出场的话，哪可能会让我们保留这个错误的部位太久而造成太多的损失。
+    下面就是这个系统的程式码：
+{Thermostat by George Pruitt
+Two systems in one. If the ChoppyMarketIndex is less than 20 then we are in a
+swing mode. If it is greater than or equal to 20 then we are in a trend mode.
+Swing system is an open range breakout incorporating a buy easier/sell easier
+concept. The trend following system is based on bollinger bands and is
+similar to the Bollinger Bandit program.}
+
+Inputs: bollingerLengths(50),trendLiqLength(50),numStdDevs(2),swingPrcnt1(0.50),swingPrcnt2(0.75),atrLength(10),swingTrendSwitch(20);
+
+Vars:cmiVal(0),buyEasierDay(0),sellEasierDay(0),trendLokBuy(0),trendLokSell(0),keyOfDay(0),swingBuyPt(0),swingSellPt(0),trendBuyPt(0),trendSellPt(0),swingProtStop(0);
+
+cmiVal = ChoppyMarketIndex(30);
+buyEasierDay = 0;
+sellEasierDay = 0;
+trendLokBuy = Average(Low,3);
+trendLokSell= Average(High,3);
+keyOfDay = (High + Low + Close)/3;
+
+if(Close > keyOfDay) then sellEasierDay = 1;
+if(Close <= keyOfDay) then buyEasierDay = 1;
+
+if(buyEasierDay = 1) then begin
+    swingBuyPt = Open of tomorrow + swingPrcnt1*AvgTrueRange(atrLength);
+    swingSellPt = Open of tomorrow - swingPrcnt2*AvgTrueRange(atrLength);
+end;
+if(sellEasierDay = 1) then begin
+    swingBuyPt = Open of tomorrow + swingPrcnt2*AvgTrueRange(atrLength);
+    swingSellPt = Open of tomorrow - swingPrcnt1*AvgTrueRange(atrLength);
+end;
+
+swingBuyPt = MaxList(swingBuyPt,trendLokBuy);
+swingSellPt = MinList(swingSellPt,trendLokSell);
+trendBuyPt = BollingerBand(Close,bollingerLengths,numStdDevs);
+trendSellPt = BollingerBand(Close,bollingerLengths,- numStdDevs);
+
+if(cmiVal < swingTrendSwitch)then begin
+    if (MarketPosition <> 1) then Buy("SwingBuy") next bar at swingBuyPt stop;
+    if(MarketPosition <> -1) then SellShort("SwingSell") next bar at swingSellPt stop;
+end else begin
+    swingProtStop = 3*AvgTrueRange(atrLength);
+    Buy("TrendBuy") next bar at trendBuyPt stop;
+    SellShort("TrendSell") next bar at trendSellPt stop;
+    Sell from Entry("TrendBuy") next bar at Average(Close,trendLiqLength) stop;
+    BuyToCover from Entry("TrendSell") next bar at Average(Close,trendLiqLength) stop;
+    Sell from Entry("SwingBuy") next bar at EntryPrice – swingProtStop stop;
+    BuyToCover from Entry("SwingSell") next bar at EntryPrice + swingProtStop stop;
+end;
+    有兴趣的朋友可以拿来测试一下看看，不过我自己测试了最近几年的外汇，指数，金属，能源，农产品等等。发现绩效还好而已，所以想要直接拿来套用的人可能会失望了。不过这样的系统开发的逻辑，倒是可以值得我们学习的。谢谢。
+	
+	
+	较完善的日内交易系统框架 (2011-10-20 08:15:13)转载▼
+标签： 杂谈	分类： 交易策略
+http://www.tradeblazer.net/forum/thread-4559-1-1.html
+ 
+//------------------------------------------------------------------------
+// 簡稱: s007
+// 名稱: 
+// 類別: 交易指令
+// 類型: 其他
+// 輸出:
+//------------------------------------------------------------------------
+Params
+        Numeric maxLots(1);//單次開倉手數
+        Numeric maxTrad(3);//最大交易次數
+        Numeric splitRate(3); //交易滑點和佣金        
+        
+        Numeric ma1(5); 
+        Numeric ma2(18);
+        
+        Numeric tradBegin(909); //開倉時間        
+        Numeric tradEnd(1440); //開倉時間        
+        Numeric closeTime(1456); //bar的時間超過此值後平倉
+        
+        Numeric stopLoss(40); //虧損大于于此值時止損，為0不判斷
+        Numeric stopProfis(200); //盈利高於此值時止贏，為0不判斷
+        
+        Numeric tracProfis(0); //盈利高於此值後執行追蹤止贏，為0不判斷
+        Numeric tracLoss(0); //追蹤止盈的回撤值，為0不判斷，
+        
+        Numeric returnProfis(70); //盈利高於此值後執行回撤止贏，為0不判斷        
+                
+        Numeric minProfis(10); //持倉bar數超過maxHoles後盈利小於此值平倉，為0不判斷
+        Numeric maxHolds(7);//為0不判斷
+Vars
+        String fileName;         
+        String fileName2; 
+        String toDay; 
+        Numeric splitDot;        //交易滑點
+        
+        Bool b1(False);//開多條件
+        Bool b2(False);//開多條件        
+        
+        Bool s1(False);//開空條件
+        Bool s2(False);//開空條件        
+        
+        Bool bc(False);//開多條件
+        Bool sc(False);//開多條件
+        
+        Numeric tradePrice(0);//發單的價格        
+        
+        StringSeries  tradMem("");//交易描述        
+        Numeric tradProve(0);//可否開倉：0/禁止，1/允許 
+        Numeric tradNum(0);//交易次數 
+        Numeric tradState(0);//持倉狀態：0/無，1/多，-1/空        
+        Numeric tradCost(0);//持倉成本
+        Numeric tradIdx(0);//持倉Bar的index
+        Numeric tradCyc(0);//持倉週期
+        String pKey;//
+        String pKeyTradProve("TRADPROVE");//
+        String pKeyTradState("TRADSTATE");//
+        String pKeyTradCost("TRADCOST");//
+        String pKeyTradNum("TRADNUM");//
+        String pKeyTradIdx("TRADIDX");//
+        
+        Numeric curProfit(0);//持倉當前浮動盈虧
+        NumericSeries maxProfit(0);//持倉最大浮盈
+        NumericSeries maxLoss(0);//持倉最大浮虧
+        
+        String  dopos("");//持倉處理代碼
+        NumericSeries m1(0);
+        NumericSeries m2(0);
+        
+Begin
+        splitDot=splitRate*MinMove();
+        
+        pKey=FormulaName()+SymbolName()+Text(BarType())+Text(BarInterval());
+        pKeyTradProve="TRADPROVE";//
+        pKeyTradState="TRADSTATE";//
+        pKeyTradCost="TRADCOST";//
+        pKeyTradNum="TRADNUM";//
+        pKeyTradIdx="TRADIDX";//        
+        //初始化
+        If(BarStatus==0)
+        {                
+                SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                SetTBProfileString(pKey,pKeyTradState,Text(0));
+                SetTBProfileString(pKey,pKeyTradCost,Text(0));
+                SetTBProfileString(pKey,pKeyTradNum,Text(0));
+                SetTBProfileString(pKey,pKeyTradIdx,Text(0));
+
+                tradMem="";
+                maxProfit=0;
+                maxLoss=0;        
+                Return;
+        }
+
+        if(Day !=Day[1])
+        {
+                SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                SetTBProfileString(pKey,pKeyTradState,Text(0));
+                SetTBProfileString(pKey,pKeyTradCost,Text(0));
+                SetTBProfileString(pKey,pKeyTradNum,Text(0));
+                SetTBProfileString(pKey,pKeyTradIdx,Text(0));
+                
+                tradMem=" ";                
+                maxProfit=0;
+                maxLoss=0;                
+        }        
+        Else
+        {
+                //獲取交易狀態
+                tradProve=Value(GetTBProfileString(pKey,pKeyTradProve));
+                tradState=Value(GetTBProfileString(pKey,pKeyTradState));
+                tradCost=Value(GetTBProfileString(pKey,pKeyTradCost));
+                tradNum=Value(GetTBProfileString(pKey,pKeyTradNum));
+                tradIdx=Value(GetTBProfileString(pKey,pKeyTradIdx));
+                
+                tradMem=" ";                
+                maxProfit=maxProfit[1];
+                maxLoss=maxLoss[1];
+
+                m1=iTodayEMA(Open,ma1);//指標
+                m2=iTodayEMA(Open,ma2);//指標
+
+                //開倉條件
+                //跌停板附近不開多倉，漲停附近不開空倉
+                if(BarStatus==2)
+                {
+                        b1=Close>(Q_LowerLimit()+15*MinMove());
+                        s1=Close<(Q_UpperLimit()-15*MinMove()) ;
+                }
+                Else
+                {        
+                        b1=Not(High==Low And High==Close Or High[1]==Low[1] );
+                        s1=Not(High==Low And High==Close Or High[1]==Low[1] );
+                }                
+                        
+                If(tradNum<=maxTrad And Time>=0.0001*tradBegin And Time<=0.0001*tradEnd)
+                {
+                        //開倉條件
+                        bc=CrossOver(m1,m2) And b1 ;//
+                        sc=CrossUnder(m1,m2) And b1 ;//                                                
+                }                
+        
+                // 當前無倉-----------------------------------------------------------------Begin
+                if(tradState==0 )
+                {                
+                        // 當前無倉，開始建立多頭
+                        if(bc)
+                        {
+                                if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=Open+splitDot;                                
+                                If(Buy(maxLots,tradePrice))
+                                {
+                                        SetTBProfileString(pKey,pKeyTradProve,Text(0));
+                                        SetTBProfileString(pKey,pKeyTradState,Text(1));
+                                        SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                        SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                        SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));                
+                                        tradMem="開多-"+Text(tradePrice);
+                                        Commentary(tradMem);                                                                                
+                                }
+                        }
+                        Else
+                        // 當前無倉，開始建立空頭
+                        If(sc)
+                        {
+                                if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=Open-splitDot;                                
+                                If(SellShort(maxLots,tradePrice))
+                                {
+                                        SetTBProfileString(pKey,pKeyTradProve,Text(0));
+                                        SetTBProfileString(pKey,pKeyTradState,Text(-1));
+                                        SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                        SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                        SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));                                                               
+                                        tradMem="開空-"+Text(tradePrice);
+                                        Commentary(tradMem);                                        
+                                }
+                        }
+                }
+                // 當前無倉-----------------------------------------------------------------end
+                // 當前有倉-----------------------------------------------------------------begin
+                Else
+                {
+                        //計算當前盈虧和最大浮動盈虧
+                        curProfit=tradState*(Close-tradCost);                        
+                        If(BarStatus==2)
+                        {                                
+                                If(curProfit>maxProfit)        maxProfit=curProfit;
+                                If(curProfit<maxLoss)                maxLoss=curProfit;
+                        }
+                        Else
+                        {
+                                If(tradState==1)
+                                {
+                                        If((High-tradCost)>maxProfit) maxProfit=(High-tradCost); 
+                                        If((Low-tradCost)<maxLoss)                maxLoss=(Low-tradCost);
+                                }
+                                If(tradState==-1)
+                                {
+                                        If((tradCost-Low)>maxProfit)        maxProfit=tradCost-Low; 
+                                        If((tradCost-High)<maxLoss)        maxLoss=tradCost-High;        
+                                }
+                        }                        
+                        
+                        //平多反空
+                        If(tradState==1 And sc And tradNum<maxTrad And Time>=0.0001*tradBegin And Time<=0.0001*tradEnd)
+                        {
+                                if(BarStatus==2)tradePrice= Q_BidPrice -splitDot; Else tradePrice=Open-splitDot;        
+                                If(SellShort(maxLots,tradePrice))
+                                {
+                                        tradMem="平多反空-"+Text(tradePrice);Commentary(tradMem);
+                                        SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                        SetTBProfileString(pKey,pKeyTradState,Text(-1));
+                                        SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                        SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                        SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));
+                                        maxProfit=0; 
+                                        maxLoss=0;        
+                                        curProfit=0;
+                                }
+                        }
+                        //平空反多
+                        If(tradState==-1 And bc And tradNum<maxTrad And Time>=0.0001*tradBegin And Time<=0.0001*tradEnd) 
+                        {
+                                if(BarStatus==2)        tradePrice= Q_AskPrice +splitDot; Else tradePrice=Open+splitDot;        
+                                If(Buy(maxLots,tradePrice))
+                                {
+                                        tradMem="平空反多-"+Text(tradePrice);Commentary(tradMem);
+                                        SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                        SetTBProfileString(pKey,pKeyTradState,Text(1));
+                                        SetTBProfileString(pKey,pKeyTradCost,Text(tradePrice));
+                                        SetTBProfileString(pKey,pKeyTradNum,Text(1+tradNum));
+                                        SetTBProfileString(pKey,pKeyTradIdx,Text(CurrentBar()));
+                                        maxProfit=0; 
+                                        maxLoss=0;
+                                        curProfit=0;                                        
+                                }
+                        }        
+                        
+                        tradCyc=(CurrentBar()-tradIdx);
+                        tradMem="浮盈:"+Text(curProfit)+",最大浮盈:"+Text(maxProfit)+",倉期："+Text(tradCyc);Commentary(tradMem);
+                        dopos="";
+                        //開倉BAR的處理
+                        if(tradCyc==0)
+                        {
+                        
+                        }                        
+                        //持倉BAR的處理
+                        Else
+                        if(tradCyc>0)
+                        {
+                                //開倉後第一根BAR的處理-應對bar走完後的信號消失問題**********************************************                                
+                                if(tradCyc==1)
+                                {
+                                      。。。。。
+                                }                
+                                Else                                
+                                dopos=DoPosition(tradState,tradCyc,curProfit,maxProfit,stopLoss,stopProfis,tracProfis,tracLoss,returnProfis,minProfis,maxHolds,closeTime);
+                        }
+                        
+                        dopos=DoPosition(tradState,tradCyc,curProfit,maxProfit,stopLoss,stopProfis,tracProfis,tracLoss,returnProfis,minProfis,maxHolds,closeTime);
+                        //統一的平倉處理-------------------------------------------------------------------------------------------
+                        if(Len(dopos)>2)
+                        {
+                                //處理交易價格，叫賣叫買價加上滑點，便於成交
+                                if(BarStatus==2)
+                                {
+                                        If(tradState==1)         tradePrice= Q_BidPrice -splitDot; 
+                                        If(tradState==-1)         tradePrice= Q_AskPrice +splitDot; 
+                                }Else tradePrice=Close-tradState*splitDot;
+                                
+                                //平多
+                                If(tradState==1) 
+                                {
+                                        If(Sell(maxLots,tradePrice))
+                                        {
+                                                tradMem=dopos+":平多-"+Text(tradePrice);
+                                                SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                                SetTBProfileString(pKey,pKeyTradState,Text(0));                                                
+                                                maxProfit=0; 
+                                                maxLoss=0;
+                                        }
+                                }
+                                //平空
+                                If(tradState==-1) 
+                                {
+                                        If(BuyToCover(maxLots,tradePrice))
+                                        {
+                                                tradMem=dopos+":平空-"+Text(tradePrice);
+                                                SetTBProfileString(pKey,pKeyTradProve,Text(1));
+                                                SetTBProfileString(pKey,pKeyTradState,Text(0));                                                
+                                                maxProfit=0; 
+                                                maxLoss=0;                                                
+                                        }
+                                }                
+                                Commentary(tradMem);                        
+                        }                        
+                }                                        
+        }
+End
