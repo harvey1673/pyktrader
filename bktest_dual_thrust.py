@@ -5,8 +5,6 @@ import pandas as pd
 import numpy as np
 import strategy as strat
 import datetime
-import openpyxl
-import os
 import backtest
 
 def dual_thrust( asset, start_date, end_date, scalers, lookbacks, config):
@@ -16,16 +14,19 @@ def dual_thrust( asset, start_date, end_date, scalers, lookbacks, config):
     rollrule = '-30b'
     if 'rollrule' in config:
         rollrule = config['rollrule']
+    maxlook = max(lookbacks)
+    start_d = misc.day_shift(start_date, '-'+str(maxlook)+'b')
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-    ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
+    ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
     mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    output = {}
     for ix, win in enumerate(lookbacks):
         config['win'] = win
         for iy, k in enumerate(scalers):
             idx = ix*10+iy
             config['k'] = k
             (res, closed_trades, ts) = dual_thrust_sim( ddf, mdf, config)
-            output = {idx: res}
+            output[idx] = res
             print 'saving results for scen = %s' % str(idx)
             all_trades = {}
             for i, tradepos in enumerate(closed_trades):
@@ -41,6 +42,9 @@ def dual_thrust( asset, start_date, end_date, scalers, lookbacks, config):
     return 
 
 def dual_thrust_sim( ddf, mdf, config):
+    close_daily = False
+    if 'close_daily' in config:
+        close_daily = config['close_daily']
     marginrate = (0.05,0.05)
     if 'marginrate' in config:
         marginrate = config['marginrate']
@@ -53,10 +57,18 @@ def dual_thrust_sim( ddf, mdf, config):
     start_equity = 100000
     if 'capital' in config:
         start_equity = config['capital']
-
-    ddf['TR'] = pd.concat([ddf['high']-ddf['close'], ddf['close']-ddf['low']], join='outer', axis=1).max(axis=1).shift(1) 
+    win = 1
+    if 'win' in config:
+        win = config['win']
+    tcost = 0.0005
+    if 'trans_cost' in config:
+        tcost = config['trans_cost']
+    ddf['TR'] = pd.concat([pd.rolling_max(ddf.high, win) - pd.rolling_min(ddf.close, win), 
+                           pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
+                           join='outer', axis=1).max(axis=1).shift(1) 
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
+    mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
     curr_pos = []
     closed_trades = []
     start_d = ddf.index[0]
@@ -68,7 +80,7 @@ def dual_thrust_sim( ddf, mdf, config):
         min_id = agent.get_min_id(dd)
         d = dd.date()
         dslice = ddf.ix[d]
-        if d < start_d + datetime.timedelta(days=1):
+        if np.isnan(dslice.TR):
             continue
         d_open = dslice.open
         if (d_open == 0):
@@ -76,6 +88,8 @@ def dual_thrust_sim( ddf, mdf, config):
                 d_open = mslice.open
         else:
             d_open = dslice.open
+        if (d_open <= 0):
+            continue
         prev_d = d
         buytrig  = d_open + dslice.TR * k[0]
         selltrig = d_open - dslice.TR * k[1]
@@ -84,15 +98,16 @@ def dual_thrust_sim( ddf, mdf, config):
         else:
             pos = curr_pos[0].pos
         
-        if (d == end_d) and (min_id > 2055):
-            if pos != 0:
+        if (min_id >= 2055):
+            if (pos != 0) and (close_daily or (d == end_d)):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].set_tradeid(tradeid, -pos)
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
-            break
-        if (min_id < 2058):
+                mdf.ix[dd, 'cost'] +=  - misc.sign(pos) * pos * (offset + mslice.close*tcost) 
+            continue
+        else:
             if (mslice.close >= buytrig) and (pos <=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close+offset, dd)
@@ -100,12 +115,14 @@ def dual_thrust_sim( ddf, mdf, config):
                     curr_pos[0].set_tradeid(tradeid, -pos)
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
+                    mdf.ix[dd, 'cost'] +=  - misc.sign(pos) * pos * (offset + mslice.close*tcost)
                 new_pos = strat.TradePos([mslice.contract], [1], 1, buytrig, 0)
                 tradeid += 1
                 new_pos.set_tradeid(tradeid, 1)
                 new_pos.open(mslice.close+offset, dd)
                 curr_pos.append(new_pos)
                 pos = 1
+                mdf.ix[dd, 'cost'] +=  - misc.sign(pos) * pos * (offset + mslice.close*tcost)
             elif (mslice.close <= selltrig) and (pos >=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close-offset, dd)
@@ -113,13 +130,16 @@ def dual_thrust_sim( ddf, mdf, config):
                     curr_pos[0].set_tradeid(tradeid, -pos)
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
+                    mdf.ix[dd, 'cost'] +=  - misc.sign(pos) * pos * (offset + mslice.close*tcost)
                 new_pos = strat.TradePos([mslice.contract], [1], -1, selltrig, 0)
                 tradeid += 1
                 new_pos.set_tradeid(tradeid, -1)
                 new_pos.open(mslice.close-offset, dd)
                 curr_pos.append(new_pos)
                 pos = -1
+                mdf.ix[dd, 'cost'] +=  - misc.sign(pos) * pos * (offset + mslice.close*tcost)
             mdf.ix[dd, 'pos'] = pos
+            
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
     res = dict( res_pnl.items() + res_trade.items())
@@ -131,6 +151,8 @@ def run_sim():
               'marginrate':(0.05, 0.05), 
               'capital': 10000,
               'offset': 0,
+              'trans_cost': 0.0,
+              'close_daily': False, 
               'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DualThrust_'}
     
 
@@ -144,13 +166,13 @@ def run_sim():
     #start_dates = start_dates1 + start_dates2
     #for asset, sdate in zip(commod_list, start_dates):
     asset = 'm'
-    start_date = datetime.date(2010,9,1)
+    start_date = datetime.date(2014,1,1)
     end_date = datetime.date(2014,12,12)
     if asset in ['cu', 'al', 'zn']:
         config['nearby'] = 2
     else:
         config['nearby'] = 1
-    scalers = [(0.5,0.5),(0.7,0.7),(1.0,1.0),(1.2,1.2)]
+    scalers = [(1.0,1.0)]
     lookbacks = [1]
     dual_thrust( asset, start_date, end_date, scalers, lookbacks, config)
 

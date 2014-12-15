@@ -3,21 +3,26 @@ import pandas as pd
 import numpy as np
 
 def get_pnl_stats(df, start_capital, marginrate, freq):
-	df['pnl'] = df['pos'].shift(1)*(df['close'] - df['close'].shift(1))
-	df['margin'] = pd.concat([df.pos*marginrate[0], -df.pos*marginrate[1]], join='outer', axis=1).max(1)
-	df['cum_pnl'] = df['pnl'].cumsum()
+	df['pnl'] = df['pos'].shift(1)*(df['close'] - df['close'].shift(1)).fillna(0.0)
+	df['margin'] = pd.concat([df.pos*marginrate[0]*df.close, -df.pos*marginrate[1]*df.close], join='outer', axis=1).max(1)
 	if freq == 'm':
 		daily_pnl = pd.Series(df['pnl']).resample('1d',how='sum').dropna()
 		daily_margin = pd.Series(df['margin']).resample('1d',how='last').dropna()
+		daily_cost = pd.Series(df['cost']).resample('1d',how='sum').dropna()
 	else:
-		daily_pnl = pd.Series(df['pnl']).dropna()
-	daily_pnl.name = 'dailyPNL'
-	cum_pnl = daily_pnl.cumsum() + start_capital
+		daily_pnl = pd.Series(df['pnl'])
+		daily_margin = pd.Series(df['margin'])
+		daily_cost = pd.Series(df['cost'])
+	daily_pnl.name = 'daily_pnl'
+	daily_margin = 'daily_margin'
+	daily_cost = 'daily_cost'
+	cum_pnl = pd.Series(daily_pnl.cumsum() + daily_cost.cumsum() + start_capital, name = 'cum_pnl')
 	available = cum_pnl - daily_margin
 	res = {}
 	res['avg_pnl'] = daily_pnl.mean()
 	res['std_pnl'] = daily_pnl.std()
 	res['tot_pnl'] = daily_pnl.sum()
+	res['tot_cost'] = daily_cost.sum()
 	res['num_days'] = len(daily_pnl)
 	res['sharp_ratio'] = res['avg_pnl']/res['std_pnl']*np.sqrt(252.0)
 	max_dd, max_dur = max_drawdown(cum_pnl)
@@ -29,9 +34,7 @@ def get_pnl_stats(df, start_capital, marginrate, freq):
 		res['profit_dd_ratio'] = res['tot_pnl']/abs(max_dd)
 	else:
 		res['profit_dd_ratio'] = 0
-	ts = pd.concat([cum_pnl, daily_margin], join='outer', axis=1)
-	ts['cum_pnl'] = cum_pnl
-	ts['margin'] = daily_margin
+	ts = pd.concat([cum_pnl, daily_margin, daily_cost], join='outer', axis=1)
 	return res, ts
 
 def get_trade_stats(trade_list):
