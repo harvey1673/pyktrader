@@ -28,41 +28,11 @@ class TurtleTrader(Strategy):
         cur_atr = df.ix[-1,'ATR_20']
         hh = [df.ix[-1,'DONCH_H20'],df.ix[-1,'DONCH_H10']]
         ll  = [df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_H10']]
-        idx = 0
-        for i, under in enumerate(self.underliers):
-            if inst == under[0]:
-                idx = i
-                break
-        sub_trades = self.submitted_pos[idx]
-        for etrade in sub_trades:
-            if etrade.status == order.ETradeStatus.Done:
-                traded_price = etrade.filled_price[0]
-                for tradepos in reversed(self.positions[idx]):
-                    if tradepos.entry_tradeid == etrade.id:
-                        tradepos.open( traded_price, datetime.datetime.now())
-                        etrade.status = order.ETradeStatus.StratConfirm
-                        break
-                    elif tradepos.exit_tradeid == etrade.id:
-                        tradepos.close( traded_price, datetime.datetime.now())
-                        self.save_closed_pos(tradepos)
-                        etrade.status = order.ETradeStatus.StratConfirm
-                        break
-                if etrade.status != order.ETradeStatus.StratConfirm:
-                    self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
-            elif etrade.status == order.ETradeStatus.Cancelled:
-                for tradepos in reversed(self.positions[idx]):
-                    if tradepos.entry_tradeid == etrade.id:
-                        tradepos.cancel_open()
-                        etrade.status = order.ETradeStatus.StratConfirm
-                        break
-                    elif tradepos.exit_tradeid == etrade.id:
-                        tradepos.cancel_close()
-                        etrade.status = order.ETradeStatus.StratConfirm
-                        break
-                if etrade.status != order.ETradeStatus.StratConfirm:
-                    self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
-        self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed()]            
-        self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
+        idx = self.get_index([inst])
+		if idx < 0:
+			self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
+			return 
+		self.update_positions(idx)
         cur_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
         if len(self.submitted_pos[idx]) == 0:
             if len(self.positions[inst]) == 0: 
