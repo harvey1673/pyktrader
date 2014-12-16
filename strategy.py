@@ -115,6 +115,47 @@ class Strategy(object):
                 self.agent.register_data_func(freq,fobj)
         self.update_trade_unit()
     
+	def get_index(self, under):
+		idx = -1
+		for i, insts in enumerate(self.underliers):
+            if set(under) == set(insts):
+                idx = i
+                break
+		return idx
+	
+	def update_positions(self, idx):
+        sub_trades = self.submitted_pos[idx]
+        for etrade in sub_trades:
+            if etrade.status == order.ETradeStatus.Done:
+                traded_price = etrade.final_price()
+                for tradepos in reversed(self.positions[idx]):
+                    if tradepos.entry_tradeid == etrade.id:
+                        tradepos.open( traded_price, datetime.datetime.now())
+                        etrade.status = order.ETradeStatus.StratConfirm
+                        break
+                    elif tradepos.exit_tradeid == etrade.id:
+                        tradepos.close( traded_price, datetime.datetime.now())
+                        self.save_closed_pos(tradepos)
+                        etrade.status = order.ETradeStatus.StratConfirm
+                        break
+                if etrade.status != order.ETradeStatus.StratConfirm:
+                    self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
+            elif etrade.status == order.ETradeStatus.Cancelled:
+                for tradepos in reversed(self.positions[idx]):
+                    if tradepos.entry_tradeid == etrade.id:
+                        tradepos.cancel_open()
+                        etrade.status = order.ETradeStatus.StratConfirm
+                        break
+                    elif tradepos.exit_tradeid == etrade.id:
+                        tradepos.cancel_close()
+                        etrade.status = order.ETradeStatus.StratConfirm
+                        break
+                if etrade.status != order.ETradeStatus.StratConfirm:
+                    self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
+        self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
+        self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
+		return 
+		
     def state_refresh(self):
         self.load_state()
         
