@@ -14,8 +14,8 @@ def get_pnl_stats(df, start_capital, marginrate, freq):
 		daily_margin = pd.Series(df['margin'])
 		daily_cost = pd.Series(df['cost'])
 	daily_pnl.name = 'daily_pnl'
-	daily_margin = 'daily_margin'
-	daily_cost = 'daily_cost'
+	daily_margin.name = 'daily_margin'
+	daily_cost.name = 'daily_cost'
 	cum_pnl = pd.Series(daily_pnl.cumsum() + daily_cost.cumsum() + start_capital, name = 'cum_pnl')
 	available = cum_pnl - daily_margin
 	res = {}
@@ -62,10 +62,8 @@ def create_drawdowns(ts):
     Calculate the largest peak-to-trough drawdown of the PnL curve
     as well as the duration of the drawdown. Requires that the 
     pnl_returns is a pandas Series.
-
     Parameters:
     pnl - A pandas Series representing period percentage returns.
-
     Returns:
     drawdown, duration - Highest peak-to-trough drawdown and duration.
     """
