@@ -128,7 +128,8 @@ def turtle_sim( ddf, mdf, config ):
             #add positions
             elif (tot_pos < max_pos) and (mslice.close - curr_pos[-1].entry_price)*direction > curr_atr/max_pos*NN:
                 for trade in curr_pos:
-                    trade.exit_target += curr_atr/max_pos*NN * direction
+                    #trade.exit_target += curr_atr/max_pos*NN * direction
+					trade.exit_target = mslice.close - direction * curr_atr * NN
                 new_pos = strat.TradePos([mslice.contract], [1], direction*unit, mslice.close, mslice.close - direction * curr_atr * NN)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
