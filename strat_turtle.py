@@ -49,7 +49,6 @@ class TurtleTrader(Strategy):
                         break
                 if etrade.status != order.ETradeStatus.StratConfirm:
                     self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
-                self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed()]
             elif etrade.status == order.ETradeStatus.Cancelled:
                 for tradepos in reversed(self.positions[idx]):
                     if tradepos.entry_tradeid == etrade.id:
@@ -62,7 +61,7 @@ class TurtleTrader(Strategy):
                         break
                 if etrade.status != order.ETradeStatus.StratConfirm:
                     self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
-                    
+        self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed()]            
         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
         cur_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
         if len(self.submitted_pos[idx]) == 0:
