@@ -180,13 +180,14 @@ def load_inst_marginrate(instID):
     cnx.close()
     return out
         
-def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1501, minid_end = 2060):
+def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_end = 2060):
     cnx = mysql.connector.connect(**dbconfig)
+    end_adj = d_end + datetime.timedelta(days=1)
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)
     stmt = stmt + "and min_id >= %s " % minid_start
     stmt = stmt + "and min_id <= %s " % minid_end
     stmt = stmt + "and datetime >= '%s' " % d_start.strftime('%Y-%m-%d')
-    stmt = stmt + "and datetime < '%s' " % d_end.strftime('%Y-%m-%d')
+    stmt = stmt + "and datetime < '%s' " % end_adj.strftime('%Y-%m-%d')
     stmt = stmt + "order by date(datetime), min_id" 
     df = pd.io.sql.read_sql(stmt, cnx, index_col = 'datetime')
     cnx.close()

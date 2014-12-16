@@ -20,7 +20,7 @@ class TurtleTrader(Strategy):
         self.capital = capital 
         self.pos_ratio = 0.01
         self.stop_loss = 2.0
-		self.order_type = OPT_LIMIT_ORDER
+        self.order_type = OPT_LIMIT_ORDER
     
     def run_tick(self, ctick):
         inst = ctick.instID
@@ -29,10 +29,10 @@ class TurtleTrader(Strategy):
         hh = [df.ix[-1,'DONCH_H20'],df.ix[-1,'DONCH_H10']]
         ll  = [df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_H10']]
         idx = self.get_index([inst])
-		if idx < 0:
-			self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
-			return 
-		self.update_positions(idx)
+        if idx < 0:
+            self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
+            return 
+        self.update_positions(idx)
         cur_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
         if len(self.submitted_pos[idx]) == 0:
             if len(self.positions[inst]) == 0: 
@@ -67,8 +67,8 @@ class TurtleTrader(Strategy):
                         self.submitted_pos[idx].append(etrade)
                         self.agent.submit_trade(etrade)
                     elif  units < 4 and (cur_price - self.positions[idx][-1].entry_price)*buysell >= cur_atr/2.0:
-						for pos in self.positions[idx]:
-							pos.exit_target = cur_price - cur_atr*self.stop_loss*buysell
+                        for pos in self.positions[idx]:
+                            pos.exit_target = cur_price - cur_atr*self.stop_loss*buysell
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], cur_price, [5],  \
