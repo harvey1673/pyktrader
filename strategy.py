@@ -30,14 +30,6 @@ class TradePos(object):
         self.exit_tradeid = None
         self.is_closed = False
         self.profit = 0.0
-    
-    def set_tradeid(self, tradeid, pos):
-        direction = 1 if pos > 0 else -1
-        if direction == self.direction:
-            self.entry_tradeid = tradeid
-        else:
-            self.exit_tradeid = tradeid
-        return 
 
     def open(self, price, start_time):
         self.entry_price = price
@@ -196,13 +188,13 @@ class Strategy(object):
                         entry_tradeid = None
                     else:
                         entry_tradeid = int(row[7])
-                        tradepos.set_tradeid(entry_tradeid, tradepos.direction)
+                        tradepos.entry_tradeid = entry_tradeid
                         
                     if row[11] == '':
                         exit_tradeid = None
                     else:
                         exit_tradeid = int(row[11])        
-                        tradepos.set_tradeid(exit_tradeid, -tradepos.direction)
+                        tradepos.exit_tradeid = exit_tradeid
                     
                     if row[9] == '':
                         exit_time = None
@@ -230,5 +222,8 @@ class Strategy(object):
             file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             tradedict = tradepos2dict(tradepos)
             file_writer.writerow([tradedict[itm] for itm in tradepos_header])
-        return        
-   
+        return
+	
+	#def load_closed_pos(self):
+	#	logfile = self.folder + 'hist_tradepos.csv'
+	
