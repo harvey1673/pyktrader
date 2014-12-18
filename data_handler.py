@@ -13,6 +13,12 @@ def conv_ohlc_freq(df, freq):
     if 'min_id' in df.columns:
         mincol  = pd.DataFrame(df['min_id']).resample(freq, how ='first').dropna()
         allcol.append(mincol)
+    if 'openInterest' in df.columns:
+        volcol  = pd.DataFrame(df['openInterest']).resample(freq, how ='last').dropna()
+        allcol.append(volcol)
+    if 'contract' in df.columns:
+        mincol  = pd.DataFrame(df['contract']).resample(freq, how ='first').dropna()
+        allcol.append(mincol)
     res =  pd.concat(allcol, join='outer', axis =1)
     return res
 
@@ -60,13 +66,13 @@ def ROC(df, n):
 
 #Bollinger Bandsy
 def BBANDS(df, n):
-    MA = pd.Series(pd.rolling_mean(df['close'], n), name ='MA_'+str(n))
+    MA = pd.Series(pd.rolling_mean(df['close'], n))
     MSD = pd.Series(pd.rolling_std(df['close'], n))
     b1 = 4 * MSD / MA
-    B1 = pd.Series(MA + 2*MSD, name = 'BollUp_' + str(n))
-    #b2 = (df['close'] - MA + 2 * MSD) / (4 * MSD)
-    B2 = pd.Series(MA - 2*MSD, name = 'BollLow_' + str(n))
-    return pd.concat([B1,MA,B2], join='outer', axis=1)
+    B1 = pd.Series(b1, name = 'BollingerB_' + str(n))
+    b2 = (df['close'] - MA + 2 * MSD) / (4 * MSD)
+    B2 = pd.Series(b2, name = 'Bollingerb_' + str(n))
+    return pd.concat([B1,B2], join='outer', axis=1)
 
 #Pivot Points, Supports and Resistances
 def PPSR(df):
@@ -270,7 +276,14 @@ def donch_h(df, n):
  
 def donch_l(df, n):
     df.ix[-1,'DONCH_L'+str(n)] = min(df.ix[-n:,'low'])
-    
+
+def DONCH_C(df, n):
+    DC_H = pd.rolling_max(df['close'],n)
+    return pd.Series(DC_H, name = 'DONCH_C'+ str(n))
+
+def donch_c(df, n):
+    df.ix[-1,'DONCH_C'+str(n)] = max(df.ix[-n:,'close'])
+	
 #Standard Deviation
 def STDDEV(df, n):
     return pd.Series(pd.rolling_std(df['close'], n), name = 'STD_' + str(n))
