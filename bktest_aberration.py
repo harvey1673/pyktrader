@@ -19,11 +19,11 @@ def aberration( asset, start_date, end_date, freqs, windows, config):
 	
     output = {}
     for ix, freq in enumerate(freqs):
-        ts_data = df['close'].resample(freq,  how ='last').dropna()
+		xdf = dh.conv_ohlc_freq(df, freq):
         for iy, win in enumerate(windows):
             idx = ix*10+iy
-            config['k'] = k
-            (res, closed_trades, ts) = aberration_sim( ts_data, config)
+            config['win'] = win
+            (res, closed_trades, ts) = aberration_sim( xdf, config)
             output[idx] = res
             print 'saving results for scen = %s' % str(idx)
             all_trades = {}
@@ -39,91 +39,66 @@ def aberration( asset, start_date, end_date, freqs, windows, config):
     res.to_csv(fname)
     return 
 
-def aberration_sim( ddf, mdf, config):
+def aberration_sim( df, config):
     marginrate = config['marginrate']
     offset = config['offset']
-	k = config['scaler']
+	win = config['win']
     start_equity = config['capital']
-    win = config['win']
     tcost = config['trans_cost']
-    ddf['TR'] = pd.concat([pd.rolling_max(ddf.high, win) - pd.rolling_min(ddf.close, win), 
-                           pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
-                           join='outer', axis=1).max(axis=1).shift(1) 
-    ll = mdf.shape[0]
-    mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
-    mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
+	unit = config['unit']
+    df['ma'] = dh.MA(df, win).shift(1)
+	std = dh.STDDEV(df, win).shift(1)
+	df['upbnd'] = df['ma'] + std
+	df['lowbnd'] = df['ma'] - std
+    ll = df.shape[0]
+    df['pos'] = pd.Series([0]*ll, index = mdf.index)
+    df['cost'] = pd.Series([0]*ll, index = mdf.index)
     curr_pos = []
     closed_trades = []
-    start_d = ddf.index[0]
-    end_d = ddf.index[-1]
-    prev_d = start_d - datetime.timedelta(days=1)
+    start_d = df.index[0].date()
+    end_d = df.index[-1].date()
     tradeid = 0
-    for idx, dd in enumerate(mdf.index):
-        mslice = mdf.ix[dd]
+    for idx, dd in enumerate(df.index):
+        mslice = df.ix[dd]
         min_id = agent.get_min_id(dd)
         d = dd.date()
-        dslice = ddf.ix[d]
-        if np.isnan(dslice.TR):
-            continue
-        d_open = dslice.open
-        if (d_open == 0):
-            if (prev_d < d):
-                d_open = mslice.open
-        else:
-            d_open = dslice.open
-        if (d_open <= 0):
-            continue
-        prev_d = d
-        buytrig  = d_open + dslice.TR * k[0]
-        selltrig = d_open - dslice.TR * k[1]
         if len(curr_pos) == 0:
             pos = 0
         else:
             pos = curr_pos[0].pos
-        
-        if (min_id >= 2055):
-            if (pos != 0) and (close_daily or (d == end_d)):
-                curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
+		df.ix[dd, 'pos'] = pos
+        if np.isnan(mslice.ma):
+            continue
+		if (min_id >=2054):
+			if (pos!=0) and (d == end_d):
+				curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
-            continue
+			continue
         else:
-            if (mslice.close >= buytrig) and (pos <=0 ):
-                if len(curr_pos) > 0:
-                    curr_pos[0].close(mslice.close+offset, dd)
-                    tradeid += 1
-                    curr_pos[0].exit_tradeid = tradeid
-                    closed_trades.append(curr_pos[0])
-                    curr_pos = []
-                    mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], 1, buytrig, 0)
+            if ((mslice.close >= mslice.ma) and (pos<0 )) or (mslice.close <= mslice.ma) and (pos>0 ) :
+				curr_pos[0].close(mslice.close+offset, dd)
+				tradeid += 1
+				curr_pos[0].exit_tradeid = tradeid
+				closed_trades.append(curr_pos[0])
+				curr_pos = []
+				mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+				pos = 0
+			pos = (mslice.close>=mslice.upbnd) * unit -(mslice.close<=mslice.lowbnd) * unit
+			if abs(pos)>0:
+				target = min(mslice.close>=mslice.upbnd) * mslice.upbnd +(mslice.close<=mslice.lowbnd) * mslice.lowbnd
+                new_pos = strat.TradePos([mslice.contract], [1], pos, target, mslice.upbnd+mslice.lowbnd-target)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close+offset, dd)
+                new_pos.open(mslice.close + misc.sign(pos)*offset, dd)
                 curr_pos.append(new_pos)
-                pos = 1
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif (mslice.close <= selltrig) and (pos >=0 ):
-                if len(curr_pos) > 0:
-                    curr_pos[0].close(mslice.close-offset, dd)
-                    tradeid += 1
-                    curr_pos[0].exit_tradeid = tradeid
-                    closed_trades.append(curr_pos[0])
-                    curr_pos = []
-                    mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], -1, selltrig, 0)
-                tradeid += 1
-                new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close-offset, dd)
-                curr_pos.append(new_pos)
-                pos = -1
-                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
-            mdf.ix[dd, 'pos'] = pos
+        mdf.ix[dd, 'pos'] = pos
             
-    (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
+    (res_pnl, ts) = backtest.get_pnl_stats( df, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
@@ -157,7 +132,7 @@ def run_sim():
         config['nearby'] = 1
     freqs = ['5Min', '15Min', '30Min', '60Min', 'D']
     windows = [35]
-    aberration( asset, start_date, end_date, scalers, windows, config)
+    aberration( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
     run_sim()
