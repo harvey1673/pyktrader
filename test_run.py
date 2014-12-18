@@ -1,4 +1,4 @@
-import agent
+import newagent as agent
 import fut_api
 import lts_api
 import base
@@ -122,8 +122,4 @@ def save_option():
 
 if __name__ == '__main__':
     save_all()
-    try:
-        while 1: time.sleep(1)
-    except KeyboardInterrupt:
-        my_agent.mdapis = []; my_agent.trader = None
     pass

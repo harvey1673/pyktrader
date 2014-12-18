@@ -115,15 +115,15 @@ class Strategy(object):
                 self.agent.register_data_func(freq,fobj)
         self.update_trade_unit()
     
-	def get_index(self, under):
-		idx = -1
-		for i, insts in enumerate(self.underliers):
+    def get_index(self, under):
+        idx = -1
+        for i, insts in enumerate(self.underliers):
             if set(under) == set(insts):
                 idx = i
                 break
-		return idx
-	
-	def update_positions(self, idx):
+        return idx
+    
+    def update_positions(self, idx):
         sub_trades = self.submitted_pos[idx]
         for etrade in sub_trades:
             if etrade.status == order.ETradeStatus.Done:
@@ -154,8 +154,8 @@ class Strategy(object):
                     self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
-		return 
-		
+        return 
+        
     def state_refresh(self):
         self.load_state()
         
@@ -264,7 +264,7 @@ class Strategy(object):
             tradedict = tradepos2dict(tradepos)
             file_writer.writerow([tradedict[itm] for itm in tradepos_header])
         return
-	
-	#def load_closed_pos(self):
-	#	logfile = self.folder + 'hist_tradepos.csv'
-	
+    
+    #def load_closed_pos(self):
+    #    logfile = self.folder + 'hist_tradepos.csv'
+    

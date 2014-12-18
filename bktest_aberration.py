@@ -12,10 +12,7 @@ def aberration( asset, start_date, end_date, freqs, windows, config):
     rollrule = config['rollrule']
 	freq = '5min'
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-    if 'min' in freq:
-		df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
-	else:
-		df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
+	df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
 	
     output = {}
     for ix, freq in enumerate(freqs):
@@ -103,7 +100,7 @@ def aberration_sim( df, config):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
     
-def run_sim():
+def run_sim(asset, start_date, end_date):
     config = {'nearby':1, 
               'rollrule':'-40b', 
               'marginrate':(0.05, 0.05), 
@@ -111,8 +108,8 @@ def run_sim():
               'offset': 0,
               'trans_cost': 0.0,
 			  'scaler': (2.0, 2.0),
-              'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DualThrust_'}
-    
+              'unit': 1,
+              'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Aberration_'}
 
     #commod_list1= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
     #start_dates1 = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
@@ -123,17 +120,30 @@ def run_sim():
     #commod_list = commod_list1+commod_list2
     #start_dates = start_dates1 + start_dates2
     #for asset, sdate in zip(commod_list, start_dates):
-    asset = 'm'
-    start_date = datetime.date(2014,1,1)
-    end_date = datetime.date(2014,12,12)
+
     if asset in ['cu', 'al', 'zn']:
-        config['nearby'] = 2
-    else:
-        config['nearby'] = 1
+        config['nearby'] = 3
+        config['rollrule'] = '-1b'
+    elif asset in ['IF']:
+        config['rollrule'] = '-1b'
+        
     freqs = ['5Min', '15Min', '30Min', '60Min', 'D']
     windows = [35]
     aberration( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
-    run_sim()
-            
+    args = sys.argv[1:]
+    if len(args) < 3:
+        end_d = datetime.date(2014,11,30)
+    else:
+        end_d = datetime.datetime.strptime(args[2], '%Y%m%d').date()
+    if len(args) < 2:
+        start_d = datetime.date(2014,1,2)
+    else:
+        start_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
+    if len(args) < 1:
+        asset = 'm'
+    else:
+        asset = args[0]
+    run_sim(asset, start_d, end_d)
+

@@ -1,3 +1,4 @@
+import sys
 import misc
 import agent
 import data_handler as dh
@@ -128,18 +129,6 @@ def dual_thrust_sim( ddf, mdf, config):
     res_trade = backtest.get_trade_stats( closed_trades )
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
-    
-def run_sim():
-    config = {'nearby':1, 
-              'rollrule':'-40b', 
-              'marginrate':(0.05, 0.05), 
-              'capital': 10000,
-              'offset': 0,
-              'trans_cost': 0.0,
-              'close_daily': False, 
-              'unit': 1,
-              'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DualThrust_'}
-    
 
     #commod_list1= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
     #start_dates1 = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
@@ -149,18 +138,48 @@ def run_sim():
     #            [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
     #commod_list = commod_list1+commod_list2
     #start_dates = start_dates1 + start_dates2
-    #for asset, sdate in zip(commod_list, start_dates):
-    asset = 'm'
-    start_date = datetime.date(2013,1,1)
-    end_date = datetime.date(2014,11,30)
+        
+def run_sim(asset, start_date, end_date, daily_close):
+    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DT_'
+    if daily_close:
+        file_prefix = file_prefix + 'daily_'
+    config = {'nearby':1, 
+              'rollrule':'-40b', 
+              'marginrate':(0.05, 0.05), 
+              'capital': 10000,
+              'offset': 0,
+              'trans_cost': 0.0,
+              'close_daily': daily_close, 
+              'unit': 1,
+              'file_prefix': file_prefix }
+    
     if asset in ['cu', 'al', 'zn']:
-        config['nearby'] = 2
-    else:
-        config['nearby'] = 1
-    scalers = [(0.1, 0.1), (0.2, 0.2), (0.4, 0.4), (0.6,0.6)]
-    lookbacks = [1, 2]
+        config['nearby'] = 3
+        config['rollrule'] = '-1b'
+    elif asset in ['IF']:
+        config['rollrule'] = '-1b'
+    scalers = [(0.3, 0.3), (0.5,0.5), (0.7,0.7), (0.9, 0.9)]
+    lookbacks = [1, 2, 4]
     dual_thrust( asset, start_date, end_date, scalers, lookbacks, config)
+    return
 
 if __name__=="__main__":
-    run_sim()
+    args = sys.argv[1:]
+    if len(args) < 4:
+        d_close = False
+    else:
+        d_close = (int(args[3])>0)
+    if len(args) < 3:
+        end_d = datetime.date(2014,11,30)
+    else:
+        end_d = datetime.datetime.strptime(args[2], '%Y%m%d').date()
+    if len(args) < 2:
+        start_d = datetime.date(2014,1,2)
+    else:
+        start_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
+    if len(args) < 1:
+        asset = 'm'
+    else:
+        asset = args[0]
+    run_sim(asset, start_d, end_d, d_close)
             

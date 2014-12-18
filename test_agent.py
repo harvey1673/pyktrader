@@ -40,7 +40,9 @@ def test_main(name='test_trade'):
             ('1m',BaseObject(name = 'EMA_30',    sfunc=fcustom(data_handler.EMA, n=30),     rfunc=fcustom(data_handler.ema, n=30))) \
         ]
     strategies = []
-    test_strat = strategy.Strategy('TestStrat', [insts], None, data_func, [[1,-1]])
+	insts = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505']
+	
+    test_strat = strategy.Strategy('TurtleTrader1', [insts], None, data_func, [[1,-1]])
     strategies.append(test_strat)
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
@@ -81,33 +83,6 @@ def test_main(name='test_trade'):
         myagent.process_trade_list()
         print myagent.etrades
 
-# order test
-#         iorder = order.Order(myagent.positions['ag1412'], 
-#                              4100, 1, myagent.tick_id, 
-#                              OF_OPEN, 
-#                              ORDER_BUY, 
-#                              OPT_LIMIT_ORDER, {} )
-#         myagent.send_order(iorder)
-#         myagent.ref2order[iorder.order_ref] = iorder
-#         myagent.cancel_order(iorder)
-#         print iorder.status        
-        #娴嬭瘯鎶ュ崟
-#         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=1)
-#         myagent.open_position(morder)
-#         morder = agent.BaseObject(instrument='IF1103',direction='0',order_ref=myagent.inc_order_ref(),price=3280,volume=20)
-#         
-#         #骞充粨
-#         corder = agent.BaseObject(instrument='IF1103',direction='1',order_ref=myagent.inc_order_ref(),price=3220,volume=1)
-#         myagent.close_position(corder)
-#         
-#         cref = myagent.inc_order_ref()
-#         morder = agent.BaseObject(instrument='IF1104',direction='0',order_ref=cref,price=3180,volume=1)
-#         myagent.open_position(morder)
-#         
-#         rorder = agent.BaseObject(instrument='IF1103',order_ref=cref)
-#         myagent.cancel_command(rorder)
-        
-#        while 1: time.sleep(1)
     except KeyboardInterrupt:
         myagent.mdapis = [] 
         myagent.trader = None    

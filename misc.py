@@ -256,7 +256,7 @@ def nearby(prodcode, n, start_date, end_date, roll_rule, freq, need_shift=False)
     if start_date > end_date: 
         return None
     cont_mth, exch = mysqlaccess.prod_main_cont_exch(prodcode)
-    contlist = contract_range(prodcode, exch, cont_mth, start_date, end_date)
+    contlist = contract_range(prodcode, exch, cont_mth, start_date, day_shift(end_date, roll_rule[1:]))
     exp_dates = [day_shift(contract_expiry(cont), roll_rule) for cont in contlist]
     #print contlist, exp_dates
     sdate = start_date

@@ -5,6 +5,7 @@ import numpy as np
 import strategy as strat
 import datetime
 import os
+import sys
 import backtest
 
 NO_OPEN_POS_PROTECT = 30
@@ -130,7 +131,7 @@ def turtle_sim( ddf, mdf, config ):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
     
-def run_sim():
+def run_sim(asset, start_date, end_date):
     config = {'nearby':1, 
               'rollrule':'-40b', 
               'marginrate':(0.05, 0.05), 
@@ -150,16 +151,26 @@ def run_sim():
                 # [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
     # commod_list = commod_list1+commod_list2
     # start_dates = start_dates1 + start_dates2
-    asset = 'm'
-    start_date = datetime.date(2010,12,10)
-    end_date = datetime.date(2014,12,10)
     if asset in ['cu', 'al', 'zn']:
         config['nearby'] = 2
     else:
         config['nearby'] = 1
-    systems = [(20,10), (15,7),(40,20),(55,20)]
+    systems = [(20,10), (15,7),(40,20)]
     turtle( asset, start_date, end_date, systems, config)
     return 
     
 if __name__=="__main__":
-    run_sim()
+    args = sys.argv[1:]
+    if len(args) < 3:
+        end_d = datetime.date(2014,11,30)
+    else:
+        end_d = datetime.datetime.strptime(args[2], '%Y%m%d').date()
+    if len(args) < 2:
+        start_d = datetime.date(2014,1,2)
+    else:
+        start_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
+    if len(args) < 1:
+        asset = 'm'
+    else:
+        asset = args[0]
+    run_sim(asset, start_d, end_d)
