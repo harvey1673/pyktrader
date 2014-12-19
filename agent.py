@@ -20,6 +20,9 @@ day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest'
 def get_tick_id(dt):
     return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
 
+def get_min_id(dt):
+    return ((dt.hour+6)%24)*100+dt.minute
+
 class TickData:
     def __init__(self, instID='IF1412', high=0.0, low=0.0, price=0.0, volume=0, openInterest=0, 
                  bidPrice1=0.0, bidVol1=0, askPrice1=0.0, askVol1=0, timestamp=datetime.datetime.now()):
