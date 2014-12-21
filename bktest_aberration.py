@@ -10,7 +10,6 @@ import backtest
 def aberration( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
-	freq = '5min'
     file_prefix = config['file_prefix'] + '_' + asset + '_'
 	df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
 	
@@ -20,7 +19,7 @@ def aberration( asset, start_date, end_date, freqs, windows, config):
         for iy, win in enumerate(windows):
             idx = ix*10+iy
             config['win'] = win
-            (res, closed_trades, ts) = aberration_sim( xdf, config)
+            (res, closed_trades, ts) = aberration_sim( xdf, mdf, , config)
             output[idx] = res
             print 'saving results for scen = %s' % str(idx)
             all_trades = {}
@@ -36,7 +35,7 @@ def aberration( asset, start_date, end_date, freqs, windows, config):
     res.to_csv(fname)
     return 
 
-def aberration_sim( df, config):
+def aberration_sim( xdf, mdf, config):
     marginrate = config['marginrate']
     offset = config['offset']
 	win = config['win']

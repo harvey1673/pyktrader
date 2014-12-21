@@ -14,8 +14,9 @@ def dual_thrust( asset, start_date, end_date, scalers, lookbacks, config):
     maxlook = max(lookbacks)
     start_d = misc.day_shift(start_date, '-'+str(maxlook)+'b')
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-    ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
-    mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    #ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
+    mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)
+    ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
     for ix, win in enumerate(lookbacks):
         config['win'] = win
