@@ -85,7 +85,7 @@ def tradepos2dict(tradepos):
     return trade
   
 class Strategy(object):
-    def __init__(self, name, underliers, agent = None, data_func = [], trade_unit = [] ):
+    def __init__(self, name, underliers, trade_unit = [], agent = None):
         self.name = name
         self.underliers = underliers
         self.agent = agent
@@ -98,7 +98,7 @@ class Strategy(object):
             self.trade_unit = [ [1]*len(under) for under in underliers ]
         self.positions  = [[] for under in underliers]
         self.submitted_pos = [ [] for under in underliers ]
-        self.data_func = data_func
+        self.data_func = []
         if agent == None:
             self.folder = ''
         else:
