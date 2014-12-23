@@ -1,14 +1,15 @@
 ﻿#-*- coding:utf-8 -*-
-import agent
+import time
+#import agent
 import fut_api
-import strategy
+#import strategy
 import ctp_emulator as emulator
 import logging
-import data_handler
+#import data_handler
 import strategy
 import strat_dual_thrust as strat_dt
 import strat_turtle
-import order
+#import order
 from misc import *
 from base import *
 
@@ -16,7 +17,7 @@ class TestStrat(strategy.Strategy):
     def run_min(self, instID):
         pass
     
-def test_main(name='test_trade'):
+def test_main(name='test_trade', tday = datetime.date.today()):
     '''
     import agent
     trader,myagent = agent.trade_test_main()
@@ -25,30 +26,29 @@ def test_main(name='test_trade'):
     ##释放连接
     trader.RegisterSpi(None)
     '''
-    name='test_trade'
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    trader_cfg = TEST_TRADER
+    #trader_cfg = TEST_TRADER
     user_cfg = PROD_USER
     agent_name = name
-    tday = datetime.date(2014,12,23)
     insts_dt = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505']
+    units_dt = [[1]]*len(insts_dt)
     under_dt = [[inst] for inst in insts_dt]
     insts_turtle = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505']
     under_turtle = [[inst] for inst in insts_turtle]
-    dt_strat = strat_dt.DTTrader('DT_test', under_dt, agent = None)
-    turtle_strat = strat_turtle.TurtleTrader('Turtle_test', under_turtle, agent=None, trade_unit = [[1]]*len(under_turtle) )
+    units_turtle = [[1]]*len(insts_turtle)
+    dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, agent = None)
+    turtle_strat = strat_turtle.TurtleTrader('Turtle_test', under_turtle, trade_unit = [[1]]*len(under_turtle), agent=None )
     strategies = [dt_strat, turtle_strat]
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
                  'daily_data_days':25, \
                  'min_data_days':2 }
     #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
-    all_insts = list(set(insts_turtle)+set(insts_dt))
+    all_insts = list(set(insts_turtle).union(set(insts_dt)))
     myagent, my_trader = emulator.create_agent_with_mocktrader(agent_name, all_insts, strat_cfg, tday)
     fut_api.make_user(myagent,user_cfg)
-    try:
-        myagent.resume()
-
+    myagent.resume()
+    
 # position/trade test        
         #=======================================================================
         # myagent.positions['cu1501'].pos_yday.long  = 2
@@ -79,7 +79,8 @@ def test_main(name='test_trade'):
         # myagent.process_trade_list()
         # print myagent.etrades
         #=======================================================================
-
+    try:
+        while 1: time.sleep(1)
     except KeyboardInterrupt:
         myagent.mdapis = [] 
         myagent.trader = None    

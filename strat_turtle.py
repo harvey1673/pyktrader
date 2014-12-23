@@ -8,7 +8,7 @@ import order as order
  
 class TurtleTrader(Strategy):
     def __init__(self, name, underliers,  trade_unit = [], agent = None):
-        Strategy.__init__(name, underliers, agent)
+        Strategy.__init__(self, name, underliers, trade_unit, agent)
         self.data_func = [ 
                 ('d', BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20))), \
                 ('d', BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10))),\

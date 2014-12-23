@@ -88,6 +88,7 @@ class Strategy(object):
     def __init__(self, name, underliers, trade_unit = [], agent = None):
         self.name = name
         self.underliers = underliers
+        self.instIDs = list(set().union(*underliers))
         self.agent = agent
         self.logger = None
         if self.agent != None:
@@ -113,6 +114,7 @@ class Strategy(object):
         if len(self.data_func)>0:
             for (freq, fobj) in self.data_func:
                 self.agent.register_data_func(freq,fobj)
+        self.state_refresh()
         self.update_trade_unit()
     
     def get_index(self, under):
@@ -190,6 +192,7 @@ class Strategy(object):
     
     def save_state(self):
         filename = self.folder + 'strat_status.csv'
+        self.logger.info('save state for strat = %s' % (self.name))
         with open(filename,'wb') as log_file:
             file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             file_writer.writerow(tradepos_header)
@@ -205,6 +208,7 @@ class Strategy(object):
         if not os.path.isfile(logfile):
             self.positions  = positions
             return 
+        self.logger.info('load state for strat = %s' % (self.name))
         with open(logfile, 'rb') as f:
             reader = csv.reader(f)
             for idx, row in enumerate(reader):

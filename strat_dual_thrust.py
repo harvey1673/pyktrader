@@ -9,7 +9,7 @@ import agent
  
 class DTTrader(Strategy):
     def __init__(self, name, underliers, agent = None, trade_unit = [], ratios = [], stop_loss = []):
-        Strategy.__init__(name, underliers, trade_unit, agent)
+        Strategy.__init__(self, name, underliers, trade_unit, agent)
         self.data_func = [
                 ('d', BaseObject(name = 'DONCH_H1', sfunc=fcustom(data_handler.DONCH_H, n=1), rfunc=fcustom(data_handler.donch_h, n=1))),\
                 ('d', BaseObject(name = 'DONCH_L1', sfunc=fcustom(data_handler.DONCH_L, n=1), rfunc=fcustom(data_handler.donch_l, n=1))),\
@@ -39,11 +39,11 @@ class DTTrader(Strategy):
         sell_trig = tday_open - self.ratio[idx][1] * cur_rng
         self.update_positions(idx)
         curr_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
-		curr_pos = None
-		buysell = 0
-		if len(self.positions[idx])>0:
-			curr_pos = self.positions[idx][0]
-			buysell = curr_pos.direction
+        curr_pos = None
+        buysell = 0
+        if len(self.positions[idx])>0:
+            curr_pos = self.positions[idx][0]
+            buysell = curr_pos.direction
         if (tick_id >= self.last_tick_id):
             if (buysell!=0) and (self.close_tday[idx]):
                 valid_time = self.agent.tick_id + 600
@@ -53,31 +53,37 @@ class DTTrader(Strategy):
                 curr_pos.exit_tradeid = etrade.id
                 self.submitted_pos[idx].append(etrade)
                 self.agent.submit_trade(etrade)
+                self.logger.info('DT EOD close position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
+                                                            % (inst, buysell,self.trade_unit[idx][0], etrade.id))
         elif len(self.submitted_pos[idx]) == 0:
             if ((curr_price >= buy_trig) and (buysell <=0)) or ((curr_price <= sell_trig) and (buysell >=0)):
-				if buysell!=0:
-					valid_time = self.agent.tick_id + 600
-					etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
+                if buysell!=0:
+                    valid_time = self.agent.tick_id + 600
+                    etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], -curr_price*buysell, [5], \
                                                valid_time, self.name, self.agent.name)
-					curr_pos.exit_tradeid = etrade.id
-					self.submitted_pos[idx].append(etrade)
-					self.agent.submit_trade(etrade)
-				if  (curr_price >= buy_trig):
-					buysell = 1
-				else:
-					buysell = -1
-				valid_time = self.agent.tick_id + 600
+                    curr_pos.exit_tradeid = etrade.id
+                    self.submitted_pos[idx].append(etrade)
+                    self.agent.submit_trade(etrade)
+                    self.logger.info('DT EOD close position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
+                                                            % (inst, buysell,self.trade_unit[idx][0], etrade.id))
+                if  (curr_price >= buy_trig):
+                    buysell = 1
+                else:
+                    buysell = -1
+                valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                       [self.order_type], buysell * cur_price, [3],  \
+                                       [self.order_type], buysell * curr_price, [3],  \
                                        valid_time, self.name, self.agent.name)
                 tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        cur_price, 0)
+                                        curr_price, 0)
                 tradepos.entry_tradeid = etrade.id
                 self.submitted_pos[idx].append(etrade)
                 self.positions[inst].append(tradepos)
-                self.agent.submit_trade(etrade)	
-		return 
-		
+                self.agent.submit_trade(etrade)
+                self.logger.info('DT EOD open position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
+                                                            % (inst, buysell,self.trade_unit[idx][0], etrade.id))
+        return 
+        
     def update_trade_unit(self):
-		pass
+        pass

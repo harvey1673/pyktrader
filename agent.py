@@ -1037,14 +1037,15 @@ class Agent(AbsAgent):
                     fobj.rfunc(df_m)
             if m > 1 and mins % m == 0:
                 print df_m.ix[-1]
-        for strat in self.strategies:
-            self.proc_lock = True
-            if inst in strat.instIDs:
-                strat.run_min(inst)
-            self.proc_lock = False
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst])
-            mysqlaccess.insert_min_data(inst, self.cur_min[inst])
+            mysqlaccess.insert_min_data(inst, self.cur_min[inst])                
+        if not self.proc_lock:
+            self.proc_lock = True
+            for strat in self.strategies:
+                if inst in strat.instIDs:
+                    strat.run_min(inst)
+            self.proc_lock = False
         
     def day_finalize(self, insts):
         self.logger.info('finalizing the day for market data')
