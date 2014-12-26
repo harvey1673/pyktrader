@@ -46,13 +46,14 @@ class TurtleTrader(Strategy):
                 if buysell !=0:
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                           [self.order_type], cur_price, [5],  \
+                                           [self.order_type], cur_price, [0],  \
                                            valid_time, self.name, self.agent.name)
                     tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
                                         cur_price, cur_price - cur_atr*self.stop_loss*buysell)
                     tradepos.entry_tradeid = etrade.id
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)
+                    self.save_state()
                     self.agent.submit_trade(etrade)
                     return 1
             else:
@@ -63,9 +64,10 @@ class TurtleTrader(Strategy):
                         or ((cur_price - tradepos.exit_target)*buysell < 0):
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], cur_price, [5], \
+                                               [self.order_type], cur_price, [0], \
                                                valid_time, self.name, self.agent.name)
                         tradepos.exit_tradeid = etrade.id
+                        self.save_state()
                         self.submitted_pos[idx].append(etrade)
                         self.agent.submit_trade(etrade)
                     elif  units < 4 and (cur_price - self.positions[idx][-1].entry_price)*buysell >= cur_atr/2.0:
@@ -73,13 +75,14 @@ class TurtleTrader(Strategy):
                             pos.exit_target = cur_price - cur_atr*self.stop_loss*buysell
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], cur_price, [5],  \
+                                               [self.order_type], cur_price, [0],  \
                                                valid_time, self.name, self.agent.name)
                         tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
                                             cur_price, cur_price - cur_atr*self.stop_loss*buysell)
                         tradepos.entry_tradeid = etrade.id
                         self.submitted_pos[idx].append(etrade)
                         self.positions[idx].append(tradepos)
+                        self.save_state()
                         self.agent.submit_trade(etrade)                  
                     return 1
         

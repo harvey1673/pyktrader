@@ -151,7 +151,7 @@ class ETrade(object):
         #ETrade.instances.add(self)
 
     def final_price(self):
-        return sum([ v*p for (v,p) in zip(filled_vol, filled_price)])
+        return sum([ v*p for (v,p) in zip(self.filled_vol, self.filled_price)])
     
     def update(self):
         Done_status = True

@@ -114,7 +114,7 @@ class Strategy(object):
         if len(self.data_func)>0:
             for (freq, fobj) in self.data_func:
                 self.agent.register_data_func(freq,fobj)
-        self.state_refresh()
+        self.load_state()
         self.update_trade_unit()
     
     def get_index(self, under):
@@ -141,7 +141,9 @@ class Strategy(object):
                         etrade.status = order.ETradeStatus.StratConfirm
                         break
                 if etrade.status != order.ETradeStatus.StratConfirm:
-                    self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
+                    print etrade.id, etrade.instIDs, etrade.filled_price
+                    print [(pos.entry_tradeid, pos.exit_tradeid) for pos in self.positions[idx]]
+                    self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade.strategy, self.name))
             elif etrade.status == order.ETradeStatus.Cancelled:
                 for tradepos in reversed(self.positions[idx]):
                     if tradepos.entry_tradeid == etrade.id:
@@ -157,9 +159,6 @@ class Strategy(object):
         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
         return 
-        
-    def state_refresh(self):
-        self.load_state()
         
     def resume(self):
         pass
@@ -250,15 +249,16 @@ class Strategy(object):
                         tradepos.close(exit_price, exit_time)
                     
                     is_added = False
-                    for under, tplist in zip(self.underliers, self.positions):
+                    for under, tplist in zip(self.underliers, positions):
                         if set(under) == set(insts):
                             tplist.append(tradepos)
                             is_added = True
                             break
                     if is_added == False:
                         self.underliers.append(insts)
-                        self.positions.append([tradepos])
+                        positions.append([tradepos])
                         self.logger.warning('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
+        self.positions = positions
         return    
         
     def save_closed_pos(self, tradepos):

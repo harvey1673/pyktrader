@@ -673,27 +673,30 @@ class Agent(AbsAgent):
         self.min_data  = dict([(inst, {1:pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}) for inst in instruments])
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
         self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])
+        #positions
+        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
         
         self.day_data_func = []
         self.min_data_func = {}
         
         self.startup_time = datetime.datetime.now()
+
         self.strategies = strategies
         for strat in self.strategies:
             strat.agent = self
             strat.initialize()
-        
         self.prepare_data_env()
-        for inst in instruments:
-            self.cur_day[inst]['date'] = tday
-            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(tday.toordinal())
-        
+        self.get_eod_positions()
+        #for inst in instruments:
+        #    self.cur_day[inst]['date'] = tday
+        #    self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(tday.toordinal())
+
         ###交易
         self.ref2order = {}    #orderref==>order
         #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
         
         self.cancel_protect_period = 200
-        self.market_order_tick_multiple = 3
+        self.market_order_tick_multiple = 5
         
         #当前资金/持仓
         self.available = 0  #可用资金
@@ -701,8 +704,6 @@ class Agent(AbsAgent):
         self.used_margin = 0
         self.cap_limit = 1000000
         
-        #positions
-        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
         ##查询命令队列
         self.qry_commands = []  #每个元素为查询命令，用于初始化时查询相关数据
         
@@ -731,18 +732,16 @@ class Agent(AbsAgent):
             初始化，如保证金率，账户资金等
         '''
         ##必须先把持仓初始化成配置值或者0
-        self.get_eod_positions()
         for inst in self.instruments:
             self.instruments[inst].get_margin_rate()
         for strat in self.strategies:
-            strat.state_refrsh()
+            strat.load_state()
         for inst in self.positions:
             self.positions[inst].re_calc() 
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
-        time.sleep(1)   #保险起见
         self.check_qry_commands()
         self.initialized = True #避免因为断开后自动重连造成的重复访问
 
@@ -777,12 +776,34 @@ class Agent(AbsAgent):
                     ts = fobj.sfunc(df)
                     df[ts.name]= pd.Series(ts, index=df.index)  
 
-        if self.min_data_days > 0:
+        if self.min_data_days >= 0:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
             min_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             min_end   = workdays.workday(self.scur_day, 1, CHN_Holidays)
             for inst in self.instruments:
-                self.min_data[inst][1] = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
+                mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
+                self.min_data[inst][1] = mindata
+                self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+                self.cur_day[inst]['date'] = self.scur_day
+                if len(mindata)>0:
+                    self.cur_min[inst]['datetime'] = mindata.index[-1]
+                    self.cur_min[inst]['open'] = mindata.ix[-1,'open']
+                    self.cur_min[inst]['close'] = mindata.ix[-1,'close']
+                    self.cur_min[inst]['high'] = mindata.ix[-1,'high']
+                    self.cur_min[inst]['low'] = mindata.ix[-1,'low']
+                    self.cur_min[inst]['volume'] = mindata.ix[-1,'volume']
+                    self.cur_min[inst]['openInterest'] = mindata.ix[-1,'openInterest']
+                    dailydata = data_handler.conv_ohlc_freq(mindata, 'D')
+                    if dailydata.index[-1].date() >= self.scur_day:
+                        self.scur_day = dailydata.index[-1].date()
+                        self.cur_day[inst]['date'] = self.scur_day
+                        self.cur_day[inst]['open'] = dailydata.ix[-1,'open']
+                        self.cur_day[inst]['close'] = dailydata.ix[-1,'close']
+                        self.cur_day[inst]['high'] = dailydata.ix[-1,'high']
+                        self.cur_day[inst]['low'] = dailydata.ix[-1,'low']
+                        self.cur_day[inst]['volume'] = dailydata.ix[-1,'volume']
+                        self.cur_day[inst]['openInterest'] = dailydata.ix[-1,'openInterest']
+
                 for m in self.min_data_func:
                     if m != 1:
                         self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
@@ -795,7 +816,7 @@ class Agent(AbsAgent):
         #self.fetch_order()   
         #self.fetch_trade()     
         self.proc_lock = True
-        time.sleep(1)
+        #time.sleep(1)
         #self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder
@@ -835,11 +856,16 @@ class Agent(AbsAgent):
         
     def get_eod_positions(self):
         file_prefix = self.folder
-        last_bday = workdays.workday(self.scur_day, -1, CHN_Holidays)
-        self.logger.info('Starting; getting EOD position for %s' % last_bday.strftime('%y%m%d'))
-        logfile = file_prefix + 'EOD_Pos_' + last_bday.strftime('%y%m%d')+'.csv'
+        pos_date = self.scur_day
+        logfile = file_prefix + 'EOD_Pos_' + pos_date.strftime('%y%m%d')+'.csv'
         if not os.path.isfile(logfile):
-            return False
+            pos_date = workdays.workday(pos_date, -1, CHN_Holidays)
+            logfile = file_prefix + 'EOD_Pos_' + pos_date.strftime('%y%m%d')+'.csv'
+            if not os.path.isfile(logfile):
+                return False
+        else:
+            self.eod_flag = True
+        self.logger.info('Starting; getting EOD position for %s' % pos_date.strftime('%y%m%d'))
         with open(logfile, 'rb') as f:
             reader = csv.reader(f)
             for idx, row in enumerate(reader):
@@ -928,7 +954,7 @@ class Agent(AbsAgent):
         update_tick = get_tick_id(self.instruments[inst].last_update)
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
                 ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick > curr_tick))):
-            self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
+            #self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
             return False
                 
         if self.tick_id < curr_tick:
@@ -968,9 +994,10 @@ class Agent(AbsAgent):
             self.instruments[inst].is_busy = True        
         
         try:
-            if (tick_id - self.instruments[inst].start_tick_id < 10) and (self.cur_day[inst]['open']==0.0):
-                self.cur_day[inst]['open']=tick.price
-            
+            if (tick_id - self.instruments[inst].start_tick_id < 100) and (self.cur_day[inst]['open']==0.0):
+                self.cur_day[inst]['open'] = tick.price
+                #mysqlaccess.insert_daily_data(inst, self.cur_day[inst], True)
+                self.logger.info('open data is inserted into database for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
             self.cur_day[inst]['close'] = tick.price
             self.cur_day[inst]['high']  = tick.high
             self.cur_day[inst]['low']   = tick.low
@@ -1074,6 +1101,7 @@ class Agent(AbsAgent):
     def run_eod(self):
         if self.trader == None:
             return 
+        self.proc_lock = True
         print 'run EOD process'
         pfilled_list = []
         for etrade in self.etrades:
@@ -1197,8 +1225,10 @@ class Agent(AbsAgent):
     
     def RtnTick(self,ctick):#行情处理主循环
         if (not self.update_instrument(ctick)):
+            # print "stop at update inst"
             return 0
         if( not self.update_hist_data(ctick)):
+            # print "stop at update hist data"
             return 0
    
         # lock the trade processing to avoid position conflict
@@ -1294,8 +1324,7 @@ class Agent(AbsAgent):
             self.save_state()
             return True
         else:
-            print "do not meet the limit price, curr price = %s, limit price = %s" % (curr_price, exec_trade.limit_price)
-            print order_prices
+            print "do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price)
             return False    
         
     def process_trade_list(self):

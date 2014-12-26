@@ -73,7 +73,7 @@ def insert_min_data(inst, min_data):
     cnx.close()
     pass
 
-def insert_daily_data(inst, daily_data):
+def insert_daily_data(inst, daily_data, open_only = False):
     if inst.isdigit():
         dbtable = 'stock_daily'
     else:
@@ -81,8 +81,14 @@ def insert_daily_data(inst, daily_data):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     col_list = daily_data.keys()
-    exch = misc.inst2exch(inst)    
-    stmt = "INSERT IGNORE INTO {table} (instID,exch,{variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
+    exch = misc.inst2exch(inst)
+    if open_only:
+        col_list = ['date', 'open']
+        cmd = "INSERT IGNORE"
+    else:
+        col_list = daily_data.keys()
+        cmd = "REPLACE"
+    stmt = "{commd} INTO {table} (instID,exch,{variables}) VALUES (%s,%s,{formats})".format(commd=cmd, table=dbtable,variables=','.join(col_list), formats=','.join(['%s']*len(col_list)))
     args = tuple([inst, exch]+[daily_data[col] for col in col_list])
     cursor.execute(stmt, args)
     cnx.commit()
@@ -180,7 +186,7 @@ def load_inst_marginrate(instID):
     cnx.close()
     return out
         
-def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_end = 2060):
+def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_end = 2115):
     cnx = mysql.connector.connect(**dbconfig)
     end_adj = d_end + datetime.timedelta(days=1)
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)

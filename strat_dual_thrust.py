@@ -30,13 +30,15 @@ class DTTrader(Strategy):
         tick_id = agent.get_tick_id(ctick.timestamp)
         df = self.agent.day_data[inst]
         cur_rng = max(df.ix[-1,'DONCH_H1'] - df.ix[-1,'DONCH_C1'], df.ix[-1,'DONCH_C1'] - df.ix[-1,'DONCH_L1'])
-        tday_open = self.cur_day[inst]['open']
+        tday_open = self.agent.cur_day[inst]['open']
+        if tday_open <= 0.0:
+            return 
         idx = self.get_index([inst])
         if idx < 0:
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
             return
         buy_trig = tday_open + self.ratios[idx][0] * cur_rng
-        sell_trig = tday_open - self.ratio[idx][1] * cur_rng
+        sell_trig = tday_open - self.ratios[idx][1] * cur_rng
         self.update_positions(idx)
         curr_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
         curr_pos = None
@@ -48,9 +50,10 @@ class DTTrader(Strategy):
             if (buysell!=0) and (self.close_tday[idx]):
                 valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], -curr_price*buysell, [5], \
+                                               [self.order_type], -curr_price*buysell, [0], \
                                                valid_time, self.name, self.agent.name)
                 curr_pos.exit_tradeid = etrade.id
+                self.save_state()
                 self.submitted_pos[idx].append(etrade)
                 self.agent.submit_trade(etrade)
                 self.logger.info('DT EOD close position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
@@ -60,9 +63,10 @@ class DTTrader(Strategy):
                 if buysell!=0:
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], -curr_price*buysell, [5], \
+                                               [self.order_type], -curr_price*buysell, [0], \
                                                valid_time, self.name, self.agent.name)
                     curr_pos.exit_tradeid = etrade.id
+                    self.save_state()
                     self.submitted_pos[idx].append(etrade)
                     self.agent.submit_trade(etrade)
                     self.logger.info('DT EOD close position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
@@ -73,13 +77,14 @@ class DTTrader(Strategy):
                     buysell = -1
                 valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                       [self.order_type], buysell * curr_price, [3],  \
+                                       [self.order_type], buysell * curr_price, [0],  \
                                        valid_time, self.name, self.agent.name)
                 tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
                                         curr_price, 0)
                 tradepos.entry_tradeid = etrade.id
                 self.submitted_pos[idx].append(etrade)
-                self.positions[inst].append(tradepos)
+                self.positions[idx].append(tradepos)
+                self.save_state()
                 self.agent.submit_trade(etrade)
                 self.logger.info('DT EOD open position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
                                                             % (inst, buysell,self.trade_unit[idx][0], etrade.id))

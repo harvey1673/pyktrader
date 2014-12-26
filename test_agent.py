@@ -30,10 +30,12 @@ def test_main(name='test_trade', tday = datetime.date.today()):
     #trader_cfg = TEST_TRADER
     user_cfg = PROD_USER
     agent_name = name
-    insts_dt = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505']
+    insts_dt = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505', \
+                'CF505', 'ME505', 'TA505', 'SR505', 'cu1503', 'al1503', 'zn1503', 'ag1506', 'au1506', 'v1505', 'TC505']
     units_dt = [[1]]*len(insts_dt)
     under_dt = [[inst] for inst in insts_dt]
-    insts_turtle = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505']
+    insts_turtle = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505', \
+                'CF505', 'ME505', 'TA505', 'SR505', 'cu1503', 'al1503', 'zn1503', 'ag1506', 'au1506', 'v1505', 'TC505']
     under_turtle = [[inst] for inst in insts_turtle]
     units_turtle = [[1]]*len(insts_turtle)
     dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, agent = None)
@@ -41,7 +43,7 @@ def test_main(name='test_trade', tday = datetime.date.today()):
     strategies = [dt_strat, turtle_strat]
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':25, \
+                 'daily_data_days':22, \
                  'min_data_days':2 }
     #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
     all_insts = list(set(insts_turtle).union(set(insts_dt)))
