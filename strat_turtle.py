@@ -29,13 +29,16 @@ class TurtleTrader(Strategy):
         df = self.agent.day_data[inst]
         cur_atr = df.ix[-1,'ATR_20']
         hh = [df.ix[-1,'DONCH_H20'],df.ix[-1,'DONCH_H10']]
-        ll  = [df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_H10']]
+        ll  = [df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_L10']]
         idx = self.get_index([inst])
         if idx < 0:
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
             return 
-        self.update_positions(idx)
+        save_status = self.update_positions(idx)
         cur_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
+        if cur_price < 0.01 or cur_price > 100000:
+            self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, ctick.bidPrice1,  + ctick.askPrice1))
+            return 
         if len(self.submitted_pos[idx]) == 0:
             if len(self.positions[idx]) == 0: 
                 buysell = 0
@@ -53,39 +56,49 @@ class TurtleTrader(Strategy):
                     tradepos.entry_tradeid = etrade.id
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)
-                    self.save_state()
+                    save_status = True
+                    self.logger.info('strat %s open a new position on %s, direction=%s, vol=%s, tradeid=%s is sent for processing, stat status saved' % 
+                                     (self.name, inst, buysell, self.trade_unit[idx][0], etrade.id))
                     self.agent.submit_trade(etrade)
-                    return 1
             else:
                 buysell = self.positions[idx][0].direction
                 units = len(self.positions[idx])
-                for tradepos in self.positions[idx]:
+                for tradepos in reversed(self.positions[idx]):
                     if (cur_price < ll[1] and buysell == 1) or (cur_price > hh[1] and buysell == -1) \
-                        or ((cur_price - tradepos.exit_target)*buysell < 0):
+                            or ((cur_price - tradepos.exit_target)*buysell < 0):
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], cur_price, [0], \
                                                valid_time, self.name, self.agent.name)
                         tradepos.exit_tradeid = etrade.id
-                        self.save_state()
+                        save_status = True
+                        self.logger.info('strat %s close a position on %s after a reverse breakout, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
+                                     (self.name, inst, -buysell, self.trade_unit[idx][0], etrade.id))
                         self.submitted_pos[idx].append(etrade)
                         self.agent.submit_trade(etrade)
-                    elif  units < 4 and (cur_price - self.positions[idx][-1].entry_price)*buysell >= cur_atr/2.0:
-                        for pos in self.positions[idx]:
-                            pos.exit_target = cur_price - cur_atr*self.stop_loss*buysell
-                        valid_time = self.agent.tick_id + 600
-                        etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], cur_price, [0],  \
-                                               valid_time, self.name, self.agent.name)
-                        tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                            cur_price, cur_price - cur_atr*self.stop_loss*buysell)
-                        tradepos.entry_tradeid = etrade.id
-                        self.submitted_pos[idx].append(etrade)
-                        self.positions[idx].append(tradepos)
-                        self.save_state()
-                        self.agent.submit_trade(etrade)                  
-                    return 1
-        
+                        if save_status:
+                            self.save_state()
+                        return
+                if  units < 4 and (cur_price - self.positions[idx][-1].entry_price)*buysell >= cur_atr/2.0:
+                    for pos in self.positions[idx]:
+                        pos.exit_target = cur_price - cur_atr*self.stop_loss*buysell
+                    valid_time = self.agent.tick_id + 600
+                    etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
+                                           [self.order_type], cur_price, [0],  \
+                                           valid_time, self.name, self.agent.name)
+                    tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
+                                        cur_price, cur_price - cur_atr*self.stop_loss*buysell)
+                    tradepos.entry_tradeid = etrade.id
+                    self.submitted_pos[idx].append(etrade)
+                    self.positions[idx].append(tradepos)
+                    save_status = True
+                    self.logger.info('strat %s build a new position on top on %s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
+                                 (self.name, inst, buysell, self.trade_unit[idx][0], etrade.id))
+                    self.agent.submit_trade(etrade)                 
+        if save_status:
+            self.save_state()
+        return
+    
     def update_trade_unit(self):
         pass
         #for under, pos in zip(self.underliers,self.positions):

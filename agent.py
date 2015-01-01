@@ -581,7 +581,10 @@ class Instrument(object):
         self.product = inst2product(self.name)
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
-        self.start_tick_id =  prod_info['start_min'] * 1000
+        if self.product in night_session_markets:
+            self.start_tick_id = 300000
+        else:    
+            self.start_tick_id =  prod_info['start_min'] * 1000
         self.last_tick_id =  prod_info['end_min'] * 1000     
         self.multiple = prod_info['lot_size']
         self.tick_base = prod_info['tick_size']
@@ -684,7 +687,7 @@ class Agent(AbsAgent):
         self.strategies = strategies
         for strat in self.strategies:
             strat.agent = self
-            strat.initialize()
+            strat.reset()
         self.prepare_data_env()
         self.get_eod_positions()
         #for inst in instruments:
@@ -735,7 +738,7 @@ class Agent(AbsAgent):
         for inst in self.instruments:
             self.instruments[inst].get_margin_rate()
         for strat in self.strategies:
-            strat.load_state()
+            strat.initialize()
         for inst in self.positions:
             self.positions[inst].re_calc() 
         self.qry_commands.append(self.fetch_trading_account)
@@ -836,7 +839,7 @@ class Agent(AbsAgent):
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
         
         for strat in self.strategies:
-            strat.load_state()
+            strat.initialize()
             strat_trades = [ etrade for etrade in self.etrades if etrade.strategy == strat.name ]
             for trade in strat_trades:
                 strat.add_submitted_pos(trade)
@@ -932,6 +935,7 @@ class Agent(AbsAgent):
             return False
         
         if self.scur_day < tick.timestamp.date():
+            self.logger.info('tick date is later than scur_day, finalizing the day and run EOD')
             self.day_finalize(self.instruments.keys())
             if not self.eod_flag:
                 self.eod_flag = True
@@ -1136,7 +1140,7 @@ class Agent(AbsAgent):
     def add_strategy(self, strat):
         self.append(strat)
         strat.agent = self
-        strat.initialize()
+        strat.reset()
          
     def day_switch(self,scur_day):  #重新初始化opener
         self.logger.info('switching the trading day from %s to %s' % (self.scur_day, scur_day))
@@ -1329,7 +1333,12 @@ class Agent(AbsAgent):
         
     def process_trade_list(self):
         Is_Set = False
-        self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.StratConfirm ] 
+        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes) for etrade in self.etrades if etrade.status == order.ETradeStatus.StratConfirm ] 
+        if len(confirmed)>0:
+            Is_Set = True
+            print confirmed
+            self.logger.info('%s trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
+        self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.StratConfirm ]
         for exec_trade in self.etrades:
             if exec_trade.status == order.ETradeStatus.Pending:
                 if (exec_trade.valid_time < self.tick_id):

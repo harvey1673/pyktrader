@@ -21,13 +21,13 @@ class TradePos(object):
         self.pos = pos
         self.direction = 1 if pos > 0 else -1
         self.entry_target = entry_target
-        self.entry_price = None
-        self.entry_time = None
-        self.entry_tradeid = None
+        self.entry_price = 0
+        self.entry_time = ''
+        self.entry_tradeid = 0
         self.exit_target = exit_target
-        self.exit_price = None
-        self.exit_time = None
-        self.exit_tradeid = None
+        self.exit_price = 0
+        self.exit_time = ''
+        self.exit_tradeid = 0
         self.is_closed = False
         self.profit = 0.0
 
@@ -56,30 +56,18 @@ def tradepos2dict(tradepos):
     trade['direction'] = tradepos.direction
     trade['entry_target'] = tradepos.entry_target
     trade['exit_target'] = tradepos.exit_target
-    if tradepos.entry_tradeid == None:
-        trade['entry_tradeid'] = 0
-    else:
-        trade['entry_tradeid'] = tradepos.entry_tradeid
-
-    if tradepos.exit_tradeid == None:
-        trade['exit_tradeid'] = 0
-    else:
-        trade['exit_tradeid'] = tradepos.exit_tradeid
-        
-    if tradepos.entry_time == None:
-        trade['entry_time'] = ''
-        trade['entry_price'] = 0.0
-    else:
+    trade['entry_tradeid'] = tradepos.entry_tradeid
+    trade['exit_tradeid'] = tradepos.exit_tradeid
+    trade['entry_price'] = tradepos.entry_price
+    trade['exit_price'] = tradepos.exit_price
+    if tradepos.entry_time != '':
         trade['entry_time'] = tradepos.entry_time.strftime('%Y%m%d %H:%M:%S %f')
-        trade['entry_price'] = tradepos.entry_price
-    
-    if tradepos.exit_time == None:
-        trade['exit_time'] = ''
-        trade['exit_price'] = 0.0
     else:
+        trade['entry_time'] = ''
+    if tradepos.exit_time != '':
         trade['exit_time'] = tradepos.exit_time.strftime('%Y%m%d %H:%M:%S %f')
-        trade['exit_price'] = tradepos.exit_price
-
+    else:
+        trade['exit_time'] = ''
     trade['profit'] = tradepos.profit
     trade['is_closed'] = 1 if tradepos.is_closed else 0
     return trade
@@ -105,7 +93,7 @@ class Strategy(object):
         else:
             self.folder = self.folder + self.name + '_'
         
-    def initialize(self):
+    def reset(self):
         if self.agent == None:
             self.folder = ''
         else:
@@ -117,6 +105,10 @@ class Strategy(object):
         self.load_state()
         self.update_trade_unit()
     
+    def initialize(self):
+        self.load_state()
+        pass 
+    
     def get_index(self, under):
         idx = -1
         for i, insts in enumerate(self.underliers):
@@ -127,18 +119,25 @@ class Strategy(object):
     
     def update_positions(self, idx):
         sub_trades = self.submitted_pos[idx]
+        save_status = False
         for etrade in sub_trades:
             if etrade.status == order.ETradeStatus.Done:
                 traded_price = etrade.final_price()
                 for tradepos in reversed(self.positions[idx]):
                     if tradepos.entry_tradeid == etrade.id:
                         tradepos.open( traded_price, datetime.datetime.now())
+                        self.logger.info('strat %s successfully opened a position on %s after tradeid=%s is done, trade status is changed to confirmed' % 
+                                         (self.name, tradepos.insts[0], etrade.id))
                         etrade.status = order.ETradeStatus.StratConfirm
+                        save_status = True
                         break
                     elif tradepos.exit_tradeid == etrade.id:
                         tradepos.close( traded_price, datetime.datetime.now())
                         self.save_closed_pos(tradepos)
+                        self.logger.info('strat %s successfully closed a position on %s after tradeid=%s is done, the closed trade position is saved' % 
+                                         (self.name, tradepos.insts[0], etrade.id))
                         etrade.status = order.ETradeStatus.StratConfirm
+                        save_status = True
                         break
                 if etrade.status != order.ETradeStatus.StratConfirm:
                     print etrade.id, etrade.instIDs, etrade.filled_price
@@ -148,17 +147,25 @@ class Strategy(object):
                 for tradepos in reversed(self.positions[idx]):
                     if tradepos.entry_tradeid == etrade.id:
                         tradepos.cancel_open()
+                        self.logger.info('strat %s cancelled an open position on %s after tradeid=%s is cancelled. Both the trade and the position will be removed.' % 
+                                         (self.name, tradepos.insts[0], etrade.id))
                         etrade.status = order.ETradeStatus.StratConfirm
+                        save_status = True
                         break
                     elif tradepos.exit_tradeid == etrade.id:
                         tradepos.cancel_close()
+                        self.logger.info('strat %s cancelled closing a position on %s after tradeid=%s is cancelled. The position is still open with pos=%s.' % 
+                                         (self.name, tradepos.insts[0], etrade.id, tradepos.pos))
                         etrade.status = order.ETradeStatus.StratConfirm
+                        save_status = True
                         break
                 if etrade.status != order.ETradeStatus.StratConfirm:
-                    self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade, self.name))
+                    print etrade.id, etrade.instIDs, etrade.filled_price
+                    print [(pos.entry_tradeid, pos.exit_tradeid) for pos in self.positions[idx]]
+                    self.logger.warning('the trade %s is cancelled but not found in the strat=%s tradepos table' % (etrade.strategy, self.name))
         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
-        return 
+        return save_status
         
     def resume(self):
         pass
@@ -175,6 +182,7 @@ class Strategy(object):
     def day_finalize(self):    
         self.update_trade_unit()
         self.save_state()
+        self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
         pass
         
     def run_tick(self, ctick):
@@ -220,29 +228,19 @@ class Strategy(object):
                     exit_target = float(row[10])
                     tradepos = TradePos(insts, vols, pos, entry_target, exit_target)
                     if row[5] == '':
-                        entry_time = None
-                        entry_price = None
-                        entry_tradeid = None
+                        entry_time = ''
+                        entry_price = 0
                     else:
                         entry_time = datetime.datetime.strptime(row[5], '%Y%m%d %H:%M:%S %f')
                         entry_price = float(row[4])
                         tradepos.open(entry_price,entry_time)
-                        
-                    if row[7] == '':
-                        entry_tradeid = None
-                    else:
-                        entry_tradeid = int(row[7])
-                        tradepos.entry_tradeid = entry_tradeid
-                        
-                    if row[11] == '':
-                        exit_tradeid = None
-                    else:
-                        exit_tradeid = int(row[11])        
-                        tradepos.exit_tradeid = exit_tradeid
+
+                    tradepos.entry_tradeid = int(row[7])           
+                    tradepos.exit_tradeid = int(row[11])    
                     
                     if row[9] == '':
-                        exit_time = None
-                        exit_price = None
+                        exit_time = ''
+                        exit_price = 0
                     else:                    
                         exit_time = datetime.datetime.strptime(row[9], '%Y%m%d %H:%M:%S %f')
                         exit_price = float(row[8])

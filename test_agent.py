@@ -31,11 +31,13 @@ def test_main(name='test_trade', tday = datetime.date.today()):
     user_cfg = PROD_USER
     agent_name = name
     insts_dt = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505', \
-                'CF505', 'ME505', 'TA505', 'SR505', 'cu1503', 'al1503', 'zn1503', 'ag1506', 'au1506', 'v1505', 'TC505']
+                'CF505', 'ME505', 'TA505', 'SR505', 'cu1503', 'al1503', 'zn1503', 'ag1506', 'au1506', 'v1505', 'TC505', \
+                'c1505', 'IF1503']
     units_dt = [[1]]*len(insts_dt)
     under_dt = [[inst] for inst in insts_dt]
     insts_turtle = ['m1505', 'RM505', 'y1505', 'p1505', 'a1505', 'l1505', 'pp1505', 'j1505', 'jm1505', 'i1505', 'rb1505', \
-                'CF505', 'ME505', 'TA505', 'SR505', 'cu1503', 'al1503', 'zn1503', 'ag1506', 'au1506', 'v1505', 'TC505']
+                'CF505', 'ME505', 'TA505', 'SR505', 'cu1503', 'al1503', 'zn1503', 'ag1506', 'au1506', 'v1505', 'TC505', \
+                'c1505', 'IF1503']
     under_turtle = [[inst] for inst in insts_turtle]
     units_turtle = [[1]]*len(insts_turtle)
     dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, agent = None)
