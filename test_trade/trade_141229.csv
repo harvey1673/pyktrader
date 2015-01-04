@@ -1,2 +1,0 @@
-id,insts,volumes,filledvol,filledprice,otypes,slipticks,order_dict,limitprice,validtime,strategy,book,status
-1229105119,CF505,1,1,13115.0,2,0,CF505:29105119,13117.5,1653935,DT_test,test_trade,3

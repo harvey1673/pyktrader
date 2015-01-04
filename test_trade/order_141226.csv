@@ -1,6 +1,0 @@
-order_ref,sysID,inst,volume,filledvolume,filledprice,action_type,direction,price_type,limitprice,order_time,status,conditionals
-26100822,,au1506,1,1,238.9,0,0,2,238.9,1608351,3,
-26100823,,RM505,1,1,2243.0,0,0,2,2243.0,1608351,3,
-26100824,,TA505,1,1,4808.0,0,0,2,4808.0,1608351,3,
-26100825,,ag1506,1,1,3440.0,0,0,2,3440.0,1608358,3,
-26100826,,p1505,1,1,4938.0,0,1,2,4938.0,1700039,3,
