@@ -27,6 +27,7 @@ class TurtleTrader(Strategy):
     def run_tick(self, ctick):
         inst = ctick.instID
         df = self.agent.day_data[inst]
+        price_unit = self.agent.instruments[inst].multiple
         cur_atr = df.ix[-1,'ATR_20']
         hh = [df.ix[-1,'DONCH_H20'],df.ix[-1,'DONCH_H10']]
         ll  = [df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_L10']]
@@ -50,9 +51,9 @@ class TurtleTrader(Strategy):
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
                                            [self.order_type], cur_price, [0],  \
-                                           valid_time, self.name, self.agent.name)
+                                           valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                     tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        cur_price, cur_price - cur_atr*self.stop_loss*buysell)
+                                        cur_price, cur_price - cur_atr*self.stop_loss*buysell, price_unit)
                     tradepos.entry_tradeid = etrade.id
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)
@@ -69,7 +70,7 @@ class TurtleTrader(Strategy):
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], cur_price, [0], \
-                                               valid_time, self.name, self.agent.name)
+                                               valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                         tradepos.exit_tradeid = etrade.id
                         save_status = True
                         self.logger.info('strat %s close a position on %s after a reverse breakout, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
@@ -85,9 +86,9 @@ class TurtleTrader(Strategy):
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
                                            [self.order_type], cur_price, [0],  \
-                                           valid_time, self.name, self.agent.name)
+                                           valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                     tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        cur_price, cur_price - cur_atr*self.stop_loss*buysell)
+                                        cur_price, cur_price - cur_atr*self.stop_loss*buysell, price_unit)
                     tradepos.entry_tradeid = etrade.id
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)

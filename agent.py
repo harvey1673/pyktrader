@@ -581,10 +581,9 @@ class Instrument(object):
         self.product = inst2product(self.name)
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
+        self.start_tick_id =  prod_info['start_min'] * 1000
         if self.product in night_session_markets:
             self.start_tick_id = 300000
-        else:    
-            self.start_tick_id =  prod_info['start_min'] * 1000
         self.last_tick_id =  prod_info['end_min'] * 1000     
         self.multiple = prod_info['lot_size']
         self.tick_base = prod_info['tick_size']
@@ -675,8 +674,15 @@ class Agent(AbsAgent):
         self.day_data  = dict([(inst, pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])) for inst in instruments])
         self.min_data  = dict([(inst, {1:pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}) for inst in instruments])
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
-        self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])
-        #positions
+        self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])  
+        #当前资金/持仓
+        self.available = 0  #可用资金
+        self.locked_margin = 0
+        self.used_margin = 0
+        self.margin_cap = 1000000
+        self.pnl_total = 0.0
+        self.curr_capital = 0.0
+        self.prev_capital = 0.0
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
         
         self.day_data_func = []
@@ -688,6 +694,7 @@ class Agent(AbsAgent):
         for strat in self.strategies:
             strat.agent = self
             strat.reset()
+
         self.prepare_data_env()
         self.get_eod_positions()
         #for inst in instruments:
@@ -700,12 +707,6 @@ class Agent(AbsAgent):
         
         self.cancel_protect_period = 200
         self.market_order_tick_multiple = 5
-        
-        #当前资金/持仓
-        self.available = 0  #可用资金
-        self.locked_margin = 0
-        self.used_margin = 0
-        self.cap_limit = 1000000
         
         ##查询命令队列
         self.qry_commands = []  #每个元素为查询命令，用于初始化时查询相关数据
@@ -727,8 +728,8 @@ class Agent(AbsAgent):
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
                 
-    def set_capital_limit(self, cap_limit):
-        self.cap_limit = cap_limit
+    def set_capital_limit(self, margin_cap):
+        self.margin_cap = margin_cap
         
     def initialize(self):
         '''
@@ -775,6 +776,7 @@ class Agent(AbsAgent):
                 df = self.day_data[inst]
                 if len(df) > 0:
                     self.instruments[inst].prev_price = df['close'][-1]
+                    self.instruments[inst].price = df['close'][-1]
                 for fobj in self.day_data_func:
                     ts = fobj.sfunc(df)
                     df[ts.name]= pd.Series(ts, index=df.index)  
@@ -796,6 +798,7 @@ class Agent(AbsAgent):
                     self.cur_min[inst]['low'] = mindata.ix[-1,'low']
                     self.cur_min[inst]['volume'] = mindata.ix[-1,'volume']
                     self.cur_min[inst]['openInterest'] = mindata.ix[-1,'openInterest']
+                    self.instruments[inst].price = mindata.ix[-1,'close']
                     dailydata = data_handler.conv_ohlc_freq(mindata, 'D')
                     if dailydata.index[-1].date() >= self.scur_day:
                         self.scur_day = dailydata.index[-1].date()
@@ -872,15 +875,16 @@ class Agent(AbsAgent):
         with open(logfile, 'rb') as f:
             reader = csv.reader(f)
             for idx, row in enumerate(reader):
-                if idx > 0:
-                    inst = row[0]
+                if row[0] == 'capital':
+                    self.prev_capital = float(row[1])
+                    self.logger.info('getting prev EOD capital = %s' % row[1])
+                elif row[0] == 'pos':
+                    inst = row[1]
                     if inst in self.positions:
-                        if self.instruments[inst].exchange == 'SHFE': 
-                            self.positions[inst].pos_yday.long = int(row[1]) 
-                            self.positions[inst].pos_yday.short = int(row[2])
-                        else:
-                            self.positions[inst].pos_tday.long = int(row[1]) 
-                            self.positions[inst].pos_tday.short = int(row[2])                            
+                        self.positions[inst].pos_yday.long = int(row[2]) 
+                        self.positions[inst].pos_yday.short = int(row[3])
+                        self.instruments[inst].prev_price = float(row[4])    
+                        self.logger.info('getting prev EOD pos = %s: long=%s, short=%s, price=%s' % (row[1], row[2], row[3], row[4]))                
         return True
     
     def save_eod_positions(self):
@@ -893,26 +897,37 @@ class Agent(AbsAgent):
         else:
             with open(logfile,'wb') as log_file:
                 file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
-                file_writer.writerow(['instID', 'long', 'short'])
+                file_writer.writerow(['capital', self.curr_capital])
                 for inst in self.positions:
                     pos = self.positions[inst]
                     pos.re_calc()
-                    file_writer.writerow([inst, pos.curr_pos.long, pos.curr_pos.short])
+                    price = self.instruments[inst].price
+                    file_writer.writerow(['pos', inst, pos.curr_pos.long, pos.curr_pos.short, price])
             return True
 
     def calc_margin(self):
         locked_margin = 0
         used_margin = 0
+        yday_pnl = 0
+        tday_pnl = 0
         for instID in self.instruments:
             inst = self.instruments[instID]
             pos = self.positions[instID]
+            print inst.name, inst.marginrate, inst.calc_margin_amount(inst.price,ORDER_BUY), inst.calc_margin_amount(inst.price,ORDER_SELL)
             locked_margin += pos.locked_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
             locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
             used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
-            used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
-            
+            used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL)
+            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_price)
+            tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long)
+            tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) 
         self.locked_margin = locked_margin
         self.used_margin = used_margin
+        self.pnl_total = yday_pnl + tday_pnl
+        self.curr_capital = self.prev_capital + self.pnl_total
+        self.available = self.curr_capital - self.locked_margin
+        self.logger.info('calc_margin: curr_capital=%s, prev_capital=%s, pnl_tday=%s, pnl_yday=%s, locked_margin=%s, used_margin=%s, available=%s' \
+                        % (self.curr_capital, self.prev_capital, tday_pnl, yday_pnl, locked_margin, used_margin, self.available))
  
     def save_state(self):
         '''
@@ -1129,13 +1144,10 @@ class Agent(AbsAgent):
         self.etrades = []
         self.ref2order = {}
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
+        self.prev_capital = self.curr_capital
         for inst in self.positions:
-            if self.instruments[inst].exchange == 'SHFE': 
-                self.positions[inst].pos_yday.long = curr_pos[inst][0] 
-                self.positions[inst].pos_yday.short = curr_pos[inst][1] 
-            else:
-                self.positions[inst].pos_tday.long = curr_pos[inst][0] 
-                self.positions[inst].pos_tday.short = curr_pos[inst][1] 
+            self.positions[inst].pos_yday.long = curr_pos[inst][0] 
+            self.positions[inst].pos_yday.short = curr_pos[inst][1] 
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1253,7 +1265,7 @@ class Agent(AbsAgent):
             else:
                 order_prices.append(self.instruments[inst].ask_price1-self.instruments[inst].tick_base*tick)
     
-        curr_price = sum([p*v for p, v in zip(order_prices, exec_trade.volumes)])
+        curr_price = sum([p*v*cf for p, v, cf in zip(order_prices, exec_trade.volumes, exec_trade.conv_f)])/exec_trade.price_unit
         if curr_price <= exec_trade.limit_price: 
             required_margin = 0
             for idx, (inst, v, otype) in enumerate(zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.order_types)):
@@ -1313,7 +1325,7 @@ class Agent(AbsAgent):
                     orders.append(iorder)
                 all_orders[inst] = orders
                 
-            if required_margin + self.locked_margin > self.cap_limit:
+            if required_margin + self.locked_margin > self.margin_cap:
                 self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
                 exec_trade.status = order.ETradeStatus.Cancelled                
                 return False
@@ -1502,17 +1514,17 @@ class Agent(AbsAgent):
     
     ###辅助   
     def rsp_qry_position(self, instID, isToday, isLong, pos):
-        cur_pos = self.positions[instID]
-        if isLong:
-            if isToday:
-                cur_pos.pos_tday.long = pos
-            else:
-                cur_pos.pos_yday.long = pos
-        else:
-            if isToday:
-                cur_pos.pos_tday.short = pos
-            else:
-                cur_pos.pos_yday.short = pos 
+#         cur_pos = self.positions[instID]
+#         if isLong:
+#             if isToday:
+#                 cur_pos.pos_tday.long = pos
+#             else:
+#                 cur_pos.pos_tday.long = pos
+#         else:
+#             if isToday:
+#                 cur_pos.pos_tday.short = pos
+#             else:
+#                 cur_pos.pos_tday.short = pos 
         self.check_qry_commands() 
 
     def rsp_qry_instrument_marginrate(self, instID, marginRate):

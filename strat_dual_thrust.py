@@ -32,6 +32,7 @@ class DTTrader(Strategy):
         inst = ctick.instID
         tick_id = agent.get_tick_id(ctick.timestamp)
         df = self.agent.day_data[inst]
+        price_unit = self.agent.instruments[inst].multiple
         cur_rng = max(df.ix[-1,'DONCH_H1'] - df.ix[-1,'DONCH_C1'], df.ix[-1,'DONCH_C1'] - df.ix[-1,'DONCH_L1'])
         tday_open = self.agent.cur_day[inst]['open']
         if tday_open <= 0.0:
@@ -57,7 +58,7 @@ class DTTrader(Strategy):
                 valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], -curr_price*buysell, [0], \
-                                               valid_time, self.name, self.agent.name)
+                                               valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                 curr_pos.exit_tradeid = etrade.id
                 save_status = True
                 self.logger.info('DT to close position before EOD for inst = %s, direction=%s, volume=%s, trade_id = %s, current tick_id = %s' \
@@ -71,7 +72,7 @@ class DTTrader(Strategy):
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], -curr_price*buysell, [0], \
-                                               valid_time, self.name, self.agent.name)
+                                               valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                     curr_pos.exit_tradeid = etrade.id
                     save_status = True
                     self.logger.info('DT to close position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
@@ -85,9 +86,9 @@ class DTTrader(Strategy):
                 valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
                                        [self.order_type], buysell * curr_price, [0],  \
-                                       valid_time, self.name, self.agent.name)
+                                       valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                 tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        curr_price, 0)
+                                        curr_price, 0, price_unit)
                 tradepos.entry_tradeid = etrade.id
                 self.submitted_pos[idx].append(etrade)
                 self.positions[idx].append(tradepos)

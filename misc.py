@@ -275,6 +275,8 @@ def nearby(prodcode, n, start_date, end_date, roll_rule, freq, need_shift=False)
         nn = new_df.shape[0]
         if nn > 0:
             new_df['contract'] = pd.Series([nb_cont]*nn, index=new_df.index)
+        else:
+            continue
         if is_new:
             df = new_df
             is_new = False

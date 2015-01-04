@@ -134,7 +134,7 @@ def turtle_sim( ddf, mdf, config ):
     
 def run_sim(asset, start_date, end_date):
     config = {'nearby':1, 
-              'rollrule':'-40b', 
+              'rollrule':'-50b', 
               'marginrate':(0.05, 0.05), 
               'capital': 10000,
               'offset': 0,
@@ -153,10 +153,10 @@ def run_sim(asset, start_date, end_date):
     # commod_list = commod_list1+commod_list2
     # start_dates = start_dates1 + start_dates2
     if asset in ['cu', 'al', 'zn']:
-        config['nearby'] = 2
+        config['nearby'] = 3
     else:
         config['nearby'] = 1
-    systems = [(20,10), (15,7),(40,20)]
+    systems = [(20,10), (15,5), (10, 5)]
     turtle( asset, start_date, end_date, systems, config)
     return 
     

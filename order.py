@@ -21,7 +21,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
         
         file_writer.writerow(['id', 'insts', 'volumes', 'filledvol', 'filledprice', 'otypes', 'slipticks',
                               'order_dict','limitprice', 'validtime',
-                              'strategy','book','status'])
+                              'strategy','book','status', 'price_unit', 'conv_f'])
         for trade in trade_list:
             insts = ' '.join(trade.instIDs)
             volumes = ' '.join([str(i) for i in trade.volumes])
@@ -29,6 +29,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
             filled_price = ' '.join([str(i) for i in trade.filled_price])
             otypes = ' '.join([str(i) for i in trade.order_types])
             slip_ticks = ' '.join([str(i) for i in trade.slip_ticks])
+            cfactors = ' '.join([str(i) for i in trade.conv_f])
             if len(trade.order_dict)>0:
                 order_dict = ' '.join([inst +':'+'_'.join([str(o.order_ref) for o in trade.order_dict[inst]]) 
                                     for inst in trade.order_dict])
@@ -37,7 +38,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
                                 
             file_writer.writerow([trade.id, insts, volumes, filled_vol, filled_price, otypes, slip_ticks,
                                   order_dict, trade.limit_price, trade.valid_time,
-                                  trade.strategy, trade.book, trade.status])  
+                                  trade.strategy, trade.book, trade.status, trade.price_unit, cfactors])  
     pass
 
 def load_trade_list(curr_date, file_prefix):
@@ -69,7 +70,9 @@ def load_trade_list(curr_date, file_prefix):
                 valid_time = int(row[9])
                 strategy = row[10]
                 book = row[11]
-                etrade = ETrade(instIDs, volumes, otypes, limit_price, ticks, valid_time, strategy, book)
+                price_unit = float(row[13])
+                conv_factor = [ int(n) for n in row[14].split(' ')]
+                etrade = ETrade(instIDs, volumes, otypes, limit_price, ticks, valid_time, strategy, book, price_unit, conv_factor)
                 etrade.id = int(row[0])
                 etrade.status = int(row[12])
                 etrade.order_dict = order_dict
@@ -133,7 +136,7 @@ class ETrade(object):
     #def get_instances(cls):
     #    return list(ETrade.instances)
             
-    def __init__(self, instIDs, volumes, otypes, limit_price, ticks, valid_time, strategy, book):
+    def __init__(self, instIDs, volumes, otypes, limit_price, ticks, valid_time, strategy, book, price_unit = 1, conv_factor = []):
         self.id = next(self.id_generator)
         self.instIDs = instIDs
         self.volumes = volumes
@@ -142,16 +145,19 @@ class ETrade(object):
         self.order_types = otypes
         self.slip_ticks  = ticks
         self.limit_price = limit_price
+        self.price_unit = price_unit
         self.valid_time = valid_time
         self.strategy = strategy
         self.book = book
         self.status = ETradeStatus.Pending
-        
+        self.conv_f = [1] * len(instIDs)
+        if len(conv_factor) > 0:
+            self.conv_f = conv_factor
         self.order_dict = {}
         #ETrade.instances.add(self)
 
     def final_price(self):
-        return sum([ v*p for (v,p) in zip(self.filled_vol, self.filled_price)])
+        return sum([ v*p*cf for (v,p,cf) in zip(self.filled_vol, self.filled_price, self.conv_f)])/self.price_unit
     
     def update(self):
         Done_status = True
@@ -243,7 +249,7 @@ class Order(object):
                                 (price, volume, trade_time, self.filled_volume, self.volume))
             elif (self.filled_volume == self.volume) and (self.volume>0):
                 self.status = OrderStatus.Done
-            #self.position.re_calc()
+            self.position.re_calc()
         return self.filled_volume == self.volume
         
 #     def on_close(self,price,volume,order_time):
@@ -260,7 +266,7 @@ class Order(object):
             self.volume = self.filled_volume    #不会再有成交回报
             logging.info(u'撤单记录: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
                 % (self.order_ref, self.instrument.name, self.volume, self.filled_volume, self.cancelled_volume))
-        #self.position.re_calc()
+        self.position.re_calc()
 
     def is_closed(self): #是否已经完全平仓
         return (self.status in [OrderStatus.Cancelled,OrderStatus.Done]) and self.filled_volume == self.volume
@@ -282,12 +288,15 @@ class Position(object):
     def __init__(self,instrument):
         self.instrument = instrument
         self.orders = []    #元素为Order
-        self.pos_tday = BaseObject(long=0, short=0) # SOD position for SHFE, zero for others
-        self.pos_yday = BaseObject(long=0, short=0) # today's new open position for
-
+        self.tday_pos = BaseObject(long=0, short=0) 
+        self.tday_avp = BaseObject(long=0.0, short=0.0)
+        
+        self.pos_tday = BaseObject(long=0, short=0)
+        self.pos_yday = BaseObject(long=0, short=0) # yday's overnight position
+        
         self.curr_pos = BaseObject(long=0, short=0)
         self.locked_pos = BaseObject(long=0, short=0)
-                
+        
         self.can_yclose = BaseObject(long=0, short=0)
         self.can_close  = BaseObject(long=0, short=0)
         self.can_open = BaseObject(long=0, short=0)
@@ -326,20 +335,34 @@ class Position(object):
                 else:
                     yday_closed.short += mo.filled_volume
                     yday_c_locked.short += mo.volume    
-        
-        self.can_close.long  = max(self.pos_tday.short + tday_opened.short - tday_c_locked.long,0) 
-        self.can_close.short = max(self.pos_tday.long + tday_opened.long  - tday_c_locked.short,0)
+
         if self.instrument.exchange == 'SHFE':
             self.can_yclose.long  = max(self.pos_yday.short - yday_c_locked.long, 0)
             self.can_yclose.short = max(self.pos_yday.long  - yday_c_locked.short,0)
-        #else:
-        #    self.can_close.long  = max(self.pos_yday.short + tday_opened.short - tday_c_locked.long,0) 
-        #    self.can_close.short = max(self.pos_yday.long + tday_opened.long  - tday_c_locked.short,0)            
+            self.can_close.long  = max(tday_opened.short - tday_c_locked.long, 0) 
+            self.can_close.short = max(tday_opened.long  - tday_c_locked.short,0)
+        else:
+            self.can_yclose.long  = 0
+            self.can_yclose.short = 0
+            self.can_close.long  = max(self.pos_yday.short + tday_opened.short - tday_c_locked.long, 0) 
+            self.can_close.short = max(self.pos_yday.long  + tday_opened.long  - tday_c_locked.short,0)                     
         
-        self.curr_pos.long = tday_opened.long - tday_closed.short + self.pos_tday.long + self.pos_yday.long - yday_closed.short
-        self.curr_pos.short =tday_opened.short- tday_closed.long  + self.pos_tday.short+ self.pos_yday.short- yday_closed.long
-        self.locked_pos.long = self.pos_yday.long -yday_closed.short+ self.pos_tday.long + tday_o_locked.long - tday_closed.short
-        self.locked_pos.short =self.pos_yday.short-yday_closed.long + self.pos_tday.short+ tday_o_locked.short- tday_closed.long
+        self.tday_pos.long  = tday_opened.long + tday_closed.long + yday_closed.long
+        self.tday_pos.short = tday_opened.short + tday_closed.short + yday_closed.short
+        
+        if self.tday_pos.long > 0:
+            self.tday_avp.long = sum([o.filled_price*o.filled_volume for o in self.orders if o.direction == ORDER_BUY])/self.tday_pos.long
+        else:
+            self.tday_avp.long = 0.0
+        if self.tday_pos.short > 0:
+            self.tday_avp.short= sum([o.filled_price*o.filled_volume for o in self.orders if o.direction == ORDER_SELL])/self.tday_pos.short
+        else:
+            self.tday_avp.short = 0.0        
+        
+        self.curr_pos.long = tday_opened.long - tday_closed.short + self.pos_yday.long - yday_closed.short
+        self.curr_pos.short =tday_opened.short- tday_closed.long  + self.pos_yday.short- yday_closed.long
+        self.locked_pos.long = self.pos_yday.long -yday_closed.short+ tday_o_locked.long - tday_closed.short
+        self.locked_pos.short =self.pos_yday.short-yday_closed.long + tday_o_locked.short- tday_closed.long
         
         self.can_open.long  = max(self.instrument.max_holding[0] - self.locked_pos.long,0)
         self.can_open.short = max(self.instrument.max_holding[1] - self.locked_pos.short,0)
@@ -353,10 +376,8 @@ class Position(object):
         return (self.can_close.long, self.can_close.short)
     
     def get_yclose_volume(self):
-        if self.instrument.exchange == "SHFE":
-            return (self.can_yclose.long, self.can_yclose.short)
-        else: 
-            return (0,0)
+        return (self.can_yclose.long, self.can_yclose.short)
+
     def add_orders(self,orders):
         self.orders.extend(orders)
     

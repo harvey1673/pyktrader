@@ -12,12 +12,13 @@ import os
 
 sign = lambda x: math.copysign(1, x)
 tradepos_header = ['insts', 'vols', 'pos', 'direction', 'entry_price', 'entry_time', 'entry_target', 'entry_tradeid',
-                   'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed']
+                   'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed', 'price_unit']
                                   
 class TradePos(object):
-    def __init__(self, insts, vols, pos, entry_target, exit_target):
+    def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1):
         self.insts = insts
         self.volumes = vols
+        self.price_unit = price_unit
         self.pos = pos
         self.direction = 1 if pos > 0 else -1
         self.entry_target = entry_target
@@ -42,7 +43,7 @@ class TradePos(object):
     def close(self, price, end_time):
         self.exit_time = end_time
         self.exit_price = price
-        self.profit = (self.exit_price - self.entry_price) * self.pos
+        self.profit = (self.exit_price - self.entry_price) * self.pos * self.price_unit
         self.is_closed = True
     
     def cancel_close(self):
@@ -69,6 +70,7 @@ def tradepos2dict(tradepos):
     else:
         trade['exit_time'] = ''
     trade['profit'] = tradepos.profit
+    trade['price_unit'] = tradepos.price_unit
     trade['is_closed'] = 1 if tradepos.is_closed else 0
     return trade
   
@@ -226,7 +228,8 @@ class Strategy(object):
                     #direction = int(row[3])
                     entry_target = float(row[6])
                     exit_target = float(row[10])
-                    tradepos = TradePos(insts, vols, pos, entry_target, exit_target)
+                    price_unit = float(row[14])
+                    tradepos = TradePos(insts, vols, pos, entry_target, exit_target, price_unit)
                     if row[5] == '':
                         entry_time = ''
                         entry_price = 0
