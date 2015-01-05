@@ -126,7 +126,37 @@ product_code = {'SHFE':['cu', 'al', 'zn', 'pb', 'wr', 'rb', 'fu', 'ru', 'bu', 'h
 CHN_Stock_Exch = { 'SSE': ['600104', '000300', '510180', '600104C1412M01400', '600104C1412A01400'], 
                    'SZE': ['399001', '399004', '399007'] }
 
-night_session_markets = ['cu','al','zn','pb','ag','au','rb','hc','ru','m','a','p','j','jm','i','RM','SR','CF','TA','ME']
+night_session_markets = {}
+# night_session_markets = {'cu': 1,
+#                          'al': 1,
+#                          'zn': 1,
+#                          'pb': 1,
+#                          'rb': 1,
+#                          'hc': 1,
+#                          'bu': 1,
+#                          'ag': 2,
+#                          'au': 2,
+#                          'p' : 2,
+#                          'j' : 2,
+#                          'a' : 2,
+#                          'm' : 2,
+#                          'y' : 2,
+#                          'jm': 2,
+#                          'i' : 2,
+#                          'ru': 3,
+#                          'CF': 4,
+#                          'SR': 4,
+#                          'RM': 4,
+#                          'TA': 4,
+#                          'MA': 4,
+#                          'ME': 4, 
+#                          }
+
+night_trading_hrs = {1: (300, 700),
+                     2: (300, 830),
+                     3: (300, 500),
+                     4: (300, 530),
+                     }
 
 product_lotsize = {'zn': 5, 
                    'cu': 5,

@@ -385,4 +385,4 @@ class Position(object):
         self.orders.append(order)
 
     def __str__(self):
-        return u'%s:%x' % (self.instrument.name,id(self))
+        return '%s' % (self.instrument.name)

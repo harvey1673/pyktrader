@@ -671,6 +671,7 @@ class Agent(AbsAgent):
         self.daily_data_days = daily_data_days
         self.min_data_days = min_data_days
         self.tick_data  = dict([(inst, []) for inst in instruments])
+        self.late_tick  = dict([(inst, []) for inst in instruments])
         self.day_data  = dict([(inst, pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])) for inst in instruments])
         self.min_data  = dict([(inst, {1:pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}) for inst in instruments])
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
@@ -747,6 +748,7 @@ class Agent(AbsAgent):
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
         self.check_qry_commands()
+        self.calc_margin()
         self.initialized = True #避免因为断开后自动重连造成的重复访问
 
     def register_data_func(self, freq, fobj):
@@ -792,24 +794,24 @@ class Agent(AbsAgent):
                 self.cur_day[inst]['date'] = self.scur_day
                 if len(mindata)>0:
                     self.cur_min[inst]['datetime'] = mindata.index[-1]
-                    self.cur_min[inst]['open'] = mindata.ix[-1,'open']
-                    self.cur_min[inst]['close'] = mindata.ix[-1,'close']
-                    self.cur_min[inst]['high'] = mindata.ix[-1,'high']
-                    self.cur_min[inst]['low'] = mindata.ix[-1,'low']
-                    self.cur_min[inst]['volume'] = mindata.ix[-1,'volume']
-                    self.cur_min[inst]['openInterest'] = mindata.ix[-1,'openInterest']
-                    self.instruments[inst].price = mindata.ix[-1,'close']
+                    self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
+                    self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
+                    self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
+                    self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
+                    self.cur_min[inst]['volume'] = int(mindata.ix[-1,'volume'])
+                    self.cur_min[inst]['openInterest'] = int(mindata.ix[-1,'openInterest'])
+                    self.instruments[inst].price = float(mindata.ix[-1,'close'])
                     dailydata = data_handler.conv_ohlc_freq(mindata, 'D')
                     if dailydata.index[-1].date() >= self.scur_day:
                         self.scur_day = dailydata.index[-1].date()
                         self.cur_day[inst]['date'] = self.scur_day
-                        self.cur_day[inst]['open'] = dailydata.ix[-1,'open']
-                        self.cur_day[inst]['close'] = dailydata.ix[-1,'close']
-                        self.cur_day[inst]['high'] = dailydata.ix[-1,'high']
-                        self.cur_day[inst]['low'] = dailydata.ix[-1,'low']
-                        self.cur_day[inst]['volume'] = dailydata.ix[-1,'volume']
-                        self.cur_day[inst]['openInterest'] = dailydata.ix[-1,'openInterest']
-
+                        self.cur_day[inst]['open'] = float(dailydata.ix[-1,'open'])
+                        self.cur_day[inst]['close'] = float(dailydata.ix[-1,'close'])
+                        self.cur_day[inst]['high'] = float(dailydata.ix[-1,'high'])
+                        self.cur_day[inst]['low'] = float(dailydata.ix[-1,'low'])
+                        self.cur_day[inst]['volume'] = int(dailydata.ix[-1,'volume'])
+                        self.cur_day[inst]['openInterest'] = int(dailydata.ix[-1,'openInterest'])
+                
                 for m in self.min_data_func:
                     if m != 1:
                         self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
@@ -817,7 +819,8 @@ class Agent(AbsAgent):
                     for fobj in self.min_data_func[m]:
                         ts = fobj.sfunc(df)
                         df[ts.name]= pd.Series(ts, index=df.index)  
-  
+        return
+        
     def resume(self):
         #self.fetch_order()   
         #self.fetch_trade()     
@@ -913,7 +916,7 @@ class Agent(AbsAgent):
         for instID in self.instruments:
             inst = self.instruments[instID]
             pos = self.positions[instID]
-            print inst.name, inst.marginrate, inst.calc_margin_amount(inst.price,ORDER_BUY), inst.calc_margin_amount(inst.price,ORDER_SELL)
+            #print inst.name, inst.marginrate, inst.calc_margin_amount(inst.price,ORDER_BUY), inst.calc_margin_amount(inst.price,ORDER_SELL)
             locked_margin += pos.locked_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
             locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
             used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
@@ -938,17 +941,14 @@ class Agent(AbsAgent):
         order.save_order_list(self.scur_day, self.ref2order, file_prefix)
         order.save_trade_list(self.scur_day, self.etrades, file_prefix)
         return
-       
-    def update_instrument(self, tick):
-        inst = tick.instID    
+    
+    def validate_tick(self, tick):
+        inst = tick.instID
         if inst not in self.instruments:
             self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
             return False
-
-        curr_tick = get_tick_id(tick.timestamp)
         if self.scur_day > tick.timestamp.date():
             return False
-        
         if self.scur_day < tick.timestamp.date():
             self.logger.info('tick date is later than scur_day, finalizing the day and run EOD')
             self.day_finalize(self.instruments.keys())
@@ -959,10 +959,32 @@ class Agent(AbsAgent):
             for inst in self.instruments:
                 self.cur_day[inst]['date'] = self.scur_day
             self.eod_flag = False
-        
-        if (curr_tick < self.instruments[inst].start_tick_id-5):
-            return False
-        
+        product = self.instruments[inst].product
+        exch = self.instruments[inst].exchange
+        if exch == 'CFFEX':
+            hrs = [(1515, 1730), (1900, 2115)]
+        else:
+            hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
+            if product in night_session_markets:
+                night_idx = night_session_markets[product]
+                hrs = [night_trading_hrs[night_idx]] + hrs
+        tick_date = tick.timestamp.date()
+        if (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
+            return False  
+        min_id = get_min_id(tick.timestamp)
+        tick_status = False
+        for ptime in hrs:
+            if (min_id>=ptime[0]-1) and (min_id<=ptime[1]+1):
+                tick_status = True
+                break
+        if not tick_status:
+            #print min_id, ptime[0], ptime[1]
+            self.logger.warning('Instrument %s has received tick outside trading hour, received tick: %s' % (tick.instID, tick.timestamp,))
+        return tick_status
+    
+    def update_instrument(self, tick):
+        inst = tick.instID    
+        curr_tick = get_tick_id(tick.timestamp)
         if (curr_tick > self.instruments[inst].last_tick_id+5):
             if not self.eod_flag:
                 self.eod_flag = True
@@ -974,6 +996,7 @@ class Agent(AbsAgent):
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
                 ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick > curr_tick))):
             #self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
+            self.late_tick[inst].append(tick)
             return False
                 
         if self.tick_id < curr_tick:
@@ -1085,7 +1108,10 @@ class Agent(AbsAgent):
                 print df_m.ix[-1]
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst])
-            mysqlaccess.insert_min_data(inst, self.cur_min[inst])                
+            mysqlaccess.insert_min_data(inst, self.cur_min[inst])
+            if len(self.late_tick[inst])>0:
+                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst])
+                self.late_tick[inst] = []                
         if not self.proc_lock:
             self.proc_lock = True
             for strat in self.strategies:
@@ -1136,6 +1162,7 @@ class Agent(AbsAgent):
             order.save_trade_list(self.scur_day, pfilled_list, file_prefix)    
         for strat in self.strategies:
             strat.day_finalize()
+        self.calc_margin()
         self.save_eod_positions()
         curr_pos = {}
         for inst in self.positions:
@@ -1240,6 +1267,9 @@ class Agent(AbsAgent):
         #    self.qry_commands.append(self.fetch_trade)
     
     def RtnTick(self,ctick):#行情处理主循环
+        if (not self.validate_tick(ctick)):
+            return 0
+        
         if (not self.update_instrument(ctick)):
             # print "stop at update inst"
             return 0
@@ -1272,6 +1302,7 @@ class Agent(AbsAgent):
                 orders = []
                 pos = self.positions[inst]
                 pos.re_calc()
+                self.calc_margin()
                 if ((v>0) and (v > pos.can_close.long + pos.can_yclose.long + pos.can_open.long)) or \
                         ((v<0) and (-v > pos.can_close.short + pos.can_yclose.short + pos.can_open.short)):
                     self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
