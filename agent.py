@@ -555,7 +555,7 @@ class Instrument(object):
         self.last_tick_id = 0
         # market snapshot
         self.price = 0.0
-        self.prev_price = 0.0
+        self.prev_close = 0.0
         self.volume = 0
         self.open_interest = 0
         self.last_update = datetime.datetime(1900, 1, 1, 0,0,0,0)
@@ -643,7 +643,7 @@ class AbsAgent(object):
 class Agent(AbsAgent):
  
     def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), 
-                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5):
+                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5, is_live = True):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -661,12 +661,11 @@ class Agent(AbsAgent):
         self.request_id = 1
         self.initialized = False
         self.scur_day = tday
-        
-        self.mkt_start_tick = min([self.instruments[inst].start_tick_id for inst in instruments])
-        self.mkt_end_tick = max([self.instruments[inst].last_tick_id for inst in instruments])
-        self.trade_start_tick = 1500000
-        self.trade_end_tick = 2115000
-
+        self.proc_lock = True
+        #保存分钟数据标志
+        self.save_flag = False  #默认不保存
+        self.eod_flag = False
+        self.live_trading = is_live
         # market data
         self.daily_data_days = daily_data_days
         self.min_data_days = min_data_days
@@ -716,12 +715,6 @@ class Agent(AbsAgent):
         #self.scheduler = sched.scheduler(time.time, time.sleep)
         #保存锁
         #self.event = threading.Event()
-        self.proc_lock = True
-        #保存分钟数据标志
-        self.save_flag = False  #默认不保存
-        self.eod_flag = False
-        self.agent_start = datetime.datetime.now()
-
         #actions
         self.etrades = []
         self.init_init()    #init中的init,用于子类的处理
@@ -772,21 +765,24 @@ class Agent(AbsAgent):
         if self.daily_data_days > 0:
             self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
-            daily_end = workdays.workday(self.scur_day, 1, CHN_Holidays)
+            daily_end = self.scur_day
             for inst in self.instruments:  
                 self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
                 df = self.day_data[inst]
                 if len(df) > 0:
-                    self.instruments[inst].prev_price = df['close'][-1]
+                    self.instruments[inst].prev_close = df['close'][-1]
                     self.instruments[inst].price = df['close'][-1]
+                    self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
                 for fobj in self.day_data_func:
                     ts = fobj.sfunc(df)
                     df[ts.name]= pd.Series(ts, index=df.index)  
 
-        if self.min_data_days >= 0:
+        if self.min_data_days > 0:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
             min_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
-            min_end   = workdays.workday(self.scur_day, 1, CHN_Holidays)
+            min_end = self.scur_day
+            if self.live_trading:
+                min_end   = workdays.workday(self.scur_day, 1, CHN_Holidays)
             for inst in self.instruments:
                 mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
                 self.min_data[inst][1] = mindata
@@ -801,24 +797,30 @@ class Agent(AbsAgent):
                     self.cur_min[inst]['volume'] = int(mindata.ix[-1,'volume'])
                     self.cur_min[inst]['openInterest'] = int(mindata.ix[-1,'openInterest'])
                     self.instruments[inst].price = float(mindata.ix[-1,'close'])
+                    self.instruments[inst].last_update = mindata.index[-1]
                     dailydata = data_handler.conv_ohlc_freq(mindata, 'D')
                     if dailydata.index[-1].date() >= self.scur_day:
-                        self.scur_day = dailydata.index[-1].date()
-                        self.cur_day[inst]['date'] = self.scur_day
+                        self.cur_day[inst]['date'] = dailydata.index[-1].date()
                         self.cur_day[inst]['open'] = float(dailydata.ix[-1,'open'])
                         self.cur_day[inst]['close'] = float(dailydata.ix[-1,'close'])
                         self.cur_day[inst]['high'] = float(dailydata.ix[-1,'high'])
                         self.cur_day[inst]['low'] = float(dailydata.ix[-1,'low'])
                         self.cur_day[inst]['volume'] = int(dailydata.ix[-1,'volume'])
                         self.cur_day[inst]['openInterest'] = int(dailydata.ix[-1,'openInterest'])
-                
+                    
                 for m in self.min_data_func:
                     if m != 1:
                         self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
                     df = self.min_data[inst][m]
                     for fobj in self.min_data_func[m]:
                         ts = fobj.sfunc(df)
-                        df[ts.name]= pd.Series(ts, index=df.index)  
+                        df[ts.name]= pd.Series(ts, index=df.index)
+            
+            if self.live_trading:
+                max_day = max([self.cur_day[inst]['date'] for inst in self.instruments])
+                if max_day > self.scur_day:
+                    self.logger.info('trading date is switched from %s to %s' % (self.scur_day, max_day))
+                    self.scur_day = max_day
         return
         
     def resume(self):
@@ -886,7 +888,7 @@ class Agent(AbsAgent):
                     if inst in self.positions:
                         self.positions[inst].pos_yday.long = int(row[2]) 
                         self.positions[inst].pos_yday.short = int(row[3])
-                        self.instruments[inst].prev_price = float(row[4])    
+                        self.instruments[inst].prev_close = float(row[4])    
                         self.logger.info('getting prev EOD pos = %s: long=%s, short=%s, price=%s' % (row[1], row[2], row[3], row[4]))                
         return True
     
@@ -900,10 +902,12 @@ class Agent(AbsAgent):
         else:
             with open(logfile,'wb') as log_file:
                 file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
-                file_writer.writerow(['capital', self.curr_capital])
                 for inst in self.positions:
                     pos = self.positions[inst]
                     pos.re_calc()
+                self.calc_margin()
+                file_writer.writerow(['capital', self.curr_capital])
+                for inst in self.positions:
                     price = self.instruments[inst].price
                     file_writer.writerow(['pos', inst, pos.curr_pos.long, pos.curr_pos.short, price])
             return True
@@ -921,9 +925,9 @@ class Agent(AbsAgent):
             locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
             used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
             used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL)
-            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_price)
-            tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long)
-            tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) 
+            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close)
+            tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
+            tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple
         self.locked_margin = locked_margin
         self.used_margin = used_margin
         self.pnl_total = yday_pnl + tday_pnl
@@ -974,7 +978,7 @@ class Agent(AbsAgent):
         min_id = get_min_id(tick.timestamp)
         tick_status = False
         for ptime in hrs:
-            if (min_id>=ptime[0]-1) and (min_id<=ptime[1]+1):
+            if (min_id>=ptime[0]) and (min_id<=ptime[1]+1):
                 tick_status = True
                 break
         if not tick_status:
@@ -985,13 +989,6 @@ class Agent(AbsAgent):
     def update_instrument(self, tick):
         inst = tick.instID    
         curr_tick = get_tick_id(tick.timestamp)
-        if (curr_tick > self.instruments[inst].last_tick_id+5):
-            if not self.eod_flag:
-                self.eod_flag = True
-                self.run_eod()
-                self.eod_flag = True
-            return False
-        
         update_tick = get_tick_id(self.instruments[inst].last_update)
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
                 ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick > curr_tick))):
@@ -1001,20 +998,18 @@ class Agent(AbsAgent):
                 
         if self.tick_id < curr_tick:
             self.tick_id = curr_tick
-        self.instruments[tick.instID].last_update = tick.timestamp
-        self.instruments[tick.instID].bid_price1 = tick.bidPrice1
-        self.instruments[tick.instID].ask_price1 = tick.askPrice1
-        self.instruments[tick.instID].bid_vol1   = tick.bidVol1
-        self.instruments[tick.instID].ask_vol1   = tick.askVol1
-        self.instruments[tick.instID].open_interest = tick.openInterest
-        last_volume = self.instruments[tick.instID].volume
+        self.instruments[inst].last_update = tick.timestamp
+        self.instruments[inst].bid_price1 = tick.bidPrice1
+        self.instruments[inst].ask_price1 = tick.askPrice1
+        self.instruments[inst].bid_vol1   = tick.bidVol1
+        self.instruments[inst].ask_vol1   = tick.askVol1
+        self.instruments[inst].open_interest = tick.openInterest
+        last_volume = self.instruments[inst].volume
         #self.logger.debug(u'MD:收到行情，inst=%s,time=%s，volume=%s,last_volume=%s' % (dp.InstrumentID,dp.UpdateTime,dp.Volume, last_volume))
         if tick.volume > last_volume:
-            self.instruments[tick.instID].price  = tick.price
-            self.instruments[tick.instID].high   = tick.high
-            self.instruments[tick.instID].low    = tick.low
-            self.instruments[tick.instID].volume = tick.volume
-            self.instruments[tick.instID].last_traded = tick.timestamp
+            self.instruments[inst].price  = tick.price
+            self.instruments[inst].volume = tick.volume
+            self.instruments[inst].last_traded = tick.timestamp
         return True
         
     def update_hist_data(self, tick):
@@ -1077,10 +1072,7 @@ class Agent(AbsAgent):
             
             if tick_id > self.instruments[inst].last_tick_id-5:
                 self.day_finalize([inst])
-                if (tick_id > self.mkt_end_tick-5) and (not self.eod_flag):
-                    self.eod_flag = True
-                    self.run_eod()
-                    self.eod_flag = True
+
         except:
             pass
         self.instruments[inst].is_busy = False               
@@ -1120,7 +1112,7 @@ class Agent(AbsAgent):
             self.proc_lock = False
         
     def day_finalize(self, insts):
-        self.logger.info('finalizing the day for market data')
+        self.logger.info('finalizing the day for market data = %s', insts)
         for inst in insts:
             if (len(self.tick_data[inst]) > 0) :
                 last_tick = self.tick_data[inst][-1]
@@ -1129,7 +1121,7 @@ class Agent(AbsAgent):
                 self.min_switch(inst)
 
             if self.cur_day[inst]['close'] > 0:
-                self.instruments[inst].prev_price = self.cur_day[inst]['close']
+                self.instruments[inst].prev_close = self.cur_day[inst]['close']
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
                 for fobj in self.day_data_func:
