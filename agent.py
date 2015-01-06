@@ -675,6 +675,9 @@ class Agent(AbsAgent):
         self.min_data  = dict([(inst, {1:pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}) for inst in instruments])
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
         self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])  
+        for inst in instruments:
+            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+            self.cur_day[inst]['date'] = self.scur_day
         #当前资金/持仓
         self.available = 0  #可用资金
         self.locked_margin = 0
@@ -786,8 +789,6 @@ class Agent(AbsAgent):
             for inst in self.instruments:
                 mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, min_start, min_end)        
                 self.min_data[inst][1] = mindata
-                self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-                self.cur_day[inst]['date'] = self.scur_day
                 if len(mindata)>0:
                     self.cur_min[inst]['datetime'] = mindata.index[-1]
                     self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
