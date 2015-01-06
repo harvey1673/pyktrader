@@ -75,8 +75,8 @@ class DTTrader(Strategy):
                                                valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                     curr_pos.exit_tradeid = etrade.id
                     save_status = True
-                    self.logger.info('DT to close position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
-                                                            % (inst, buysell,self.trade_unit[idx][0], etrade.id))
+                    self.logger.info('DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s, trade_id = %s' \
+                                                            % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx][0], etrade.id))
                     self.submitted_pos[idx].append(etrade)
                     self.agent.submit_trade(etrade)
                 if  (curr_price >= buy_trig):
@@ -94,8 +94,8 @@ class DTTrader(Strategy):
                 self.positions[idx].append(tradepos)
                 save_status = True
                 self.agent.submit_trade(etrade)
-                self.logger.info('DT to open a new position for inst = %s, direction=%s, volume=%s, trade_id = %s' \
-                                                            % (inst, buysell,self.trade_unit[idx][0], etrade.id))
+                self.logger.info('DT to open a new position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price=%s, direction=%s, volume=%s, trade_id = %s' \
+                                                            % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx][0], etrade.id))
         if save_status:
             self.save_state()
         return 

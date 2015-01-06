@@ -682,8 +682,8 @@ class Agent(AbsAgent):
         self.used_margin = 0
         self.margin_cap = 1000000
         self.pnl_total = 0.0
-        self.curr_capital = 0.0
-        self.prev_capital = 0.0
+        self.curr_capital = 1000000.0
+        self.prev_capital = 1000000.0
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
         
         self.day_data_func = []

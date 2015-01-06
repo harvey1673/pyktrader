@@ -58,8 +58,8 @@ class TurtleTrader(Strategy):
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)
                     save_status = True
-                    self.logger.info('strat %s open a new position on %s, direction=%s, vol=%s, tradeid=%s is sent for processing, stat status saved' % 
-                                     (self.name, inst, buysell, self.trade_unit[idx][0], etrade.id))
+                    self.logger.info('strat %s open a new position on %s, cur_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing, stat status saved' % 
+                                     (self.name, inst, cur_price, hh[0], ll[0], buysell, self.trade_unit[idx][0], etrade.id))
                     self.agent.submit_trade(etrade)
             else:
                 buysell = self.positions[idx][0].direction
@@ -73,8 +73,8 @@ class TurtleTrader(Strategy):
                                                valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                         tradepos.exit_tradeid = etrade.id
                         save_status = True
-                        self.logger.info('strat %s close a position on %s after a reverse breakout, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
-                                     (self.name, inst, -buysell, self.trade_unit[idx][0], etrade.id))
+                        self.logger.info('strat %s close a position on %s after a reverse breakout, cur_price=%s, chanhigh=%s, exit=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
+                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.exit_target, -buysell, self.trade_unit[idx][0], etrade.id))
                         self.submitted_pos[idx].append(etrade)
                         self.agent.submit_trade(etrade)
                         if save_status:
@@ -93,8 +93,8 @@ class TurtleTrader(Strategy):
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)
                     save_status = True
-                    self.logger.info('strat %s build a new position on top on %s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
-                                 (self.name, inst, buysell, self.trade_unit[idx][0], etrade.id))
+                    self.logger.info('strat %s build a new position on top on %s, curr_price=%s, last entry=%s, cur_atr=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
+                                 (self.name, inst, cur_price, self.positions[idx][-1].entry_price, cur_atr, buysell, self.trade_unit[idx][0], etrade.id))
                     self.agent.submit_trade(etrade)                 
         if save_status:
             self.save_state()
