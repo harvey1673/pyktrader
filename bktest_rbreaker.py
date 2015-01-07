@@ -66,30 +66,28 @@ def r_breaker_sim( ddf, mdf, config):
     end_d = mdf.index[-1].date()
     prev_d = start_d - datetime.timedelta(days=1)
     tradeid = 0
+	cur_high = 0
+	cur_low = 0
     for dd in mdf.index:
         mslice = mdf.ix[dd]
         min_id = agent.get_min_id(dd)
         d = dd.date()
-        dslice = ddf.ix[d]
+		dslice = ddf.ix[d]
+        if np.isnan(dslice.bbreak):
+            continue
+        if (prev_d < d):
+            num_trades = 0
+			cur_high = mslice.high
+			cur_low = mslice.low
+		else:
+			cur_high = max([cur_high, mslice.high])
+			cur_low = min([cur_low, mslice.low])
+        prev_d = d
         if len(curr_pos) == 0:
             pos = 0
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos    
-        if np.isnan(dslice.TR):
-            continue
-        d_open = dslice.open
-        if (d_open == 0):
-            if (prev_d < d):
-                d_open = mslice.open
-        else:
-            d_open = dslice.open
-        if (d_open <= 0):
-            continue
-        prev_d = d
-        buytrig  = d_open + dslice.TR * k[0]
-        selltrig = d_open - dslice.TR * k[1]
-        
         if (min_id >= 2055):
             if (pos != 0) and (close_daily or (d == end_d)):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -99,37 +97,41 @@ def r_breaker_sim( ddf, mdf, config):
                 curr_pos = []
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
-        else:
-            if (mslice.close >= buytrig) and (pos <=0 ):
+        elif (min_id <=905):
+			continue
+		else:
+			if num_trades >=2:
+				continue
+			if ((cur_high < dslice.bbreak) and (cur_high >= dslice.ssetup) and (mslice.close < dslice.senter) and (pos >=0)) or 
+			   ((cur_low > dslice.sbreak)  and (cur_low  <= dslice.bsetup) and (mslice.close > dslice.benter) and (pos <=0)):
                 if len(curr_pos) > 0:
-                    curr_pos[0].close(mslice.close+offset, dd)
+                    curr_pos[0].close(mslice.close-sign(pos)*offset, dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], unit, buytrig, 0)
+                new_pos = strat.TradePos([mslice.contract], [1], -unit*sign(pos), mslice.close, 0)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close + offset, dd)
+                new_pos.open(mslice.close + offset*sign(pos), dd)
                 curr_pos.append(new_pos)
-                pos = unit
+                pos = -unit*sign(pos)
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif (mslice.close <= selltrig) and (pos >=0 ):
-                if len(curr_pos) > 0:
-                    curr_pos[0].close(mslice.close-offset, dd)
-                    tradeid += 1
-                    curr_pos[0].exit_tradeid = tradeid
-                    closed_trades.append(curr_pos[0])
-                    curr_pos = []
-                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], -unit, selltrig, 0)
+				num_trades += 1
+			elif ((mslice.close >= dslice.bbreak) or (mslice.close <= dslice.sbreak)) and (pos == 0):
+                if (mslice.close >= dslice.bbreak):
+					direction = 1
+				else:
+					direction = -1
+				new_pos = strat.TradePos([mslice.contract], [1], unit*direction, mslice.close, 0)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close - offset, dd)
+                new_pos.open(mslice.close + offset*sign(direction), dd)
                 curr_pos.append(new_pos)
-                pos = -unit
-                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+                pos = unit*direction
+                mdf.ix[dd, 'cost'] -=  abs(direction) * (offset + mslice.close*tcost)
+				num_trades += 1				
         mdf.ix[dd, 'pos'] = pos
             
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
