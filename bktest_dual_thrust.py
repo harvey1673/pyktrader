@@ -48,9 +48,11 @@ def dual_thrust_sim( ddf, mdf, config):
     win = config['win']
     tcost = config['trans_cost']
     unit = config['unit']
+	SL = config['SL']
     ddf['TR'] = pd.concat([pd.rolling_max(ddf.high, win) - pd.rolling_min(ddf.close, win), 
                            pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
-                           join='outer', axis=1).max(axis=1).shift(1) 
+                           join='outer', axis=1).max(axis=1).shift(1)
+	ddf['ATR'] = dh.ATR(ddf, 20)
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -94,6 +96,14 @@ def dual_thrust_sim( ddf, mdf, config):
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
         else:
+			if (pos!=0) and (SL>0) and (curr_pos[0].entry_price-mslice.close)*misc.sign(pos)>SL*dslice.ATR:
+                    curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
+                    tradeid += 1
+                    curr_pos[0].exit_tradeid = tradeid
+                    closed_trades.append(curr_pos[0])
+                    curr_pos = []
+                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)	
+					pos = 0
             if (mslice.close >= buytrig) and (pos <=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close+offset, dd)
@@ -152,6 +162,7 @@ def run_sim(asset, start_date, end_date, daily_close):
               'trans_cost': 0.0,
               'close_daily': daily_close, 
               'unit': 1,
+			  'SL': 0,
               'file_prefix': file_prefix }
     
     if asset in ['cu', 'al', 'zn']:
