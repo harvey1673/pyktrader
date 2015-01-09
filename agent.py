@@ -566,6 +566,7 @@ class Instrument(object):
         self.last_traded = datetime.datetime.now()
         self.max_holding = (10, 10)
         self.is_busy = False
+        self.day_finalized = False
     
     def get_inst_info(self):
         for exch in CHN_Stock_Exch:
@@ -794,7 +795,7 @@ class Agent(AbsAgent):
                     if (min_date == self.scur_day) and min_id < min_end-5:
                         for dt in mindata.index:
                             if (dt > datetime.datetime.fromordinal(self.scur_day.toordinal())) and (mindata.ix[dt, 'open']>0):
-                                self.cur_day[inst]['open'] = mindata.ix[dt, 'open']
+                                self.cur_day[inst]['open'] = float(mindata.ix[dt, 'open'])
                                 #print inst, dt,  mindata.ix[dt, 'open']
                                 break
                         self.cur_min[inst]['datetime'] = mindata.index[-1]
@@ -942,21 +943,15 @@ class Agent(AbsAgent):
     
     def validate_tick(self, tick):
         inst = tick.instID
+        tick_date = tick.timestamp.date()
         if inst not in self.instruments:
             self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
             return False
-        if self.scur_day > tick.timestamp.date():
+        if self.scur_day > tick_date:
             return False
-        if self.scur_day < tick.timestamp.date():
+        if self.scur_day < tick_date:
             self.logger.info('tick date is later than scur_day, finalizing the day and run EOD')
-            self.day_finalize(self.instruments.keys())
-            if not self.eod_flag:
-                self.eod_flag = True
-                self.run_eod()
-            self.scur_day = tick.timestamp.date()
-            for inst in self.instruments:
-                self.cur_day[inst]['date'] = self.scur_day
-            self.eod_flag = False
+            self.day_switch(tick_date)
         product = self.instruments[inst].product
         exch = self.instruments[inst].exchange
         if exch == 'CFFEX':
@@ -965,19 +960,27 @@ class Agent(AbsAgent):
             hrs = [(1457, 1615), (1630, 1730), (1930, 2100)]
             if product in night_session_markets:
                 night_idx = night_session_markets[product]
-                hrs = [night_trading_hrs[night_idx]] + hrs
-        tick_date = tick.timestamp.date()
+                hrs = [night_trading_hrs[night_idx]] + hrs        
         if (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
             return False  
-        min_id = get_min_id(tick.timestamp)
+        tick_id = get_tick_id(tick.timestamp)
         tick_status = False
         for ptime in hrs:
-            if (min_id>=ptime[0]) and (min_id<=ptime[1]+1):
+            if (tick_id>=ptime[0]*1000-5) and (tick_id<=ptime[1]*1000+5):
                 tick_status = True
                 break
         if not tick_status:
-            #print min_id, ptime[0], ptime[1]
-            self.logger.warning('Instrument %s has received tick outside trading hour, received tick: %s' % (tick.instID, tick.timestamp,))
+            if (tick_id > 1516000):
+                self.logger.warning('Received tick for inst=%s after trading hour, received tick: %s' % (tick.instID, tick.timestamp,))
+                if False in [self.instruments[ins].day_finalized for ins in self.instruments]:
+                    self.logger.warning('Late tick after trading hour triggers to finalize the day for all')
+                    self.day_finalize(self.instruments.keys())
+                if not self.eod_flag:
+                    self.run_eod()
+                    self.eod_flag = True
+                return False
+            elif (tick_id >= hrs[-1][1]*1000-1) and (not self.instruments[inst].day_finalized):
+                self.day_finalize([inst])
         return tick_status
     
     def update_instrument(self, tick):
@@ -1018,7 +1021,7 @@ class Agent(AbsAgent):
             self.logger.warning('the daily data date is not same as tick data, daily data=%s, tick data-%s' % (self.cur_day[inst]['date'], tick_dt.date()))
             return False
         
-        if self.instruments[inst].is_busy:
+        if self.instruments[inst].is_busy or self.instruments[inst].day_finalized:
             return False
         else:
             self.instruments[inst].is_busy = True        
@@ -1027,7 +1030,7 @@ class Agent(AbsAgent):
             if (self.cur_day[inst]['open'] == 0.0):
                 self.cur_day[inst]['open'] = tick.price
                 #mysqlaccess.insert_daily_data(inst, self.cur_day[inst], True)
-                self.logger.info('open data is inserted into database for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
+                self.logger.info('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
             self.cur_day[inst]['close'] = tick.price
             self.cur_day[inst]['high']  = tick.high
             self.cur_day[inst]['low']   = tick.low
@@ -1062,7 +1065,7 @@ class Agent(AbsAgent):
                 if ((tick_min>0) and (tick.price>0)): 
                     self.tick_data[inst].append(tick)
             
-            if tick_id > self.instruments[inst].last_tick_id-5:
+            if tick_id >= self.instruments[inst].last_tick_id-1:
                 self.day_finalize([inst])
 
         except:
@@ -1126,7 +1129,9 @@ class Agent(AbsAgent):
             self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
             self.cur_day[inst]['date'] = self.scur_day
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-
+            self.instruments[inst].day_finalized = True
+        return
+    
     def run_eod(self):
         if self.trader == None:
             return 
@@ -1176,6 +1181,7 @@ class Agent(AbsAgent):
         print "scur_day = %s" % (self.scur_day)
         for inst in self.instruments:
             self.cur_day[inst]['date'] = newday
+            self.instruments[inst].day_finalized = False
         self.eod_flag = False
                 
     def init_init(self):    #init中的init,用于子类的处理

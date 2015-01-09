@@ -34,19 +34,6 @@ def fix_daily_data(contlist, sdate, edate):
                 ddata['openInterest'] = int(dslice.openInterest)
                 print inst, ddata
                 mysqlaccess.insert_daily_data(inst, ddata)
-
-def load_tick_to_df(dbtable, inst, d_start, d_end, start_tick=1500000, end_tick = 2115000):
-	tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
-    cnx = mysql.connector.connect(**dbconfig)
-    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(tick_columns), table= dbtable, instID = inst)
-    stmt = stmt + "and tick_id >= %s " % minid_start
-    stmt = stmt + "and tick_id <= %s " % minid_end
-    stmt = stmt + "and datetime >='%s' " % d_start.strftime('%Y-%m-%d')
-    stmt = stmt + "and datetime <='%s' " % d_end.strftime('%Y-%m-%d')
-    stmt = stmt + "order by date, tick_id" 
-    df = pd.io.sql.read_sql(stmt, cnx)
-    cnx.close()
-    return df    
                 
 def fix_daily_by_tick(contlist, sdate, edate, is_forced=False):
     for inst in contlist:
@@ -56,7 +43,7 @@ def fix_daily_by_tick(contlist, sdate, edate, is_forced=False):
         tdf = mysqlaccess.load_tick_to_df('fut_tick', inst, sdate, edate, start_tick=prod_info['start_min'] * 1000, end_tick = prod_info['start_min'] * 1000)
 		for d in list(set(tdf.date)):
             if (is_forced) or (d not in ddf.index) or ddf.ix(d, 'open')==0):
-				df = tdf[tdf['date']==d].sort(['tick_id'])
+				df = tdf[tdf['date']==d]
 				ddata = {}
                 ddata['date'] = d
                 ddata['open'] = float(df.price[0])

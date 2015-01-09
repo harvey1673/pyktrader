@@ -51,12 +51,13 @@ def r_breaker_sim( ddf, mdf, config):
     start_equity = config['capital']
     tcost = config['trans_cost']
     unit = config['unit']
+    close_daily = config['close_daily']
     ddf['ssetup'] = (ddf.high+a*(ddf.close - ddf.low)).shift(1)
     ddf['bsetup'] = (ddf.low-a*(ddf.high - ddf.close)).shift(1)
     ddf['senter'] = ((1+b)*(ddf.high+ddf.close)/2.0 - b * ddf.low).shift(1)
     ddf['benter'] = ((1+b)*(ddf.low+ddf.close)/2.0 - b * ddf.high).shift(1)
     ddf['bbreak'] = ddf.ssetup + c * (ddf.ssetup - ddf.bsetup)
-    ddf['sbreak'] = ddf.betsup - c * (ddf.ssetup - ddf.bsetup)
+    ddf['sbreak'] = ddf.bsetup - c * (ddf.ssetup - ddf.bsetup)
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -66,22 +67,22 @@ def r_breaker_sim( ddf, mdf, config):
     end_d = mdf.index[-1].date()
     prev_d = start_d - datetime.timedelta(days=1)
     tradeid = 0
-	cur_high = 0
-	cur_low = 0
+    cur_high = 0
+    cur_low = 0
     for dd in mdf.index:
         mslice = mdf.ix[dd]
         min_id = agent.get_min_id(dd)
         d = dd.date()
-		dslice = ddf.ix[d]
+        dslice = ddf.ix[d]
         if np.isnan(dslice.bbreak):
             continue
         if (prev_d < d):
             num_trades = 0
-			cur_high = mslice.high
-			cur_low = mslice.low
-		else:
-			cur_high = max([cur_high, mslice.high])
-			cur_low = min([cur_low, mslice.low])
+            cur_high = mslice.high
+            cur_low = mslice.low
+        else:
+            cur_high = max([cur_high, mslice.high])
+            cur_low = min([cur_low, mslice.low])
         prev_d = d
         if len(curr_pos) == 0:
             pos = 0
@@ -98,40 +99,40 @@ def r_breaker_sim( ddf, mdf, config):
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
         elif (min_id <=905):
-			continue
-		else:
-			if num_trades >=2:
-				continue
-			if ((cur_high < dslice.bbreak) and (cur_high >= dslice.ssetup) and (mslice.close < dslice.senter) and (pos >=0)) or 
-			   ((cur_low > dslice.sbreak)  and (cur_low  <= dslice.bsetup) and (mslice.close > dslice.benter) and (pos <=0)):
+            continue
+        else:
+            if num_trades >=2:
+                continue
+            if ((cur_high < dslice.bbreak) and (cur_high >= dslice.ssetup) and (mslice.close < dslice.senter) and (pos >=0)) or \
+                    ((cur_low > dslice.sbreak)  and (cur_low  <= dslice.bsetup) and (mslice.close > dslice.benter) and (pos <=0)):
                 if len(curr_pos) > 0:
-                    curr_pos[0].close(mslice.close-sign(pos)*offset, dd)
+                    curr_pos[0].close(mslice.close-misc.sign(pos)*offset, dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], -unit*sign(pos), mslice.close, 0)
+                new_pos = strat.TradePos([mslice.contract], [1], -unit*misc.sign(pos), mslice.close, 0)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close + offset*sign(pos), dd)
+                new_pos.open(mslice.close + offset*misc.sign(pos), dd)
                 curr_pos.append(new_pos)
-                pos = -unit*sign(pos)
+                pos = -unit*misc.sign(pos)
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-				num_trades += 1
-			elif ((mslice.close >= dslice.bbreak) or (mslice.close <= dslice.sbreak)) and (pos == 0):
+                num_trades += 1
+            elif ((mslice.close >= dslice.bbreak) or (mslice.close <= dslice.sbreak)) and (pos == 0):
                 if (mslice.close >= dslice.bbreak):
-					direction = 1
-				else:
-					direction = -1
-				new_pos = strat.TradePos([mslice.contract], [1], unit*direction, mslice.close, 0)
+                    direction = 1
+                else:
+                    direction = -1
+                new_pos = strat.TradePos([mslice.contract], [1], unit*direction, mslice.close, 0)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close + offset*sign(direction), dd)
+                new_pos.open(mslice.close + offset*misc.sign(direction), dd)
                 curr_pos.append(new_pos)
                 pos = unit*direction
                 mdf.ix[dd, 'cost'] -=  abs(direction) * (offset + mslice.close*tcost)
-				num_trades += 1				
+                num_trades += 1                
         mdf.ix[dd, 'pos'] = pos
             
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
@@ -149,11 +150,11 @@ def r_breaker_sim( ddf, mdf, config):
     #start_dates = start_dates1 + start_dates2
         
 def run_sim(asset, start_date, end_date, daily_close):
-    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DT_'
+    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\RBreaker_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     config = {'nearby':1, 
-              'rollrule':'-40b', 
+              'rollrule':'-50b', 
               'marginrate':(0.05, 0.05), 
               'capital': 10000,
               'offset': 0,
@@ -167,9 +168,9 @@ def run_sim(asset, start_date, end_date, daily_close):
         config['rollrule'] = '-1b'
     elif asset in ['IF']:
         config['rollrule'] = '-1b'
-    scalers = [(0.3, 0.3), (0.5,0.5), (0.7,0.7), (0.9, 0.9)]
-    lookbacks = [1, 2, 4]
-    r_breaker( asset, start_date, end_date, scalers, lookbacks, config)
+    scalers = [(0.35, 0.07, 0.25), (0.4, 0.1, 0.25)]
+    freqs = ['1min', '5min']
+    r_breaker( asset, start_date, end_date, scalers, freqs, config)
     return
 
 if __name__=="__main__":
