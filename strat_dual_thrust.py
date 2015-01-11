@@ -30,7 +30,7 @@ class DTTrader(Strategy):
             
     def run_tick(self, ctick):
         inst = ctick.instID
-        tick_id = agent.get_tick_id(ctick.timestamp)
+        tick_id = ctick.tick_id
         df = self.agent.day_data[inst]
         price_unit = self.agent.instruments[inst].multiple
         cur_rng = max(df.ix[-1,'DONCH_H1'] - df.ix[-1,'DONCH_C1'], df.ix[-1,'DONCH_C1'] - df.ix[-1,'DONCH_L1'])

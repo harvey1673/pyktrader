@@ -36,35 +36,27 @@ def fix_daily_data(contlist, sdate, edate):
                 mysqlaccess.insert_daily_data(inst, ddata)
                 
 def fix_daily_by_tick(contlist, sdate, edate, is_forced=False):
+    res = {}
     for inst in contlist:
-        product = inst2product(inst)
-        prod_info = mysqlaccess.load_product_info(product)		
+        product = misc.inst2product(inst)
+        if product in ['IF','TF']:
+            continue        
         ddf = mysqlaccess.load_daily_data_to_df('fut_daily', inst, sdate, edate)
-        tdf = mysqlaccess.load_tick_to_df('fut_tick', inst, sdate, edate, start_tick=prod_info['start_min'] * 1000, end_tick = prod_info['start_min'] * 1000)
-		for d in list(set(tdf.date)):
-            if (is_forced) or (d not in ddf.index) or ddf.ix(d, 'open')==0):
-				df = tdf[tdf['date']==d]
-				ddata = {}
+        tdf = mysqlaccess.load_tick_to_df('fut_tick', inst, sdate, edate, start_tick=300000, end_tick = 2100000)
+        for d in list(set(tdf.date)):
+            if (is_forced) or (d not in ddf.index) or (ddf.ix(d, 'open')==0):
+                df = tdf[tdf['date']==d].sort(['tick_id'])
+                ddata = {}
                 ddata['date'] = d
-                ddata['open'] = float(df.price[0])
-                ddata['close'] = float(df.price[-1])
-                ddata['high'] = float(df.high[-1])
-                ddata['low'] = float(df.low[-1])
-                ddata['volume'] = int(df.volume[-1])
-                ddata['openInterest'] = int(df.openInterest[-1])
+                ddata['open'] = float(df.iloc[0].price)
+                ddata['close'] = float(df.iloc[-1].price)
+                ddata['high'] = float(df.iloc[-1].high)
+                ddata['low'] = float(df.iloc[-1].low)
+                ddata['volume'] = int(df.iloc[-1].volume)
+                ddata['openInterest'] = int(df.iloc[-1].openInterest)
                 print inst, ddata
-                #mysqlaccess.insert_daily_data(inst, ddata)
-				
-def get_daily_by_tick(inst, cur_date, start_tick=1500000, end_tick=2100000):
-	df = mysqlaccess.load_tick_to_df('fut_tick', inst, cur_date, cur_date, start_tick, end_tick)
-	ddata = {}
-	ddata['date'] = d
-	ddata['open'] = float(df.price[0])
-	ddata['close'] = float(df.price[-1])
-	ddata['high'] = float(df.high[-1])
-	ddata['low'] = float(df.low[-1])
-	ddata['volume'] = int(df.volume[-1])
-	ddata['openInterest'] = int(df.openInterest[-1])
-	return ddata
+                res[(inst,d)] = ddata
+                mysqlaccess.insert_daily_data(inst, ddata, is_forced)
+    return res
 
         

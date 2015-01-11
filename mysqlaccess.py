@@ -17,7 +17,7 @@ dbconfig = {'user': 'harvey',
           'host':'localhost',
           'database': 'blueshale',
           }
-tick_columns = ['instID', 'date','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
+tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
 min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
 daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
@@ -32,7 +32,7 @@ def insert_tick_data(inst, tick):
     if 'timestamp' in col_list:
         col_list.remove('timestamp')
         
-    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
+    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
     args = tuple([getattr(tick,col) for col in col_list])
     cursor.execute(stmt, args)
     cnx.commit()
@@ -50,7 +50,7 @@ def bulkinsert_tick_data(inst, ticks):
     if 'timestamp' in col_list:
         col_list.remove('timestamp')
 
-    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
+    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
     args = [tuple([getattr(tick,col) for col in col_list]) for tick in ticks]    
     cursor.executemany(stmt, args)
     cnx.commit()
@@ -73,7 +73,7 @@ def insert_min_data(inst, min_data):
     cnx.close()
     pass
 
-def insert_daily_data(inst, daily_data, open_only = False):
+def insert_daily_data(inst, daily_data, is_replace = False):
     if inst.isdigit():
         dbtable = 'stock_daily'
     else:
@@ -82,12 +82,10 @@ def insert_daily_data(inst, daily_data, open_only = False):
     cursor = cnx.cursor()
     col_list = daily_data.keys()
     exch = misc.inst2exch(inst)
-    if open_only:
-        col_list = ['date', 'open']
-        cmd = "INSERT IGNORE"
-    else:
-        col_list = daily_data.keys()
+    if is_replace:
         cmd = "REPLACE"
+    else:
+        cmd = "INSERT IGNORE"
     stmt = "{commd} INTO {table} (instID,exch,{variables}) VALUES (%s,%s,{formats})".format(commd=cmd, table=dbtable,variables=','.join(col_list), formats=','.join(['%s']*len(col_list)))
     args = tuple([inst, exch]+[daily_data[col] for col in col_list])
     cursor.execute(stmt, args)
@@ -186,7 +184,7 @@ def load_inst_marginrate(instID):
     cnx.close()
     return out
         
-def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_end = 2115):
+def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_end = 2114):
     cnx = mysql.connector.connect(**dbconfig)
     end_adj = d_end + datetime.timedelta(days=1)
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)
@@ -210,13 +208,12 @@ def load_daily_data_to_df(dbtable, inst, d_start, d_end):
     return df
 
 def load_tick_to_df(dbtable, inst, d_start, d_end, start_tick=1500000, end_tick = 2115000):
-    tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
     cnx = mysql.connector.connect(**dbconfig)
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(tick_columns), table= dbtable, instID = inst)
-    stmt = stmt + "and tick_id >= %s " % minid_start
-    stmt = stmt + "and tick_id <= %s " % minid_end
-    stmt = stmt + "and datetime >='%s' " % d_start.strftime('%Y-%m-%d')
-    stmt = stmt + "and datetime <='%s' " % d_end.strftime('%Y-%m-%d')
+    stmt = stmt + "and tick_id >= %s " % start_tick
+    stmt = stmt + "and tick_id <= %s " % end_tick
+    stmt = stmt + "and date >='%s' " % d_start.strftime('%Y-%m-%d')
+    stmt = stmt + "and date <='%s' " % d_end.strftime('%Y-%m-%d')
     stmt = stmt + "order by date, tick_id" 
     df = pd.io.sql.read_sql(stmt, cnx)
     cnx.close()
@@ -228,7 +225,7 @@ def load_tick_data(dbtable, insts, d_start, d_end):
     stmt = "select {variables} from {table} where instID in ('{instIDs}') ".format(variables=','.join(tick_columns), table= dbtable, instIDs= "','".join(insts))
     stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
     stmt = stmt + "and date <= '%s' " % d_end.strftime('%Y-%m-%d')
-    stmt = stmt + "order by date, hour, min, sec, msec" 
+    stmt = stmt + "order by date, tick_id" 
     cursor.execute(stmt)
     all_ticks = []
     for line in cursor:
@@ -245,3 +242,23 @@ def insert_min_data_to_df(df, min_data):
 def insert_daily_data_to_df(df, daily_data):
     new_data = {key: daily_data[key] for key in daily_columns[1:]}
     df.loc[daily_data['date']] = pd.Series(new_data)
+
+def get_daily_by_tick(inst, cur_date, start_tick=1500000, end_tick=2100000):
+    df = load_tick_to_df('fut_tick', inst, cur_date, cur_date, start_tick, end_tick)
+    ddata = {}
+    ddata['date'] = cur_date
+    if len(df) > 0:
+        ddata['open'] = float(df.iloc[0].price)
+        ddata['close'] = float(df.iloc[-1].price)
+        ddata['high'] = float(df.iloc[-1].high)
+        ddata['low'] = float(df.iloc[-1].low)
+        ddata['volume'] = int(df.iloc[-1].volume)
+        ddata['openInterest'] = int(df.iloc[-1].openInterest)
+    else:
+        ddata['open'] = 0.0
+        ddata['close'] = 0.0
+        ddata['high'] = 0.0
+        ddata['low'] = 0.0
+        ddata['volume'] = 0
+        ddata['openInterest'] = 0
+    return ddata

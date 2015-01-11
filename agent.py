@@ -41,6 +41,7 @@ class TickData:
         self.min  = timestamp.minute
         self.sec  = timestamp.second
         self.msec = timestamp.microsecond/1000
+        self.tick_id = ((self.hour+6)%24)*100000+self.min*100+self.sec*10+int(self.msec/100)
         self.date = timestamp.date().strftime('%Y%m%d')
         pass
 
@@ -698,7 +699,7 @@ class Agent(AbsAgent):
             strat.agent = self
             strat.reset()
 
-        self.prepare_data_env()
+        self.prepare_data_env(mid_day = True)
         self.get_eod_positions()
         #for inst in instruments:
         #    self.cur_day[inst]['date'] = tday
@@ -764,8 +765,8 @@ class Agent(AbsAgent):
             self.min_data_func[mins].append(fobj)
             return True
         
-    def prepare_data_env(self): 
-        if self.daily_data_days > 0:
+    def prepare_data_env(self, mid_day = True): 
+        if self.daily_data_days > 0 or mid_day:
             self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
@@ -780,7 +781,7 @@ class Agent(AbsAgent):
                     ts = fobj.sfunc(df)
                     df[ts.name]= pd.Series(ts, index=df.index)  
 
-        if self.min_data_days > 0:
+        if self.min_data_days > 0 or mid_day:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
             d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             d_end = self.scur_day
@@ -791,23 +792,19 @@ class Agent(AbsAgent):
                 self.min_data[inst][1] = mindata
                 if len(mindata)>0:
                     min_date = mindata.index[-1].date()
-                    min_id = get_min_id(mindata.index[-1])
-                    if (min_date == self.scur_day) and min_id < min_end-5:
-                        for dt in mindata.index:
-                            if (dt > datetime.datetime.fromordinal(self.scur_day.toordinal())) and (mindata.ix[dt, 'open']>0):
-                                self.cur_day[inst]['open'] = float(mindata.ix[dt, 'open'])
-                                #print inst, dt,  mindata.ix[dt, 'open']
-                                break
+                    if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
+                        self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
                         self.cur_min[inst]['datetime'] = mindata.index[-1]
                         self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
                         self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
                         self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
                         self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
-                        self.cur_min[inst]['volume'] = int(mindata.ix[-1,'volume'])
-                        self.cur_min[inst]['openInterest'] = int(mindata.ix[-1,'openInterest'])
+                        self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
+                        self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
                         self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
                         self.instruments[inst].price = float(mindata.ix[-1,'close'])
                         self.instruments[inst].last_update = mindata.index[-1]
+                        self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))
                     
                 for m in self.min_data_func:
                     if m != 1:
@@ -957,13 +954,13 @@ class Agent(AbsAgent):
         if exch == 'CFFEX':
             hrs = [(1515, 1730), (1900, 2115)]
         else:
-            hrs = [(1457, 1615), (1630, 1730), (1930, 2100)]
+            hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
             if product in night_session_markets:
                 night_idx = night_session_markets[product]
                 hrs = [night_trading_hrs[night_idx]] + hrs        
         if (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
             return False  
-        tick_id = get_tick_id(tick.timestamp)
+        tick_id = tick.tick_id
         tick_status = False
         for ptime in hrs:
             if (tick_id>=ptime[0]*1000-5) and (tick_id<=ptime[1]*1000+5):
@@ -985,7 +982,7 @@ class Agent(AbsAgent):
     
     def update_instrument(self, tick):
         inst = tick.instID    
-        curr_tick = get_tick_id(tick.timestamp)
+        curr_tick = tick.tick_id
         update_tick = get_tick_id(self.instruments[inst].last_update)
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
                 ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick > curr_tick))):
@@ -1012,8 +1009,8 @@ class Agent(AbsAgent):
     def update_hist_data(self, tick):
         inst = tick.instID
         tick_dt = tick.timestamp
-        tick_id = get_tick_id(tick_dt)
-        tick_min = math.ceil(tick_id/1000.0)
+        tick_id = tick.tick_id
+        tick_min = int(tick_id/1000)
         if ((self.cur_min[inst]['datetime'].date() > tick_dt.date()) or (self.cur_min[inst]['min_id'] > tick_min)):
             return False
         
@@ -1051,8 +1048,6 @@ class Agent(AbsAgent):
                     self.cur_min[inst]['openInterest'] = last_tick.openInterest
                     self.min_switch(inst)                
                     self.cur_min[inst]['volume'] = last_tick.volume                    
-                else:
-                    self.cur_min[inst]['volume'] = 0
                 
                 self.tick_data[inst] = []
                 self.cur_min[inst]['open']  = tick.price

@@ -13,8 +13,8 @@ def r_breaker( asset, start_date, end_date, scalers, freqs, config):
     rollrule = config['rollrule']
     start_d = misc.day_shift(start_date, '-1b')
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-    ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
-    mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)
+    ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
+    mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
     #ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
     for ix, freq in enumerate(freqs):

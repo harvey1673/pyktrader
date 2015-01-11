@@ -17,7 +17,7 @@ class TestStrat(strategy.Strategy):
     def run_min(self, instID):
         pass
     
-def test_main(name='test_trade', tday = datetime.date.today()):
+def test_main(tday, name='test_trade'):
     '''
     import agent
     trader,myagent = agent.trade_test_main()
@@ -90,5 +90,14 @@ def test_main(name='test_trade', tday = datetime.date.today()):
         myagent.trader = None    
 
 if __name__=="__main__":
-    test_main()
+    args = sys.argv[1:]
+    if len(args) < 2:
+        name= 'test_trade'
+    else:
+        name= args[1]
+    if len(args) < 1:
+        tday = datetime.date.today()
+    else:
+        tday = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+    test_main(tday, name)
     
