@@ -41,7 +41,7 @@ class TickData:
         self.min  = timestamp.minute
         self.sec  = timestamp.second
         self.msec = timestamp.microsecond/1000
-        self.tick_id = ((self.hour+6)%24)*100000+self.min*100+self.sec*10+int(self.msec/100)
+        self.tick_id = ((self.hour+6)%24)*100000+self.min*1000+self.sec*10+int(self.msec/100)
         self.date = timestamp.date().strftime('%Y%m%d')
         pass
 
@@ -794,7 +794,7 @@ class Agent(AbsAgent):
                     min_date = mindata.index[-1].date()
                     if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
                         self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
-                        self.cur_min[inst]['datetime'] = mindata.index[-1]
+                        self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
                         self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
                         self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
                         self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
@@ -940,6 +940,8 @@ class Agent(AbsAgent):
     
     def validate_tick(self, tick):
         inst = tick.instID
+        if self.instruments[inst].exchange =='ZCE':
+            print inst, tick.tick_id, tick.price
         tick_date = tick.timestamp.date()
         if inst not in self.instruments:
             self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
@@ -967,11 +969,12 @@ class Agent(AbsAgent):
                 tick_status = True
                 break
         if not tick_status:
-            if (tick_id > 1516000):
-                self.logger.warning('Received tick for inst=%s after trading hour, received tick: %s' % (tick.instID, tick.timestamp,))
-                if False in [self.instruments[ins].day_finalized for ins in self.instruments]:
-                    self.logger.warning('Late tick after trading hour triggers to finalize the day for all')
-                    self.day_finalize(self.instruments.keys())
+            if (tick_id > 2116000):
+                self.logger.warning('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
+                for ins in self.instruments:
+                    if not self.instruments[ins].day_finalized:
+                        self.logger.warning('Late tick after trading hour triggers to finalize the inst=%s' % ins)
+                        self.day_finalize([ins])
                 if not self.eod_flag:
                     self.run_eod()
                     self.eod_flag = True

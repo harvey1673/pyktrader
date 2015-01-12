@@ -46,12 +46,7 @@ option_insts=['IO1409-C-2500','IO1409-P-2500','IO1409-C-2450','IO1409-P-2450','I
 prod_user = base.BaseObject( broker_id="8070", 
                              investor_id="*", 
                              passwd="*", 
-                             ports=[#"tcp://zjzx-md11.ctp.shcifco.com:41213", 
-									#"tcp://zjzx-md12.ctp.shcifco.com:41213",
-									#"tcp://zjzx-md13.ctp.shcifco.com:41213", 
-									#"tcp://zjzx-md14.ctp.shcifco.com:41213",
-									#"tcp://zjzx-md1.ctp.shcifco.com:41213", 
-									"tcp://zjzx-md15.ctp.shcifco.com:41213"])
+                             ports=["tcp://zjzx-md11.ctp.shcifco.com:41213"])
 prod_trader = base.BaseObject( broker_id="8070", 
                                investor_id="750305", 
                                passwd="801289", 
@@ -106,7 +101,7 @@ def filter_main_cont(sdate):
 def save_all(tday):
     logging.basicConfig(filename="save_all_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     save_insts = filter_main_cont(tday)
-    save_main(prod_user,save_insts, tday)
+    save_main(misc.PROD_USER,save_insts, tday)
     pass
 
 def save_lts_test(tday):

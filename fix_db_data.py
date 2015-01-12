@@ -39,10 +39,15 @@ def fix_daily_by_tick(contlist, sdate, edate, is_forced=False):
     res = {}
     for inst in contlist:
         product = misc.inst2product(inst)
-        if product in ['IF','TF']:
-            continue        
+        start_tick= 1500000
+        end_tick  = 2100000
+        if product in misc.night_session_markets:
+            start_tick = 300000
+        elif product in ['IF','TF']:
+            start_tick = 1515000
+            end_tick   = 2115000
         ddf = mysqlaccess.load_daily_data_to_df('fut_daily', inst, sdate, edate)
-        tdf = mysqlaccess.load_tick_to_df('fut_tick', inst, sdate, edate, start_tick=300000, end_tick = 2100000)
+        tdf = mysqlaccess.load_tick_to_df('fut_tick', inst, sdate, edate, start_tick=start_tick, end_tick = end_tick)
         for d in list(set(tdf.date)):
             if (is_forced) or (d not in ddf.index) or (ddf.ix(d, 'open')==0):
                 df = tdf[tdf['date']==d].sort(['tick_id'])
