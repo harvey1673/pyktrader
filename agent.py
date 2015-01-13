@@ -940,6 +940,11 @@ class Agent(AbsAgent):
     
     def validate_tick(self, tick):
         inst = tick.instID
+        if (self.instruments[inst].exchange == 'ZCE') and \
+                (tick.tick_id <= 530000+4) and (tick.tick_id >= 300000-4) and \
+                (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
+            tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
+            tick.date = self.scur_day.strftime('%Y%m%d')
         tick_date = tick.timestamp.date()
         if inst not in self.instruments:
             self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
