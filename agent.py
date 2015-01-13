@@ -803,7 +803,7 @@ class Agent(AbsAgent):
                         self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
                         self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
                         self.instruments[inst].price = float(mindata.ix[-1,'close'])
-                        self.instruments[inst].last_update = mindata.index[-1]
+                        self.instruments[inst].last_update = datetime.datetime.now()
                         self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))
                     
                 for m in self.min_data_func:
@@ -940,13 +940,11 @@ class Agent(AbsAgent):
     
     def validate_tick(self, tick):
         inst = tick.instID
-        if self.instruments[inst].exchange =='ZCE':
-            print inst, tick.tick_id, tick.price
         tick_date = tick.timestamp.date()
         if inst not in self.instruments:
             self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
             return False
-        if self.scur_day > tick_date:
+        if (self.scur_day > tick_date) or (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
             return False
         if self.scur_day < tick_date:
             self.logger.info('tick date is later than scur_day, finalizing the day and run EOD')
@@ -960,9 +958,9 @@ class Agent(AbsAgent):
             if product in night_session_markets:
                 night_idx = night_session_markets[product]
                 hrs = [night_trading_hrs[night_idx]] + hrs        
-        if (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
-            return False  
         tick_id = tick.tick_id
+        if self.tick_id < tick_id:
+            self.tick_id = tick_id
         tick_status = False
         for ptime in hrs:
             if (tick_id>=ptime[0]*1000-5) and (tick_id<=ptime[1]*1000+5):
@@ -988,13 +986,11 @@ class Agent(AbsAgent):
         curr_tick = tick.tick_id
         update_tick = get_tick_id(self.instruments[inst].last_update)
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
-                ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick > curr_tick))):
+                ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick >= curr_tick))):
             #self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
             self.late_tick[inst].append(tick)
             return False
                 
-        if self.tick_id < curr_tick:
-            self.tick_id = curr_tick
         self.instruments[inst].last_update = tick.timestamp
         self.instruments[inst].bid_price1 = tick.bidPrice1
         self.instruments[inst].ask_price1 = tick.askPrice1
