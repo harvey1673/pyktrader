@@ -901,6 +901,7 @@ class Agent(AbsAgent):
                 file_writer.writerow(['capital', self.curr_capital])
                 for inst in self.positions:
                     price = self.instruments[inst].price
+                    pos = self.positions[inst]
                     file_writer.writerow(['pos', inst, pos.curr_pos.long, pos.curr_pos.short, price])
             return True
 
@@ -1271,7 +1272,8 @@ class Agent(AbsAgent):
         if not self.proc_lock:
             self.proc_lock = True
             for strat in self.strategies:
-                strat.run_tick(ctick)  
+                if (ctick.instID in strat.instIDs):
+                    strat.run_tick(ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1
