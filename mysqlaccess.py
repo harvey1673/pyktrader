@@ -1,6 +1,5 @@
 '''
 Created on Jun 07, 2014
-
 @author: Harvey
 '''
 
@@ -28,12 +27,8 @@ def insert_tick_data(inst, tick):
         dbtable = 'fut_tick'
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
-    col_list = tick.__dict__.keys()
-    if 'timestamp' in col_list:
-        col_list.remove('timestamp')
-        
-    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
-    args = tuple([getattr(tick,col) for col in col_list])
+    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(tick_columns))
+    args = tuple([getattr(tick,col) for col in tick_columns])
     cursor.execute(stmt, args)
     cnx.commit()
     cnx.close()
