@@ -42,7 +42,8 @@ class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
                            volume=dp.Volume, price=dp.LastPrice, 
                            high=dp.HighestPrice, low=dp.LowestPrice, 
                            bidPrice1=dp.BidPrice1, bidVol1=dp.BidVolume1, 
-                           askPrice1=dp.AskPrice1, askVol1=dp.AskVolume1)
+                           askPrice1=dp.AskPrice1, askVol1=dp.AskVolume1,
+                           upper_limit=dp.UpperLimitPrice, lower_limit=dp.LowerLimitPrice)
         except Exception,inst:
             self.logger.warning(u'MD:%s 行情数据转换错误:updateTime="%s"' % (dp.InstrumentID, timestamp))
         return rev

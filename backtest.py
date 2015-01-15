@@ -43,6 +43,13 @@ def get_trade_stats(trade_list):
 	res['all_profit'] = sum([trade.profit for trade in trade_list])
 	res['win_profit'] = sum([trade.profit for trade in trade_list if trade.profit>0])
 	res['loss_profit'] = sum([trade.profit for trade in trade_list if trade.profit<0])
+	sorted_profit = sorted([trade.profit for trade in trade_list])
+	res['largest_profit'] = sorted_profit[-1]
+	res['second largest'] = sorted_profit[-2]
+	res['third_profit'] = sorted_profit[-3]
+	res['largest_loss'] = sorted_profit[0]
+	res['second_loss'] = sorted_profit[1]
+	res['third_loss'] = sorted_profit[2]
 	res['num_win'] = len([trade.profit for trade in trade_list if trade.profit>0])
 	res['num_loss'] = len([trade.profit for trade in trade_list if trade.profit<0])
 	res['win_ratio'] = 0

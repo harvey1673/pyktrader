@@ -1,4 +1,4 @@
-import agent as agent
+import agent
 import fut_api
 import lts_api
 import base

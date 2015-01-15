@@ -41,12 +41,8 @@ def bulkinsert_tick_data(inst, ticks):
         dbtable = 'fut_tick'
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
-    col_list = ticks[0].__dict__.keys()
-    if 'timestamp' in col_list:
-        col_list.remove('timestamp')
-
-    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
-    args = [tuple([getattr(tick,col) for col in col_list]) for tick in ticks]    
+    stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(tick_columns))
+    args = [tuple([getattr(tick,col) for col in tick_columns]) for tick in ticks]    
     cursor.executemany(stmt, args)
     cnx.commit()
     cnx.close()

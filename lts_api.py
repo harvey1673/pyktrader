@@ -46,6 +46,7 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
             #rev的后四个字段在模拟行情中经常出错
             rev = StockTick(instID=dp.InstrumentID, timestamp=timestamp, openInterest=dp.OpenInterest, volume=dp.Volume, turnover=dp.Turnover, 
                             price=dp.LastPrice, open=dp.OpenPrice, close=dp.ClosePrice, high=dp.HighestPrice, low=dp.LowestPrice,
+                            upper_limit=dp.UpperLimitPrice, lower_limit=dp.LowerLimitPrice,
                             bidPrice1=dp.BidPrice1, bidVol1=dp.BidVolume1,askPrice1=dp.AskPrice1, askVol1=dp.AskVolume1,
                             bidPrice2=dp.BidPrice2, bidVol2=dp.BidVolume2, askPrice2=dp.AskPrice2, askVol2=dp.AskVolume2,
                             bidPrice3=dp.BidPrice3, bidVol3=dp.BidVolume3, askPrice3=dp.AskPrice3, askVol3=dp.AskVolume3,

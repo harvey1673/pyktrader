@@ -26,7 +26,7 @@ def get_min_id(dt):
 class TickData:
     def __init__(self, instID='IF1412', high=0.0, low=0.0, price=0.0, volume=0, openInterest=0, 
                  bidPrice1=0.0, bidVol1=0, askPrice1=0.0, askVol1=0, upper_limit=0, lower_limit=0, 
-				 timestamp=datetime.datetime.now()):
+                 timestamp=datetime.datetime.now()):
         self.instID = instID
         self.high = high
         self.low = low
@@ -37,8 +37,8 @@ class TickData:
         self.bidVol1 = bidVol1
         self.askPrice1 = askPrice1
         self.askVol1 = askVol1
-		self.upper_limit = upper_limit
-		self.lower_limit = lower_limit
+        self.upper_limit = upper_limit
+        self.lower_limit = lower_limit
         self.timestamp = timestamp
         self.hour = timestamp.hour
         self.min  = timestamp.minute
@@ -56,7 +56,7 @@ class StockTick(TickData):
                  bidPrice3=0.0, bidVol3=0, askPrice3=0.0, askVol3=0, 
                  bidPrice4=0.0, bidVol4=0, askPrice4=0.0, askVol4=0, 
                  bidPrice5=0.0, bidVol5=0, askPrice5=0.0, askVol5=0,
-				 upper_limit=0, lower_limit=0):
+                 upper_limit=0, lower_limit=0):
         TickData.__init__(self, instID, high, low, price, volume, openInterest, bidPrice1, bidVol1, askPrice1, askVol1, upper_limit, lower_limit, timestamp)
         self.turnover = turnover
         self.open = open
@@ -342,11 +342,11 @@ class CTPTraderRspMixin(object):
             return 0
         
     def OnRspQryDepthMarketData(self, dp, pRspInfo, nRequestID, bIsLast):
-		if self.isRspSuccess(pRspInfo) and dp.InstrumentID in self.instruments:
-			inst = self.instruments[dp.InstrumentID]
-			self.instruments[inst].upper_price_limit = dp.UpperLimitPrice
-			self.instruments[inst].lower_price_limit = dp.LowerLimitPrice  
-		pass
+        if self.isRspSuccess(pRspInfo) and dp.InstrumentID in self.instruments:
+            inst = self.instruments[dp.InstrumentID]
+            self.instruments[inst].upper_price_limit = dp.UpperLimitPrice
+            self.instruments[inst].lower_price_limit = dp.LowerLimitPrice  
+        pass
         
     ###交易准备
     def OnRspQryInstrumentMarginRate(self, pInstMarginRate, pRspInfo, nRequestID, bIsLast):
@@ -549,8 +549,8 @@ class Instrument(object):
         self.tick_base = 0  #单位为0.1
         self.start_tick_id = 0
         self.last_tick_id = 0
-		self.upper_price_limit = 0
-		self.lower_price_limit = 0
+        self.upper_price_limit = 0
+        self.lower_price_limit = 0
         # market snapshot
         self.price = 0.0
         self.prev_close = 0.0
@@ -723,13 +723,13 @@ class Agent(AbsAgent):
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
 
-    def create_instruments(names):
+    def create_instruments(self, names):
         objs = dict([(name,Instrument(name)) for name in names])
         for name in names:
             objs[name].get_inst_info()
             objs[name].get_margin_rate()
         return objs
-		
+        
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
         
@@ -1007,8 +1007,8 @@ class Agent(AbsAgent):
         self.instruments[inst].bid_vol1   = tick.bidVol1
         self.instruments[inst].ask_vol1   = tick.askVol1
         self.instruments[inst].open_interest = tick.openInterest
-		self.instruments[inst].upper_price_limit = tick.upper_limit
-		self.instruments[inst].lower_price_limit = tick.lower_limit
+        self.instruments[inst].upper_price_limit = tick.upper_limit
+        self.instruments[inst].lower_price_limit = tick.lower_limit
         last_volume = self.instruments[inst].volume
         #self.logger.debug(u'MD:收到行情，inst=%s,time=%s，volume=%s,last_volume=%s' % (dp.InstrumentID,dp.UpdateTime,dp.Volume, last_volume))
         if tick.volume > last_volume:

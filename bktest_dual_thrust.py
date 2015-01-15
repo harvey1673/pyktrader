@@ -49,6 +49,8 @@ def dual_thrust_sim( ddf, mdf, config):
     tcost = config['trans_cost']
     unit = config['unit']
     SL = config['SL']
+    minTR= config['minTR']
+    print minTR
     ddf['TR'] = pd.concat([pd.rolling_max(ddf.high, win) - pd.rolling_min(ddf.close, win), 
                            pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
                            join='outer', axis=1).max(axis=1).shift(1)
@@ -82,8 +84,8 @@ def dual_thrust_sim( ddf, mdf, config):
         if (d_open <= 0):
             continue
         prev_d = d
-        buytrig  = d_open + dslice.TR * k[0]
-        selltrig = d_open - dslice.TR * k[1]
+        buytrig  = d_open + max(dslice.TR, d_open*minTR) * k[0]
+        selltrig = d_open - max(dslice.TR, d_open*minTR) * k[1]
         
         if (min_id >= 2055):
             if (pos != 0) and (close_daily or (d == end_d)):
@@ -140,33 +142,36 @@ def dual_thrust_sim( ddf, mdf, config):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
         
-def run_sim(end_date, daily_close):
+def run_sim(end_date, daily_close = False, minTR = 4.0, SL = 0.0):
     
-    commod_list= ['c','m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
-    start_dates = [datetime.date(2010,10,1)] * 13 + \
+    commod_list= ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
+    start_dates = [datetime.date(2010,10,1)] * 12 + \
                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
     #commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH']
     #start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
     #            [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
     #commod_list = commod_list1+commod_list2
     #start_dates = start_dates1 + start_dates2
-    
+    commod_list = commod_list[:4]
+    start_dates = start_dates[:4]
     file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DT_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
+    file_prefix = file_prefix+'_SL'+ str(SL)+'_TR'+str(minTR)+'_'
     config = {'nearby':1, 
               'rollrule':'-50b', 
               'marginrate':(0.05, 0.05), 
               'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0,
-              'close_daily': False, 
+              'close_daily': daily_close, 
               'unit': 1,
-              'SL': 0,
-              'file_prefix': file_prefix }
+              'SL': SL,
+              'file_prefix': file_prefix,
+              'minTR': minTR/1000.0 }
     
 
-    scalers = [(0.3, 0.3), (0.5,0.5), (0.7,0.7), (0.9, 0.9), (1.2,1.2)]
+    scalers = [(0.3, 0.3), (0.5,0.5), (0.7,0.7), (0.9, 0.9)]
     lookbacks = [1,2]
     for asset, sdate in zip(commod_list, start_dates):
         if asset in ['cu', 'al', 'zn']:
@@ -178,23 +183,15 @@ def run_sim(end_date, daily_close):
     return
 
 if __name__=="__main__":
-#     args = sys.argv[1:]
-#     if len(args) < 4:
-#         d_close = False
-#     else:
-#         d_close = (int(args[3])>0)
-#     if len(args) < 3:
-#         end_d = datetime.date(2014,11,30)
-#     else:
-#         end_d = datetime.datetime.strptime(args[2], '%Y%m%d').date()
-#     if len(args) < 2:
-#         start_d = datetime.date(2014,1,2)
-#     else:
-#         start_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
-#     if len(args) < 1:
-#         asset = 'm'
-#     else:
-#         asset = args[0]
-#     run_sim(asset, start_d, end_d, d_close)
+    args = sys.argv[1:]
+    if len(args) < 2:
+        d_close = False
+    else:
+        d_close = (int(args[1])>0)
+    if len(args) < 1:
+        end_d = datetime.date(2014,12,19)
+    else:
+        end_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+    run_sim(end_d, d_close)
     pass
             
