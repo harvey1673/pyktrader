@@ -1,4 +1,4 @@
-import * from tradeagent
+from agent import *
 import workdays
 import numpy as np
 import datetime
@@ -16,53 +16,105 @@ OptExpiryDict = {'IO1409': datetime.date(2014, 9, 19),
 			  'IO1412': datetime.date(2014,12, 19),
 			  'IO1503': datetime.date(2015, 3, 20) }
 
-def tick2time(curr_date, tick_id):
-	microsec = tick_id % 10
-	dtime = tick_id / 10
-	sec  = dtime % 100
-	dtime = dtime/100
-	min = dtime % 100
-	hrs = dtime/100
-	return datetime.datetime(curr_date.year,curr_date.month,curr_date.day, hrs, min, dtime, sec, microsec)
-	
-class OptArbAgent(Agent):
-	def __init__(self, name, trader, cuser, fut_inst, strikes, caplimit, tday=datetime.date.today()):
-		if fut_inst[1].isalpha():
-			key = fut_inst[:2]
+def fut2opt(fut_inst, expiry, otype, strike):
+	product = inst2product(fut_inst)
+	if product == 'IF':
+		optkey = fut_inst.replace('IF','IO')
+	else:
+		optkey = product
+	if product == 'Stock':
+		optkey = optkey + otype + expiry.strftime('%y%m')
+	else:
+		optkey + '-' + upper(type) + '-'
+	opt_inst = optkey + str(int(strike))
+	return opt_inst
+
+def opt_expiry(fut_inst, expiry_month):
+	return expiry_month
+
+def get_opt_margin(fut_price, strike, type):
+	return 0.0
+    
+class OptInstruments(Instrument):
+    def __init__(self, underlying, expiry, otype, strike):
+        opt_inst = fut2opt(underlying, expiry, otype, strike)
+		Instrument.__init__(self, opt_inst)
+		self.strike = strike
+		self.otype = otype
+		self.underlying = underlying
+		self.expiry = opt_expiry(underlying, expiry)
+
+	def time2exp(self, curr_time):
+		curr_date = curr_time.date()
+		exp_date = self.expiry.date()
+		if curr_time > self.expiry:
+			return 0.0
+		elif exp_date < curr_date:
+			return workdays.networkdays(self.scur_day, self.expiry.date(), misc.CHN_Holidays)/BDAYS_PER_YEAR
 		else:
-			key = fut_inst[:1]
-		if key == 'IF':
-			optkey = fut_inst.replace('IF','IO')
+			delta = self.exp - curr_time 
+			return (delta.hour*3600+delta.min*60+delta.second)/3600.0/5.5//\BDAYS_PER_YEAR
+			
+    def get_inst_info(self):
+        for exch in CHN_Stock_Exch:
+            if self.name in CHN_Stock_Exch[exch]:
+                self.product = 'Stock'
+                self.exchange = exch
+                self.start_tick_id = 1530000
+                self.last_tick_id = 2100000
+                self.multiple = 0
+                self.tick_base = 0.01
+                self.broker_fee = 0
+                return
+        self.product = 'IO'
+        self.exchange = 'CFFEX'
+        self.start_tick_id =  1515000
+        self.last_tick_id =  2115000     
+        self.multiple = 100
+        self.tick_base = 0.1
+        self.broker_fee = 0.0
+        return
+    
+    def get_margin_rate(self):
+        return (1,0)
+
+    def calc_margin_amount(self, under_price, strike, direction):
+		if direction == ORDER_BUY:
+			return price
 		else:
-			optkey = fut_inst
-		
+			return get_opt_margin(under_price, strike, self.otype)
+        return 
+     	
+class StockOptAgent(Agent):
+	def __init__(self, name, trader, cuser, underlyings, expiries, strikes, strategies = [], tday=datetime.date.today(), 
+                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\'):
+		self.underlyings = underlyings
+		self.expiries = expiries
 		self.strikes = strikes
-		self.fut_inst   = fut_inst
-		self.call_insts = [optkey+'-C-'+str(s) for s in strikes]
-		self.put_insts  = [optkey+'-P-'+str(s) for s in strikes]
-		insts = [self.fut_inst]+self.call_insts+self.put_insts		
-		Agent.__init__(self, name, trader, cuser, insts, tday)
+		self. 
+		self.option_map = dict([((under, expiry, otype, strike), fut2opt(under, expiry, otype, strike))  \
+									for strike in strikes for otype in ['C','P']    \
+									for expiry in expiries for under in underlyings])
+		instruments = self.underlyings + self.option_map.values() 
+        daily_data_days = 0
+        min_data_days = 0
+		Agent.__init__(self, name, trader, cuser, instruments, strategies, tday, folder, daily_data_days, min_data_days)	
 	
-	def init_init(self):
-		self.opt_expiry = OptExpiryDict[optkey]
-		self.ir = 0.0
-		
+	def create_instruments(self, instruments):
+		objs = {}
+		for inst in instruments:
+			if inst in self.fut_insts:
+				objs[inst] = Instrument(inst)
+				objs[inst].get_inst_info()
+				objs[inst].get_margin_rate()
+			elif:
+				spec = self.option_map[inst]
+				objs[inst] = OptInstrument(spec[0], spec[1], spec[2], spec[3])
+				objs[inst].get_inst_info()
+				objs[inst].get_margin_rate()
+		return objs
 	
-	def time2expiry(self):
-		if self.scur_day < self.opt_expiry:
-			return workdays.networkdays(self.scur_day, self.opt_expiry, misc.CHN_Holidays)/BDAYS_PER_YEAR
-		else:
-			sec = int((self.tick_id % 1000)/10.0)
-			min = int((self.tick_id % 100000)/1000.0)
-			hr  = self.tick_id / 100000
-			return max(((21.0 -(hr+(min+sec/60.0)/60.0))/5.75)/BDAYS_PER_YEAR, 0.0)
 	
-	def discf(self):
-		return np.exp(-self.ir*self.time2expiry())
-		
-	def run_strats(self, ctick):
-		pass
-		
 def test_main():
     logging.basicConfig(filename="ctp_user_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     fut_inst = 'IF1409'
