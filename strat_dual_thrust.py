@@ -8,8 +8,8 @@ import order as order
 import agent
  
 class DTTrader(Strategy):
-    def __init__(self, name, underliers, agent = None, trade_unit = [], ratios = [], stop_loss = []):
-        Strategy.__init__(self, name, underliers, trade_unit, agent)
+    def __init__(self, name, underliers, agent = None, trade_unit = [], ratios = [], stop_loss = [], daily_close = False, email_notify = None):
+        Strategy.__init__(self, name, underliers, trade_unit, agent, email_notify)
         self.data_func = [
                 ('d', BaseObject(name = 'DONCH_H1', sfunc=fcustom(data_handler.DONCH_H, n=1), rfunc=fcustom(data_handler.donch_h, n=1))),\
                 ('d', BaseObject(name = 'DONCH_L1', sfunc=fcustom(data_handler.DONCH_L, n=1), rfunc=fcustom(data_handler.donch_l, n=1))),\
@@ -23,7 +23,7 @@ class DTTrader(Strategy):
         self.stop_loss = stop_loss
         self.lookback = 1
         self.last_tick_id = 2056000
-        self.close_tday = [False]*len(underliers)
+        self.close_tday = [daily_close]*len(underliers)
 
     def initialize(self):
         self.load_state()
@@ -36,6 +36,7 @@ class DTTrader(Strategy):
         cur_rng = max(df.ix[-1,'DONCH_H1'] - df.ix[-1,'DONCH_C1'], df.ix[-1,'DONCH_C1'] - df.ix[-1,'DONCH_L1'])
         tday_open = self.agent.cur_day[inst]['open']
         if tday_open <= 0.0:
+            print "warning: open price =0.0 for inst=%s" % inst
             return 
         idx = self.get_index([inst])
         if idx < 0:
@@ -63,6 +64,10 @@ class DTTrader(Strategy):
                 save_status = True
                 self.logger.info('DT to close position before EOD for inst = %s, direction=%s, volume=%s, trade_id = %s, current tick_id = %s' \
                                                             % (inst, buysell,self.trade_unit[idx][0], etrade.id, tick_id))
+                if self.email_notify != None:
+                    content = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, trade_id = %s, current tick_id = %s' \
+                                                            % (inst, buysell,self.trade_unit[idx][0], etrade.id, tick_id)
+                    send_mail(EMAIL_HOTMAIL, self.email_notify, 'Dual Thrust trade signal', content)
                 self.submitted_pos[idx].append(etrade)
                 self.agent.submit_trade(etrade)
                 save_status = True
@@ -77,6 +82,10 @@ class DTTrader(Strategy):
                     save_status = True
                     self.logger.info('DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s, trade_id = %s' \
                                                             % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx][0], etrade.id))
+                    if self.email_notify != None:
+                        content = 'DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s, trade_id = %s' \
+                                                            % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx][0], etrade.id)
+                        send_mail(EMAIL_HOTMAIL, self.email_notify, 'Dual Thrust trade signal', content)
                     self.submitted_pos[idx].append(etrade)
                     self.agent.submit_trade(etrade)
                 if  (curr_price >= buy_trig):
@@ -96,6 +105,10 @@ class DTTrader(Strategy):
                 self.agent.submit_trade(etrade)
                 self.logger.info('DT to open a new position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price=%s, direction=%s, volume=%s, trade_id = %s' \
                                                             % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx][0], etrade.id))
+                if self.email_notify != None:
+                    content = 'DT to open a new position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price=%s, direction=%s, volume=%s, trade_id = %s' \
+                                                            % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx][0], etrade.id)
+                    send_mail(EMAIL_HOTMAIL, self.email_notify, 'Dual Thrust trade signal', content)
         if save_status:
             self.save_state()
         return 

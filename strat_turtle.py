@@ -7,8 +7,8 @@ import data_handler
 import order as order
  
 class TurtleTrader(Strategy):
-    def __init__(self, name, underliers,  trade_unit = [], agent = None):
-        Strategy.__init__(self, name, underliers, trade_unit, agent)
+    def __init__(self, name, underliers,  trade_unit = [], agent = None, email_notify = None):
+        Strategy.__init__(self, name, underliers, trade_unit, agent, email_notify)
         self.data_func = [ 
                 ('d', BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20))), \
                 ('d', BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10))),\
@@ -23,9 +23,12 @@ class TurtleTrader(Strategy):
         self.stop_loss = 2.0
         self.order_type = OPT_LIMIT_ORDER
         self.trade_unit = trade_unit
-        
+    
     def run_tick(self, ctick):
-        inst = ctick.instID
+        pass
+        
+    def run_min(self, inst):
+        #print "min switched, running in strat turtle inst = %s tick_id = %s", inst, self.agent.tick_id
         df = self.agent.day_data[inst]
         price_unit = self.agent.instruments[inst].multiple
         cur_atr = df.ix[-1,'ATR_20']
@@ -36,9 +39,10 @@ class TurtleTrader(Strategy):
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
             return 
         save_status = self.update_positions(idx)
-        cur_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
+        inst_obj = self.agent.instruments[inst]
+        cur_price = (inst_obj.ask_price1 + inst_obj.bid_price1)/2.0
         if cur_price < 0.01 or cur_price > 100000:
-            self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, ctick.bidPrice1,  + ctick.askPrice1))
+            self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bidPrice1,  inst_obj.askPrice1))
             return 
         if len(self.submitted_pos[idx]) == 0:
             if len(self.positions[idx]) == 0: 
@@ -60,6 +64,10 @@ class TurtleTrader(Strategy):
                     save_status = True
                     self.logger.info('strat %s open a new position on %s, cur_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing, stat status saved' % 
                                      (self.name, inst, cur_price, hh[0], ll[0], buysell, self.trade_unit[idx][0], etrade.id))
+                    if self.email_notify != None:
+                        content = 'strat %s open a new position on %s, cur_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing, stat status saved' % \
+                                    (self.name, inst, cur_price, hh[0], ll[0], buysell, self.trade_unit[idx][0], etrade.id)
+                        send_mail(EMAIL_HOTMAIL, self.email_notify, 'Turtle trade signal', content)
                     self.agent.submit_trade(etrade)
             else:
                 buysell = self.positions[idx][0].direction
@@ -75,6 +83,10 @@ class TurtleTrader(Strategy):
                         save_status = True
                         self.logger.info('strat %s close a position on %s after a reverse breakout, cur_price=%s, chanhigh=%s, exit=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
                                      (self.name, inst, cur_price, hh[1], ll[1], tradepos.exit_target, -buysell, self.trade_unit[idx][0], etrade.id))
+                        if self.email_notify != None:
+                            content = 'strat %s close a position on %s after a reverse breakout, cur_price=%s, chanhigh=%s, exit=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % \
+                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.exit_target, -buysell, self.trade_unit[idx][0], etrade.id)
+                            send_mail(EMAIL_HOTMAIL, self.email_notify, 'Turtle trade signal', content) 
                         self.submitted_pos[idx].append(etrade)
                         self.agent.submit_trade(etrade)
                         if save_status:
@@ -95,6 +107,10 @@ class TurtleTrader(Strategy):
                     save_status = True
                     self.logger.info('strat %s build a new position on top on %s, curr_price=%s, last entry=%s, cur_atr=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
                                  (self.name, inst, cur_price, self.positions[idx][-1].entry_price, cur_atr, buysell, self.trade_unit[idx][0], etrade.id))
+                    if self.email_notify != None:
+                        content = 'strat %s build a new position on top on %s, curr_price=%s, last entry=%s, cur_atr=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % \
+                                 (self.name, inst, cur_price, self.positions[idx][-1].entry_price, cur_atr, buysell, self.trade_unit[idx][0], etrade.id)
+                        send_mail(EMAIL_HOTMAIL, self.email_notify, 'Turtle trade signal', content)                     
                     self.agent.submit_trade(etrade)                 
         if save_status:
             self.save_state()

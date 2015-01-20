@@ -918,7 +918,7 @@ class Agent(AbsAgent):
             locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
             used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
             used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL)
-            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close)
+            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close) * inst.multiple
             tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
             tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple
         self.locked_margin = locked_margin
@@ -1068,7 +1068,8 @@ class Agent(AbsAgent):
             if tick_id >= self.instruments[inst].last_tick_id-1:
                 self.day_finalize([inst])
 
-        except:
+        except Exception as e:
+            print "exception = %s time = %s" % (e, datetime.datetime.now())
             pass
         self.instruments[inst].is_busy = False               
         return True  
@@ -1099,12 +1100,13 @@ class Agent(AbsAgent):
             if len(self.late_tick[inst])>0:
                 mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst])
                 self.late_tick[inst] = []                
-        if not self.proc_lock:
-            self.proc_lock = True
-            for strat in self.strategies:
-                if inst in strat.instIDs:
+        for strat in self.strategies:
+            if inst in strat.instIDs:
+                if not self.proc_lock:
+                    self.proc_lock = True
                     strat.run_min(inst)
-            self.proc_lock = False
+                    self.proc_lock = False
+        return
         
     def day_finalize(self, insts):
         self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (insts, self.scur_day))
@@ -1116,19 +1118,12 @@ class Agent(AbsAgent):
                 self.min_switch(inst)
 
             if self.cur_day[inst]['close'] > 0:
-                self.instruments[inst].prev_close = self.cur_day[inst]['close']
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
                 for fobj in self.day_data_func:
                     fobj.rfunc(df)
                 if self.save_flag:
                     mysqlaccess.insert_daily_data(inst, self.cur_day[inst])
-            
-            self.tick_data[inst] = []
-            self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
-            self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
-            self.cur_day[inst]['date'] = self.scur_day
-            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
             self.instruments[inst].day_finalized = True
         return
     
@@ -1163,7 +1158,8 @@ class Agent(AbsAgent):
         self.prev_capital = self.curr_capital
         for inst in self.positions:
             self.positions[inst].pos_yday.long = curr_pos[inst][0] 
-            self.positions[inst].pos_yday.short = curr_pos[inst][1] 
+            self.positions[inst].pos_yday.short = curr_pos[inst][1]
+            self.instruments[inst].prev_close = self.cur_day[inst]['close']
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1180,7 +1176,11 @@ class Agent(AbsAgent):
         self.scur_day = newday
         print "scur_day = %s" % (self.scur_day)
         for inst in self.instruments:
+            self.tick_data[inst] = []
+            self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
+            self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
             self.cur_day[inst]['date'] = newday
+            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(newday.toordinal())
             self.instruments[inst].day_finalized = False
         self.eod_flag = False
                 

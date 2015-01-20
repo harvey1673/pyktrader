@@ -75,7 +75,7 @@ def tradepos2dict(tradepos):
     return trade
   
 class Strategy(object):
-    def __init__(self, name, underliers, trade_unit = [], agent = None):
+    def __init__(self, name, underliers, trade_unit = [], agent = None, email_notify = None):
         self.name = name
         self.underliers = underliers
         self.instIDs = list(set().union(*underliers))
@@ -94,6 +94,7 @@ class Strategy(object):
             self.folder = ''
         else:
             self.folder = self.folder + self.name + '_'
+        self.email_notify = email_notify
         
     def reset(self):
         if self.agent == None:

@@ -7,6 +7,8 @@ import dateutil
 import math
 from base import *
 import pandas as pd
+import smtplib 
+from email.mime.text import MIMEText 
 
 ORDER_BUY  = '0'
 ORDER_SELL = '1'
@@ -77,6 +79,10 @@ LTS_OP_TRADER = BaseObject(    broker_id="2011",
                                investor_id="11111", 
                                passwd="11111", 
                                ports= ["tcp://211.144.195.163:24505"])
+EMAIL_HOTMAIL = {'host': 'smtp.live.com',
+                 'user': 'harvey_wwu@hotmail.com',
+                 'passwd': '9619252y'}
+
 month_code_map = {'f': 1,
                   'g': 2,
                   'h': 3,
@@ -415,3 +421,24 @@ def contract_range(product, exch, cont_mth, start_date, end_date):
                     
                     cont_list.append(contLabel)
     return cont_list
+  
+def send_mail(mail_account, to_list, sub, content): 
+    mail_host = mail_account['host']
+    mail_user = mail_account['user']
+    mail_pass = mail_account['passwd']
+    msg = MIMEText(content) 
+    msg['Subject'] = sub 
+    msg['From'] = mail_user 
+    msg['To'] = ';'.join(to_list) 
+    try:
+        smtp = smtplib.SMTP(mail_host, 587)
+        #smtp.ehlo()
+        smtp.starttls()
+        #smtp.ehlo()
+        smtp.login(mail_user, mail_pass)
+        smtp.sendmail(mail_user, to_list, msg.as_string())
+        smtp.close()
+        return True
+    except Exception, e: 
+        print str(e) 
+        return False
