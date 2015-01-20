@@ -1160,6 +1160,7 @@ class Agent(AbsAgent):
             self.positions[inst].pos_yday.long = curr_pos[inst][0] 
             self.positions[inst].pos_yday.short = curr_pos[inst][1]
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
+        self.proc_lock = False
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1174,7 +1175,8 @@ class Agent(AbsAgent):
             self.eod_flag = True
             self.run_eod()
         self.scur_day = newday
-        print "scur_day = %s" % (self.scur_day)
+        self.tick_id = 0
+        print "scur_day = %s reset tick_id=" % (self.scur_day, self.tick_id)
         for inst in self.instruments:
             self.tick_data[inst] = []
             self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
