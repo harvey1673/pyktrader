@@ -529,18 +529,6 @@ class CTPTraderRspMixin(object):
         self.agent.err_order_action(pOrderAction.OrderRef,pOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
                 
 class Instrument(object):
-    @staticmethod
-    def create_instruments(names):
-        '''根据名称序列和策略序列创建instrument
-           其中策略序列的结构为:
-           [总最大持仓量,策略1,策略2...] 
-        '''
-        objs = dict([(name,Instrument(name)) for name in names])
-        for name in names:
-            objs[name].get_inst_info()
-            objs[name].get_margin_rate()
-        return objs
-    
     def __init__(self,name):
         self.name = name
         self.exchange = 'CFFEX'
@@ -659,7 +647,7 @@ class Agent(AbsAgent):
         self.name = name
         self.folder = folder + self.name + '\\'
         self.cuser = cuser
-        self.instruments = Instrument.create_instruments(instruments)
+        self.instruments = self.create_instruments(instruments)
         self.request_id = 1
         self.initialized = False
         self.scur_day = tday
@@ -725,7 +713,18 @@ class Agent(AbsAgent):
 
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
-                
+
+    def create_instruments(names):
+        '''根据名称序列和策略序列创建instrument
+           其中策略序列的结构为:
+           [总最大持仓量,策略1,策略2...] 
+        '''
+        objs = dict([(name,Instrument(name)) for name in names])
+        for name in names:
+            objs[name].get_inst_info()
+            objs[name].get_margin_rate()
+        return objs
+		
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
         
