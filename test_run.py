@@ -1,4 +1,4 @@
-import agent
+import agent as agent
 import fut_api
 import lts_api
 import base
@@ -106,7 +106,7 @@ def save_all(tday):
 
 def save_lts_test(tday):
     logging.basicConfig(filename="save_lts_test.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    save_insts = ['600104', '000300', '510180', '600104C1412M01400', '600104C1412A01400', '399001', '399004', '399007']
+    save_insts = ['510050', '510050C1502M02500', '510050P1502M02500']
     save_LTS(misc.LTS_SO_USER,save_insts)
     pass
    

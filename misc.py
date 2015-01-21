@@ -27,6 +27,7 @@ OST_CANCELED = '5' #撤单
 OST_UNKNOWN = 'a' #未知
 OST_NOTOUCH = 'b' #尚未触发
 OST_TOUCHED = 'c' #已触
+MKT_DATA_BIGNUMBER = 10000000
 
 sign = lambda x: math.copysign(1, x)
 
@@ -55,12 +56,12 @@ TEST_TRADER = BaseObject( broker_id="8000",
                              ports  = ["tcp://qqfz-front1.ctp.shcifco.com:32305"])
 
 LTS_SO_USER = BaseObject(    broker_id="2011", 
-                             investor_id="1111111", 
-                             passwd="111111", 
+                             investor_id="060000004751", 
+                             passwd="9250015", 
                              ports=["tcp://211.144.195.163:34513"])
 LTS_SO_TRADER = BaseObject(    broker_id="2011", 
-                               investor_id="060000004750", 
-                               passwd="250015", 
+                               investor_id="060000004751", 
+                               passwd="9250015", 
                                ports= ["tcp://211.144.195.163:34505"])
 LTS_AS_USER = BaseObject(    broker_id="2011", 
                              investor_id="11111", 

@@ -714,7 +714,7 @@ class Agent(AbsAgent):
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
 
-    def create_instruments(names):
+    def create_instruments(self, names):
         '''根据名称序列和策略序列创建instrument
            其中策略序列的结构为:
            [总最大持仓量,策略1,策略2...] 
@@ -724,7 +724,7 @@ class Agent(AbsAgent):
             objs[name].get_inst_info()
             objs[name].get_margin_rate()
         return objs
-		
+        
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
         
@@ -986,10 +986,14 @@ class Agent(AbsAgent):
                 self.day_finalize([inst])
         return tick_status
     
-    def update_instrument(self, tick):
+    def update_instrument(self, tick):      
         inst = tick.instID    
         curr_tick = tick.tick_id
         update_tick = get_tick_id(self.instruments[inst].last_update)
+        if (tick.askPrice1 > MKT_DATA_BIGNUMBER) or (tick.askPrice1 == 0):
+            tick.askPrice1 = tick.bidPrice1
+        if (tick.bidPrice1 > MKT_DATA_BIGNUMBER) or (tick.bidPrice1 == 0):
+            tick.bidPrice1 = tick.askPrice1  
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
                 ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick >= curr_tick))):
             #self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
@@ -1174,8 +1178,8 @@ class Agent(AbsAgent):
             self.eod_flag = True
             self.run_eod()
         self.scur_day = newday
+        print "scur_day = %s, reset tick_id= %s to 0" % (self.scur_day, self.tick_id)
         self.tick_id = 0
-        print "scur_day = %s reset tick_id=" % (self.scur_day, self.tick_id)
         for inst in self.instruments:
             self.tick_data[inst] = []
             self.cur_min[inst] = dict([(item, 0) for item in min_data_list])

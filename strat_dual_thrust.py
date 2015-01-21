@@ -45,7 +45,7 @@ class DTTrader(Strategy):
         buy_trig = tday_open + self.ratios[idx][0] * cur_rng
         sell_trig = tday_open - self.ratios[idx][1] * cur_rng
         save_status = self.update_positions(idx)
-        curr_price = (ctick.askPrice1 + ctick.bidPrice1)/2.0
+        curr_price = ctick.price
         if curr_price < 0.01 or curr_price > 100000:
             self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, ctick.bidPrice1,  + ctick.askPrice1))
             return 

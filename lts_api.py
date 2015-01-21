@@ -46,7 +46,6 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
             #rev的后四个字段在模拟行情中经常出错
             rev = StockTick(instID=dp.InstrumentID, timestamp=timestamp, openInterest=dp.OpenInterest, volume=dp.Volume, turnover=dp.Turnover, 
                             price=dp.LastPrice, open=dp.OpenPrice, close=dp.ClosePrice, high=dp.HighestPrice, low=dp.LowestPrice,
-                            upper_limit=dp.UpperLimitPrice, lower_limit=dp.LowerLimitPrice,
                             bidPrice1=dp.BidPrice1, bidVol1=dp.BidVolume1,askPrice1=dp.AskPrice1, askVol1=dp.AskVolume1,
                             bidPrice2=dp.BidPrice2, bidVol2=dp.BidVolume2, askPrice2=dp.AskPrice2, askVol2=dp.AskVolume2,
                             bidPrice3=dp.BidPrice3, bidVol3=dp.BidVolume3, askPrice3=dp.AskPrice3, askVol3=dp.AskVolume3,
@@ -122,8 +121,6 @@ def make_user(my_agent,hq_user, insts):
         user.Init()
 
 def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.date.today()):
-    logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
     strategies = strat_cfg['strategies']
     folder = strat_cfg['folder']
     daily_days = strat_cfg['daily_data_days']
@@ -148,11 +145,10 @@ def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = dateti
     make_user(my_agent,usercfg, insts)
     return my_agent
 
-def test_main():
+def test_main(tday):
     logging.basicConfig(filename="save_lts_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     app_name = 'lts_agent'
-    insts = ['600104', '600104C1412M01400', '600104C1412A01400']
-    tday = datetime.date(2014,12,3)
+    insts = ['510050', '510050C1502M02500', '510050P1502M02500']
     strategies = []
     trader_cfg = LTS_SO_TRADER
     user_cfg = LTS_SO_USER
@@ -167,16 +163,16 @@ def test_main():
         myagent.resume()
 
 # position/trade test        
-        myagent.positions['600104'].pos_tday.long  = 2
-        myagent.positions['600104'].pos_tday.short = 2
+        myagent.positions['510050'].pos_tday.long  = 2
+        myagent.positions['510050'].pos_tday.short = 2
         #myagent.positions['cu1502'].pos_yday.long  = 0
         #myagent.positions['cu1502'].pos_yday.short = 0
         
-        myagent.positions['600104'].re_calc()
-        myagent.positions['600104'].re_calc()        
+        myagent.positions['510050'].re_calc()
+        myagent.positions['510050'].re_calc()        
         
         valid_time = myagent.tick_id + 10000
-        etrade =  order.ETrade( ['600104','600104'], [1, -1], [OPT_LIMIT_ORDER, OPT_LIMIT_ORDER], 50, [0, 0], valid_time, 'test', myagent.name)
+        etrade =  order.ETrade( ['510050'], [1], [OPT_LIMIT_ORDER], 2.50, [0], valid_time, 'test', myagent.name)
         myagent.submit_trade(etrade)
         myagent.process_trade_list() 
         
@@ -185,8 +181,8 @@ def test_main():
             #o.on_trade(2000,o.volume,141558400)
             #o.on_trade(2010,1,141558500)
         myagent.process_trade_list() 
-        myagent.positions['600104'].re_calc()
-        myagent.positions['600104'].re_calc()
+        myagent.positions['510050'].re_calc()
+        myagent.positions['510050'].re_calc()
         
         #while 1: time.sleep(1)
     except KeyboardInterrupt:

@@ -40,7 +40,7 @@ class TurtleTrader(Strategy):
             return 
         save_status = self.update_positions(idx)
         inst_obj = self.agent.instruments[inst]
-        cur_price = (inst_obj.ask_price1 + inst_obj.bid_price1)/2.0
+        cur_price = inst_obj.price
         if cur_price < 0.01 or cur_price > 100000:
             self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bidPrice1,  inst_obj.askPrice1))
             return 
