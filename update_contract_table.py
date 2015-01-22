@@ -320,6 +320,6 @@ def main():
         for inst in user.instruments[exch]:
             mysqlaccess.insert_cont_data(inst)
             
-    #print user.instruments['CFFEX']+user.instruments['CZCE']+user.instruments['DCE']+user.instruments['SHFE']
+    print user.instruments['CFFEX']+user.instruments['CZCE']+user.instruments['DCE']+user.instruments['SHFE']
 
 if __name__=="__main__": main()
