@@ -920,6 +920,7 @@ class Agent(AbsAgent):
             yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close) * inst.multiple
             tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
             tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple
+            #print "inst=%s, yday_long=%s, yday_short=%s, tday_long=%s, tday_short=%s" % (instID, pos.pos_yday.long, pos.pos_yday.short, pos.tday_pos.long, pos.tday_pos.short)
         self.locked_margin = locked_margin
         self.used_margin = used_margin
         self.pnl_total = yday_pnl + tday_pnl
@@ -1008,10 +1009,9 @@ class Agent(AbsAgent):
         self.instruments[inst].open_interest = tick.openInterest
         last_volume = self.instruments[inst].volume
         #self.logger.debug(u'MD:收到行情，inst=%s,time=%s，volume=%s,last_volume=%s' % (dp.InstrumentID,dp.UpdateTime,dp.Volume, last_volume))
-        if tick.volume > last_volume:
-            self.instruments[inst].price  = tick.price
-            self.instruments[inst].volume = tick.volume
-            self.instruments[inst].last_traded = tick.timestamp
+        self.instruments[inst].price  = tick.price
+        self.instruments[inst].volume = tick.volume
+        self.instruments[inst].last_traded = tick.timestamp
         return True
         
     def update_hist_data(self, tick):
@@ -1151,18 +1151,21 @@ class Agent(AbsAgent):
             strat.day_finalize()
         self.calc_margin()
         self.save_eod_positions()
-        curr_pos = {}
+        eod_pos = {}
         for inst in self.positions:
             pos = self.positions[inst]
-            curr_pos[inst] = (pos.curr_pos.long, pos.curr_pos.short)
+            eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
         self.etrades = []
         self.ref2order = {}
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
         self.prev_capital = self.curr_capital
         for inst in self.positions:
-            self.positions[inst].pos_yday.long = curr_pos[inst][0] 
-            self.positions[inst].pos_yday.short = curr_pos[inst][1]
+            self.positions[inst].pos_yday.long = eod_pos[inst][0] 
+            self.positions[inst].pos_yday.short = eod_pos[inst][1]
+            self.positions[inst].re_calc()
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
+            self.instruments[inst].volume = 0
+            #print "inst=%s, long=%s, short=%s, prev_close=%s" % (inst, eod_pos[inst][0], eod_pos[inst][1], self.instruments[inst].prev_close)
         self.proc_lock = False
 
     def add_strategy(self, strat):
