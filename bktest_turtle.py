@@ -15,9 +15,9 @@ def turtle( asset, start_date, end_date, systems, config):
     nearby   = config['nearby']
     file_prefix = config['file_prefix'] + '_' + asset + '_'
     start_d  = misc.day_shift(start_date, '-'+str(max([ max(sys) for sys in systems]))+'b')
-    #ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
-    mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)
-    ddf = dh.conv_ohlc_freq(mdf, 'D')
+    ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
+    mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    #ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
     for ix, sys in enumerate(systems):
         config['signals'] = sys
@@ -132,7 +132,7 @@ def turtle_sim( ddf, mdf, config ):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
     
-def run_sim(asset, start_date, end_date):
+def run_sim(end_date):
     config = {'nearby':1, 
               'rollrule':'-50b', 
               'marginrate':(0.05, 0.05), 
@@ -144,20 +144,23 @@ def run_sim(asset, start_date, end_date):
               'unit': 1,
               'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Turtle_'}
 
-    # commod_list1= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
-    # start_dates1 = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
-                # [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    # commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH']
-    # start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                # [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
-    # commod_list = commod_list1+commod_list2
-    # start_dates = start_dates1 + start_dates2
-    if asset in ['cu', 'al', 'zn']:
-        config['nearby'] = 3
-    else:
-        config['nearby'] = 1
-    systems = [(20,10), (15,5), (10, 5)]
-    turtle( asset, start_date, end_date, systems, config)
+    commod_list1= ['IF','m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
+    start_dates1 = [datetime.date(2010,10,1)] * 13 + \
+                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
+    commod_list2 = ['ME', 'CF', 'TA', 'RM', 'SR', 'FG', 'OI', 'TC', 'WH']
+    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + \
+                 [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
+    commod_list = commod_list1+commod_list2
+    start_dates = start_dates1 + start_dates2
+
+    systems = [(20,10), (20,5), (15,5), (10,5)]
+    for asset, start_date in zip(commod_list, start_dates):
+        if asset in ['cu', 'al', 'zn']:
+            config['nearby'] = 3
+            config['rollrule'] = '-1b'
+        elif asset in ['IF']:
+            config['rollrule'] = '-1b'
+        turtle( asset, start_date, end_date, systems, config)
     return 
     
 if __name__=="__main__":
