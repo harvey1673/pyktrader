@@ -25,8 +25,8 @@ def get_min_id(dt):
 
 class TickData:
     def __init__(self, instID='IF1412', high=0.0, low=0.0, price=0.0, volume=0, openInterest=0, 
-                 bidPrice1=0.0, bidVol1=0, askPrice1=0.0, askVol1=0, upper_limit=0, lower_limit=0, 
-                 timestamp=datetime.datetime.now()):
+                 bidPrice1=0.0, bidVol1=0, askPrice1=0.0, askVol1=0, 
+                 up_limit = 0.0, down_limit = 0.0, timestamp=datetime.datetime.now()):
         self.instID = instID
         self.high = high
         self.low = low
@@ -37,8 +37,8 @@ class TickData:
         self.bidVol1 = bidVol1
         self.askPrice1 = askPrice1
         self.askVol1 = askVol1
-        self.upper_limit = upper_limit
-        self.lower_limit = lower_limit
+        self.upLimit = up_limit
+        self.downLimit = down_limit
         self.timestamp = timestamp
         self.hour = timestamp.hour
         self.min  = timestamp.minute
@@ -50,14 +50,16 @@ class TickData:
 
 class StockTick(TickData):
     def __init__(self, instID='IF1412', high=0.0, low=0.0, price=0.0, open=0.0, close=0.0,
-                 volume=0, openInterest=0, turnover=0, timestamp=datetime.datetime.now(),
+                 volume=0, openInterest=0, turnover=0, up_limit = 0.0, down_limit = 0.0, 
+                 timestamp=datetime.datetime.now(),
                  bidPrice1=0.0, bidVol1=0, askPrice1=0.0, askVol1=0, 
                  bidPrice2=0.0, bidVol2=0, askPrice2=0.0, askVol2=0, 
                  bidPrice3=0.0, bidVol3=0, askPrice3=0.0, askVol3=0, 
                  bidPrice4=0.0, bidVol4=0, askPrice4=0.0, askVol4=0, 
-                 bidPrice5=0.0, bidVol5=0, askPrice5=0.0, askVol5=0,
-                 upper_limit=0, lower_limit=0):
-        TickData.__init__(self, instID, high, low, price, volume, openInterest, bidPrice1, bidVol1, askPrice1, askVol1, upper_limit, lower_limit, timestamp)
+                 bidPrice5=0.0, bidVol5=0, askPrice5=0.0, askVol5=0):
+        TickData.__init__(self, instID, high, low, price, volume, openInterest, 
+                          bidPrice1, bidVol1, askPrice1, askVol1, 
+                          up_limit, down_limit, timestamp)
         self.turnover = turnover
         self.open = open
         self.close = close
@@ -136,6 +138,7 @@ class CTPMdMixin(object):
                 timestr = str(dp.TradingDay) + ' ' + timestr
             else:
                 timestr = str(self.last_day) + ' ' + timestr
+            
             timestamp = datetime.datetime.strptime(timestr, '%Y%m%d %H:%M:%S %f')
             self.last_day = timestamp.year*10000+timestamp.month*100+timestamp.day
             tick = self.market_data2tick(dp, timestamp)
@@ -341,11 +344,7 @@ class CTPTraderRspMixin(object):
             self.logger.info(u"TD:%s结果: 等待数据接收完全..." % name)
             return 0
         
-    def OnRspQryDepthMarketData(self, dp, pRspInfo, nRequestID, bIsLast):
-        if self.isRspSuccess(pRspInfo) and dp.InstrumentID in self.instruments:
-            inst = self.instruments[dp.InstrumentID]
-            self.instruments[inst].upper_price_limit = dp.UpperLimitPrice
-            self.instruments[inst].lower_price_limit = dp.LowerLimitPrice  
+    def OnRspQryDepthMarketData(self, depth_market_data, pRspInfo, nRequestID, bIsLast):
         pass
         
     ###交易准备
@@ -535,7 +534,7 @@ class CTPTraderRspMixin(object):
         self.logger.warning(u'TD:交易所撤单录入错误回报, 可能已经成交,rspInfo=%s'%(str(pRspInfo),))
         self.agent.err_order_action(pOrderAction.OrderRef,pOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
                 
-class Instrument(object):   
+class Instrument(object):
     def __init__(self,name):
         self.name = name
         self.exchange = 'CFFEX'
@@ -549,8 +548,6 @@ class Instrument(object):
         self.tick_base = 0  #单位为0.1
         self.start_tick_id = 0
         self.last_tick_id = 0
-        self.upper_price_limit = 0
-        self.lower_price_limit = 0
         # market snapshot
         self.price = 0.0
         self.prev_close = 0.0
@@ -561,6 +558,8 @@ class Instrument(object):
         self.ask_vol1 = 0
         self.bid_price1 = 0.0
         self.bid_vol1 = 0
+        self.up_limit = 0
+        self.down_limit = 0
         self.last_traded = datetime.datetime.now()
         self.max_holding = (10, 10)
         self.is_busy = False
@@ -724,6 +723,10 @@ class Agent(AbsAgent):
         self.isSettlementInfoConfirmed = False  #结算单未确认
 
     def create_instruments(self, names):
+        '''根据名称序列和策略序列创建instrument
+           其中策略序列的结构为:
+           [总最大持仓量,策略1,策略2...] 
+        '''
         objs = dict([(name,Instrument(name)) for name in names])
         for name in names:
             objs[name].get_inst_info()
@@ -745,7 +748,7 @@ class Agent(AbsAgent):
         for inst in self.positions:
             self.positions[inst].re_calc() 
         self.qry_commands.append(self.fetch_trading_account)
-        #self.qry_commands.append(fcustom(self.queryDepthMarketData,instrument=''))
+        #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
         self.check_qry_commands()
@@ -922,9 +925,10 @@ class Agent(AbsAgent):
             locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
             used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
             used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL)
-            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close)
+            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close) * inst.multiple
             tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
             tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple
+            #print "inst=%s, yday_long=%s, yday_short=%s, tday_long=%s, tday_short=%s" % (instID, pos.pos_yday.long, pos.pos_yday.short, pos.tday_pos.long, pos.tday_pos.short)
         self.locked_margin = locked_margin
         self.used_margin = used_margin
         self.pnl_total = yday_pnl + tday_pnl
@@ -991,10 +995,16 @@ class Agent(AbsAgent):
                 self.day_finalize([inst])
         return tick_status
     
-    def update_instrument(self, tick):
+    def update_instrument(self, tick):      
         inst = tick.instID    
         curr_tick = tick.tick_id
         update_tick = get_tick_id(self.instruments[inst].last_update)
+        self.instruments[inst].up_limit   = tick.upLimit
+        self.instruments[inst].down_limit = tick.downLimit        
+        if (tick.askPrice1 > MKT_DATA_BIGNUMBER) or (tick.askPrice1 == 0):
+            tick.askPrice1 = tick.bidPrice1
+        if (tick.bidPrice1 > MKT_DATA_BIGNUMBER) or (tick.bidPrice1 == 0):
+            tick.bidPrice1 = tick.askPrice1  
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
                 ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick >= curr_tick))):
             #self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
@@ -1007,14 +1017,12 @@ class Agent(AbsAgent):
         self.instruments[inst].bid_vol1   = tick.bidVol1
         self.instruments[inst].ask_vol1   = tick.askVol1
         self.instruments[inst].open_interest = tick.openInterest
-        self.instruments[inst].upper_price_limit = tick.upper_limit
-        self.instruments[inst].lower_price_limit = tick.lower_limit
         last_volume = self.instruments[inst].volume
         #self.logger.debug(u'MD:收到行情，inst=%s,time=%s，volume=%s,last_volume=%s' % (dp.InstrumentID,dp.UpdateTime,dp.Volume, last_volume))
         if tick.volume > last_volume:
             self.instruments[inst].price  = tick.price
             self.instruments[inst].volume = tick.volume
-            self.instruments[inst].last_traded = tick.timestamp
+            self.instruments[inst].last_traded = tick.timestamp    
         return True
         
     def update_hist_data(self, tick):
@@ -1074,7 +1082,8 @@ class Agent(AbsAgent):
             if tick_id >= self.instruments[inst].last_tick_id-1:
                 self.day_finalize([inst])
 
-        except:
+        except Exception as e:
+            print "exception = %s time = %s" % (e, datetime.datetime.now())
             pass
         self.instruments[inst].is_busy = False               
         return True  
@@ -1105,12 +1114,13 @@ class Agent(AbsAgent):
             if len(self.late_tick[inst])>0:
                 mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst])
                 self.late_tick[inst] = []                
-        if not self.proc_lock:
-            self.proc_lock = True
-            for strat in self.strategies:
-                if inst in strat.instIDs:
+        for strat in self.strategies:
+            if inst in strat.instIDs:
+                if not self.proc_lock:
+                    self.proc_lock = True
                     strat.run_min(inst)
-            self.proc_lock = False
+                    self.proc_lock = False
+        return
         
     def day_finalize(self, insts):
         self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (insts, self.scur_day))
@@ -1122,19 +1132,12 @@ class Agent(AbsAgent):
                 self.min_switch(inst)
 
             if self.cur_day[inst]['close'] > 0:
-                self.instruments[inst].prev_close = self.cur_day[inst]['close']
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
                 for fobj in self.day_data_func:
                     fobj.rfunc(df)
                 if self.save_flag:
                     mysqlaccess.insert_daily_data(inst, self.cur_day[inst])
-            
-            self.tick_data[inst] = []
-            self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
-            self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
-            self.cur_day[inst]['date'] = self.scur_day
-            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
             self.instruments[inst].day_finalized = True
         return
     
@@ -1159,17 +1162,22 @@ class Agent(AbsAgent):
             strat.day_finalize()
         self.calc_margin()
         self.save_eod_positions()
-        curr_pos = {}
+        eod_pos = {}
         for inst in self.positions:
             pos = self.positions[inst]
-            curr_pos[inst] = (pos.curr_pos.long, pos.curr_pos.short)
+            eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
         self.etrades = []
         self.ref2order = {}
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
         self.prev_capital = self.curr_capital
         for inst in self.positions:
-            self.positions[inst].pos_yday.long = curr_pos[inst][0] 
-            self.positions[inst].pos_yday.short = curr_pos[inst][1] 
+            self.positions[inst].pos_yday.long = eod_pos[inst][0] 
+            self.positions[inst].pos_yday.short = eod_pos[inst][1]
+            self.positions[inst].re_calc()
+            self.instruments[inst].prev_close = self.cur_day[inst]['close']
+            self.instruments[inst].volume = 0
+            #print "inst=%s, long=%s, short=%s, prev_close=%s" % (inst, eod_pos[inst][0], eod_pos[inst][1], self.instruments[inst].prev_close)
+        self.proc_lock = False
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1184,9 +1192,14 @@ class Agent(AbsAgent):
             self.eod_flag = True
             self.run_eod()
         self.scur_day = newday
-        print "scur_day = %s" % (self.scur_day)
+        print "scur_day = %s, reset tick_id= %s to 0" % (self.scur_day, self.tick_id)
+        self.tick_id = 0
         for inst in self.instruments:
+            self.tick_data[inst] = []
+            self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
+            self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
             self.cur_day[inst]['date'] = newday
+            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(newday.toordinal())
             self.instruments[inst].day_finalized = False
         self.eod_flag = False
                 
