@@ -47,7 +47,7 @@ def test_main(tday, name='test_trade'):
     units_daily = [[1]]*len(insts_daily)
     lookbacks_daily = [0]*len(insts_daily)
 
-    dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = True, email_notify = ['harvey_wwu@hotmail.com'])
+    dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = True, email_notify = [])
     dt_daily = strat_dt.DTTrader('DT_Daily', under_daily, trade_unit = units_daily, lookbacks = lookbacks_daily, agent = None, daily_close = True, email_notify = ['harvey_wwu@hotmail.com'])
     turtle_strat = strat_turtle.TurtleTrader('Turtle_test', under_turtle, trade_unit = units_turtle, agent=None, email_notify = ['harvey_wwu@hotmail.com'] )
     strategies = [dt_strat, dt_daily, turtle_strat]

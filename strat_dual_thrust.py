@@ -61,10 +61,10 @@ class DTTrader(Strategy):
             curr_pos = self.positions[idx][0]
             buysell = curr_pos.direction
         if (tick_id >= self.last_tick_id):
-            if (buysell!=0) and (self.close_tday[idx]):
+            if (buysell!=0) and (self.close_tday[idx]) and (len(self.submitted_pos[idx])==0):
                 valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], -curr_price*buysell, [0], \
+                                               [self.order_type], -curr_price*buysell*self.trade_unit[idx][0], [0], \
                                                valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                 curr_pos.exit_tradeid = etrade.id
                 save_status = True
@@ -82,7 +82,7 @@ class DTTrader(Strategy):
                 if buysell!=0:
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], -curr_price*buysell, [0], \
+                                               [self.order_type], -curr_price*buysell*self.trade_unit[idx][0], [0], \
                                                valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                     curr_pos.exit_tradeid = etrade.id
                     save_status = True
@@ -100,7 +100,7 @@ class DTTrader(Strategy):
                     buysell = -1
                 valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                       [self.order_type], buysell * curr_price, [0],  \
+                                       [self.order_type], buysell * curr_price*self.trade_unit[idx][0], [0],  \
                                        valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                 tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
                                         curr_price, 0, price_unit)
