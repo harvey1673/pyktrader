@@ -16,15 +16,17 @@ dbconfig = {'user': 'harvey',
           'host':'localhost',
           'database': 'blueshale',
           }
-tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
+fut_tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
+ss_tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
 min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
 daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
 def insert_tick_data(inst, tick):
+    dbtable = 'fut_tick'
+    tick_columns = fut_tick_columns
     if inst.isdigit():
         dbtable = 'stock_tick'
-    else:
-        dbtable = 'fut_tick'
+        tick_columns = ss_tick_columns
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(tick_columns))
@@ -35,10 +37,11 @@ def insert_tick_data(inst, tick):
     pass
     
 def bulkinsert_tick_data(inst, ticks):
+    dbtable = 'fut_tick'
+    tick_columns = fut_tick_columns
     if inst.isdigit():
         dbtable = 'stock_tick'
-    else:
-        dbtable = 'fut_tick'
+        tick_columns = ss_tick_columns
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(tick_columns))
@@ -148,6 +151,24 @@ def load_product_info(prod):
     cnx.close()
     return out
 
+def load_stockopt_info(inst):
+    cnx = mysql.connector.connect(**dbconfig)
+    cursor = cnx.cursor()
+    stmt = "select underlying, opt_mth, otype, exchange, strike, strike_scale, lot_size, tick_base from stock_opt_map where instID='{product}' ".format(product = inst)    
+    cursor.execute(stmt)
+    out = {}
+    for (underlying, opt_mth, otype, exchange, strike, strike_scale, lot_size, tick_size) in cursor:
+        out = {'exch': str(exchange), 
+               'lot_size': int(lot_size), 
+               'tick_size': float(tick_size), 
+               'strike': float(strike)/float(strike_scale),
+               'cont_mth': opt_mth, 
+               'otype': str(otype),
+               'underlying': str(underlying)
+               }
+    cnx.close()
+    return out
+
 def load_alive_cont(sdate):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
@@ -200,6 +221,9 @@ def load_daily_data_to_df(dbtable, inst, d_start, d_end):
 
 def load_tick_to_df(dbtable, inst, d_start, d_end, start_tick=1500000, end_tick = 2115000):
     cnx = mysql.connector.connect(**dbconfig)
+    tick_columns = fut_tick_columns
+    if dbtable == 'stock_tick':
+        tick_columns = ss_tick_columns
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(tick_columns), table= dbtable, instID = inst)
     stmt = stmt + "and tick_id >= %s " % start_tick
     stmt = stmt + "and tick_id <= %s " % end_tick
@@ -213,6 +237,9 @@ def load_tick_to_df(dbtable, inst, d_start, d_end, start_tick=1500000, end_tick 
 def load_tick_data(dbtable, insts, d_start, d_end):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
+    tick_columns = fut_tick_columns
+    if dbtable == 'stock_tick': 
+        tick_columns = ss_tick_columns
     stmt = "select {variables} from {table} where instID in ('{instIDs}') ".format(variables=','.join(tick_columns), table= dbtable, instIDs= "','".join(insts))
     stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
     stmt = stmt + "and date <= '%s' " % d_end.strftime('%Y-%m-%d')

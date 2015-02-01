@@ -1,7 +1,8 @@
 ﻿#-*- coding:utf-8 -*-
 import time
-#import agent
+import agent
 import fut_api
+import lts_api
 #import strategy
 import ctp_emulator as emulator
 import logging
@@ -9,7 +10,7 @@ import logging
 import strategy
 import strat_dual_thrust as strat_dt
 import strat_turtle
-#import order
+import order
 from misc import *
 from base import *
 
@@ -106,6 +107,54 @@ def prod_test(tday, name='prod_test'):
     except KeyboardInterrupt:
         myagent.mdapis = [] 
         myagent.trader = None    
+
+def lts_save(tday):
+    logging.basicConfig(filename="save_lts_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    app_name = 'lts_save_agent'
+    save_insts = [ "510180", "510050", "11000011", "11000016", "11000021", "11000026", "11000031", "11000036"]
+    my_agent = agent.SaveAgent(name = app_name, trader = None, cuser = None, instruments=save_insts, daily_data_days=0, min_data_days=0, tday = tday)
+    lts_api.make_user(my_agent, LTS_SO_USER, save_insts)
+    try:
+        while 1:
+            time.sleep(1)
+            
+    except KeyboardInterrupt:
+        my_agent.mdapis = []; my_agent.trader = None
+ 
+def lts_test(tday, name='lts_test'):
+    logging.basicConfig(filename="lts_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    #trader_cfg = TEST_TRADER
+    user_cfg = LTS_SO_USER
+    agent_name = name    
+    try:
+        myagent.resume()
+
+# position/trade test        
+        myagent.positions['510050'].pos_tday.long  = 2
+        myagent.positions['510050'].pos_tday.short = 2
+        #myagent.positions['cu1502'].pos_yday.long  = 0
+        #myagent.positions['cu1502'].pos_yday.short = 0
+        
+        myagent.positions['510050'].re_calc()
+        myagent.positions['510050'].re_calc()        
+        
+        valid_time = myagent.tick_id + 10000
+        etrade =  order.ETrade( ['510050'], [1], [OPT_LIMIT_ORDER], 2.50, [0], valid_time, 'test', myagent.name)
+        myagent.submit_trade(etrade)
+        myagent.process_trade_list() 
+        
+        #myagent.tick_id = valid_time - 10
+        #for o in myagent.positions['cu1501'].orders:
+            #o.on_trade(2000,o.volume,141558400)
+            #o.on_trade(2010,1,141558500)
+        myagent.process_trade_list() 
+        myagent.positions['510050'].re_calc()
+        myagent.positions['510050'].re_calc()
+        
+        #while 1: time.sleep(1)
+    except KeyboardInterrupt:
+        myagent.mdapis = []; myagent.trader = None
+
         
 if __name__=="__main__":
     args = sys.argv[1:]

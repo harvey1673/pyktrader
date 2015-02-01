@@ -40,7 +40,7 @@ class LtsMdSpi(CTPMdMixin, ctp.lts.MdApi):
                 self.SubscribeMarketData(insts, exch)
 
     def market_data2tick(self, dp, timestamp):
-        print dp
+        #print dp
         #market_data的格式转换和整理, 交易数据都转换为整数
         try:
             #rev的后四个字段在模拟行情中经常出错
@@ -146,48 +146,6 @@ def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = dateti
     make_user(my_agent,usercfg, insts)
     return my_agent
 
-def test_main(tday):
-    logging.basicConfig(filename="save_lts_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    app_name = 'lts_agent'
-    insts = ['510050', '510050C1502M02500', '510050P1502M02500']
-    strategies = []
-    trader_cfg = LTS_SO_TRADER
-    user_cfg = LTS_SO_USER
-    strat_cfg = {'strategies': strategies, \
-                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':0, \
-                 'min_data_days':0 }
-    #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
-    myagent = create_agent(app_name, user_cfg, trader_cfg, insts, strat_cfg, tday)
-    
-    try:
-        myagent.resume()
-
-# position/trade test        
-        myagent.positions['510050'].pos_tday.long  = 2
-        myagent.positions['510050'].pos_tday.short = 2
-        #myagent.positions['cu1502'].pos_yday.long  = 0
-        #myagent.positions['cu1502'].pos_yday.short = 0
-        
-        myagent.positions['510050'].re_calc()
-        myagent.positions['510050'].re_calc()        
-        
-        valid_time = myagent.tick_id + 10000
-        etrade =  order.ETrade( ['510050'], [1], [OPT_LIMIT_ORDER], 2.50, [0], valid_time, 'test', myagent.name)
-        myagent.submit_trade(etrade)
-        myagent.process_trade_list() 
-        
-        #myagent.tick_id = valid_time - 10
-        #for o in myagent.positions['cu1501'].orders:
-            #o.on_trade(2000,o.volume,141558400)
-            #o.on_trade(2010,1,141558500)
-        myagent.process_trade_list() 
-        myagent.positions['510050'].re_calc()
-        myagent.positions['510050'].re_calc()
-        
-        #while 1: time.sleep(1)
-    except KeyboardInterrupt:
-        myagent.mdapis = []; myagent.trader = None
-
 if __name__=="__main__":
-    test_main()
+    pass
+    #test_main()

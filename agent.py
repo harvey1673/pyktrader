@@ -127,7 +127,7 @@ class CTPMdMixin(object):
 
     def OnRtnDepthMarketData(self, dp):
         try:
-            if dp.LastPrice > 999999 or dp.LastPrice < 0.1:
+            if dp.LastPrice > 999999 or dp.LastPrice < 0.0001:
                 self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
                 return
             if dp.InstrumentID not in self.instruments:
@@ -563,19 +563,36 @@ class Instrument(object):
         self.last_traded = datetime.datetime.now()
         self.max_holding = (10, 10)
         self.is_busy = False
+        self.strike = 0.0 # only used by option
+        self.otype = ''   # only used by option
+        self.underlying = '' # only used by option
+        self.cont_mth = 205012 # only used by option and future
+        self.expiry = datetime.date(2050,12,31)
         self.day_finalized = False
     
     def get_inst_info(self):
-        for exch in CHN_Stock_Exch:
-            if self.name in CHN_Stock_Exch[exch]:
-                self.product = 'Stock'
-                self.exchange = exch
-                self.start_tick_id = 1530000
-                self.last_tick_id = 2100000
-                self.multiple = 0
-                self.tick_base = 0.01
-                self.broker_fee = 0
-                return
+        if self.name.isdigit():
+            self.product = 'Stock'
+            self.start_tick_id = 30000
+            self.last_tick_id = 2130000
+            self.multiple = 1
+            self.tick_base = 0.01
+            self.broker_fee = 0
+            if len(self.name) == 8:
+                self.product = 'StockOpt'
+                prod_info = mysqlaccess.load_stockopt_info(self.name)
+                self.exchange = prod_info['exch']
+                self.multiple = prod_info['lot_size']
+                self.tick_base = prod_info['tick_size']
+                self.strike = prod_info['strike']
+                self.otype = prod_info['otype']  
+                self.underlying = prod_info['underlying']
+                self.cont_mth = prod_info['cont_mth']
+            elif self.name in CHN_Stock_Exch['SZE']:
+                self.exchange = 'SZE'
+            else:
+                self.exchange = 'SSE'
+            return
         self.product = inst2product(self.name)
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
@@ -589,10 +606,12 @@ class Instrument(object):
         return
     
     def get_margin_rate(self):
-        for exch in CHN_Stock_Exch:
-            if self.name in CHN_Stock_Exch[exch]:
+        if self.name.isdigit():
+            if len(self.name) == 6:
                 self.marginrate = (1,0)
-                return
+            else:
+                self.marginrate = (1,0)
+            return
         self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
         return
 
@@ -965,7 +984,9 @@ class Agent(AbsAgent):
             self.day_switch(tick_date)
         product = self.instruments[inst].product
         exch = self.instruments[inst].exchange
-        if exch == 'CFFEX':
+        if exch in ['SSE', 'SZE']:
+            hrs = [(1530, 1730), (1900, 2100)]
+        elif exch == 'CFFEX':
             hrs = [(1515, 1730), (1900, 2115)]
         else:
             hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
