@@ -123,9 +123,15 @@ def lts_save(tday):
  
 def lts_test(tday, name='lts_test'):
     logging.basicConfig(filename="lts_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    #trader_cfg = TEST_TRADER
+    trader_cfg = LTS_SO_TRADER
     user_cfg = LTS_SO_USER
-    agent_name = name    
+    agent_name = name
+    insts = [ "510180", "510050", "11000011", "11000016", "11000021", "11000026", "11000031", "11000036"]
+    strat_cfg = {'strategies': [], \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':0, \
+                 'min_data_days':0 }
+    myagent = lts_api.create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg, tday)
     try:
         myagent.resume()
 
@@ -157,14 +163,15 @@ def lts_test(tday, name='lts_test'):
 
         
 if __name__=="__main__":
-    args = sys.argv[1:]
-    if len(args) < 2:
-        name= 'test_trade'
-    else:
-        name= args[1]
-    if len(args) < 1:
-        tday = datetime.date.today()
-    else:
-        tday = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-    test_main(tday, name)
+    lts_test(datetime.date(2015,2,2), 'lts_test')
+#     args = sys.argv[1:]
+#     if len(args) < 2:
+#         name= 'test_trade'
+#     else:
+#         name= args[1]
+#     if len(args) < 1:
+#         tday = datetime.date.today()
+#     else:
+#         tday = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+#     test_main(tday, name)
     

@@ -71,6 +71,7 @@ class LtsTraderSpi(CTPTraderQryMixin, CTPTraderRspMixin, ctp.lts.TraderApi):
             passwd, #口令
             agent,  #实际操作对象
         ):        
+        self.name = 'LTS-TD'
         self.instruments = instruments
         self.broker_id = broker_id
         self.investor_id = investor_id

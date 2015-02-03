@@ -62,6 +62,7 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
             passwd, #口令
             agent,  #实际操作对象
         ):        
+        self.name = 'CTP-TD'
         self.instruments = instruments
         self.broker_id = broker_id
         self.investor_id = investor_id
