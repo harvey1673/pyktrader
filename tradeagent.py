@@ -127,7 +127,7 @@ class CTPMdMixin(object):
 
     def OnRtnDepthMarketData(self, dp):
         try:
-            if dp.LastPrice > 999999 or dp.LastPrice < 0.1:
+            if dp.LastPrice > 999999 or dp.LastPrice < 0.0001:
                 self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
                 return
             if dp.InstrumentID not in self.instruments:
@@ -234,7 +234,10 @@ class CTPTraderQryMixin(object):
             action_type = self.ApiStruct.OF_CloseToday
         elif iorder.action_type == OF_CLOSE_YDAY:
             action_type = self.ApiStruct.OF_CloseYesterday
-            
+			
+        limit_price = iorder.limit_price
+		if self.name == 'LTS-TD':
+			limit_price = str(limit_price)
         req = self.ApiStruct.InputOrder(
                 InstrumentID = iorder.instrument.name,
                 Direction = direction,
@@ -352,6 +355,8 @@ class CTPTraderRspMixin(object):
         '''
             保证金率回报。返回的必然是绝对值
         '''
+		if self.name == 'LTS-TD':
+			return (0,0)
         if bIsLast and self.isRspSuccess(pRspInfo):
             marginrate = (pInstMarginRate.LongMarginRatioByMoney,pInstMarginRate.ShortMarginRatioByMoney)
             self.agent.rsp_qry_instrument_marginrate(pInstMarginRate.InstrumentID, marginrate)
@@ -368,10 +373,14 @@ class CTPTraderRspMixin(object):
         if pInstrument.InstrumentID not in self.agent.instruments:
             #self.logger.warning(u'A_RQI:收到未监控的合约查询:%s' % (pInstrument.InstrumentID))
             return
+		if self.name == 'LTS-TD':
+			margin_rate = (0,0)
+		else:
+			margin_rate = (pInstrument.LongMarginRatio, pInstrument.ShortMarginRatio)
         p_inst = BaseObject(instID = pInstrument.InstrumentID, 
                             multiple = pInstrument.VolumeMultiple, 
                             tick_base = pInstrument.PriceTick, 
-                            marginrate = (pInstrument.LongMarginRatio, pInstrument.ShortMarginRatio))
+                            marginrate = margin_rate)
         if bIsLast and self.isRspSuccess(pRspInfo):
             self.agent.rsp_qry_instrument(p_inst)
         else:
@@ -563,19 +572,36 @@ class Instrument(object):
         self.last_traded = datetime.datetime.now()
         self.max_holding = (10, 10)
         self.is_busy = False
+        self.strike = 0.0 # only used by option
+        self.otype = ''   # only used by option
+        self.underlying = ''   # only used by option
+        self.cont_mth = 205012 # only used by option and future
+        self.expiry = datetime.date(2050,12,31)
         self.day_finalized = False
     
     def get_inst_info(self):
-        for exch in CHN_Stock_Exch:
-            if self.name in CHN_Stock_Exch[exch]:
-                self.product = 'Stock'
-                self.exchange = exch
-                self.start_tick_id = 1530000
-                self.last_tick_id = 2100000
-                self.multiple = 0
-                self.tick_base = 0.01
-                self.broker_fee = 0
-                return
+        if self.name.isdigit():
+            self.product = 'Stock'
+            self.start_tick_id = 30000
+            self.last_tick_id = 2130000
+            self.multiple = 1
+            self.tick_base = 0.01
+            self.broker_fee = 0
+            if len(self.name) == 8:
+                self.product = 'StockOpt'
+                prod_info = mysqlaccess.load_stockopt_info(self.name)
+                self.exchange = prod_info['exch']
+                self.multiple = prod_info['lot_size']
+                self.tick_base = prod_info['tick_size']
+                self.strike = prod_info['strike']
+                self.otype = prod_info['otype']  
+                self.underlying = prod_info['underlying']
+                self.cont_mth = prod_info['cont_mth']
+            elif self.name in CHN_Stock_Exch['SZE']:
+                self.exchange = 'SZE'
+            else:
+                self.exchange = 'SSE'
+            return
         self.product = inst2product(self.name)
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
@@ -589,10 +615,12 @@ class Instrument(object):
         return
     
     def get_margin_rate(self):
-        for exch in CHN_Stock_Exch:
-            if self.name in CHN_Stock_Exch[exch]:
+        if self.name.isdigit():
+            if len(self.name) == 6:
                 self.marginrate = (1,0)
-                return
+            else:
+                self.marginrate = (1,0)
+            return
         self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
         return
 
@@ -778,48 +806,50 @@ class Agent(AbsAgent):
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
             for inst in self.instruments:  
-                self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
-                df = self.day_data[inst]
-                if len(df) > 0:
-                    self.instruments[inst].price = df['close'][-1]
-                    self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
-                    self.instruments[inst].prev_close = df['close'][-1]
-                for fobj in self.day_data_func:
-                    ts = fobj.sfunc(df)
-                    df[ts.name]= pd.Series(ts, index=df.index)  
+				if len(self.instruments[inst].underlying) == 0: 
+					self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
+					df = self.day_data[inst]
+					if len(df) > 0:
+						self.instruments[inst].price = df['close'][-1]
+						self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
+						self.instruments[inst].prev_close = df['close'][-1]
+					for fobj in self.day_data_func:
+						ts = fobj.sfunc(df)
+						df[ts.name]= pd.Series(ts, index=df.index)  
 
         if self.min_data_days > 0 or mid_day:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
             d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             d_end = self.scur_day
             for inst in self.instruments:
-                min_start = int(self.instruments[inst].start_tick_id/1000)
-                min_end = int(self.instruments[inst].last_tick_id/1000)+1
-                mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
-                self.min_data[inst][1] = mindata
-                if len(mindata)>0:
-                    min_date = mindata.index[-1].date()
-                    if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
-                        self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
-                        self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
-                        self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
-                        self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
-                        self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
-                        self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
-                        self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
-                        self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
-                        self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
-                        self.instruments[inst].price = float(mindata.ix[-1,'close'])
-                        self.instruments[inst].last_update = datetime.datetime.now()
-                        self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))
-                    
-                for m in self.min_data_func:
-                    if m != 1:
-                        self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
-                    df = self.min_data[inst][m]
-                    for fobj in self.min_data_func[m]:
-                        ts = fobj.sfunc(df)
-                        df[ts.name]= pd.Series(ts, index=df.index)
+				if (len(self.instruments[inst].underlying) == 0): 
+					min_start = int(self.instruments[inst].start_tick_id/1000)
+					min_end = int(self.instruments[inst].last_tick_id/1000)+1
+					mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
+					self.min_data[inst][1] = mindata
+					if len(mindata)>0:
+						min_date = mindata.index[-1].date()
+						if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
+							self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
+							self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
+							self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
+							self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
+							self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
+							self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
+							self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
+							self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
+							self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
+							self.instruments[inst].price = float(mindata.ix[-1,'close'])
+							self.instruments[inst].last_update = datetime.datetime.now()
+							self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))
+						
+					for m in self.min_data_func:
+						if m != 1:
+							self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
+						df = self.min_data[inst][m]
+						for fobj in self.min_data_func[m]:
+							ts = fobj.sfunc(df)
+							df[ts.name]= pd.Series(ts, index=df.index)
         return
         
     def resume(self):
@@ -965,7 +995,9 @@ class Agent(AbsAgent):
             self.day_switch(tick_date)
         product = self.instruments[inst].product
         exch = self.instruments[inst].exchange
-        if exch == 'CFFEX':
+        if exch in ['SSE', 'SZE']:
+            hrs = [(1530, 1730), (1900, 2100)]
+        elif exch == 'CFFEX':
             hrs = [(1515, 1730), (1900, 2115)]
         else:
             hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
@@ -1123,8 +1155,9 @@ class Agent(AbsAgent):
         return
         
     def day_finalize(self, insts):
-        self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (insts, self.scur_day))
-        for inst in insts:
+		instruments = [inst for inst in insts if len(self.instruments[inst].underlying)==0]
+        self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (instruments, self.scur_day))
+        for inst in instruments:
             if (len(self.tick_data[inst]) > 0) :
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
@@ -1283,9 +1316,10 @@ class Agent(AbsAgent):
         if (not self.update_instrument(ctick)):
             # print "stop at update inst"
             return 0
-        if( not self.update_hist_data(ctick)):
-            # print "stop at update hist data"
-            return 0
+		if len(self.instruments[ctick.instID].underlying) ==0:
+			if( not self.update_hist_data(ctick)):
+				# print "stop at update hist data"
+				return 0
    
         # lock the trade processing to avoid position conflict
         if not self.proc_lock:
