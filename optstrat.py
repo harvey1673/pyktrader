@@ -97,15 +97,108 @@ class OptionStrategy(object):
             self.folder = ''
         else:
             self.folder = self.folder + self.name + '_'
-	
+
+    def reset(self):
+        if self.agent == None:
+            self.folder = ''
+        else:
+            self.folder = self.agent.folder + self.name + '_'
+            self.logger = self.agent.logger
+        self.load_state()
+
+    def initialize(self):
+        self.load_state()
+
+	def add_submitted_pos(self, etrade):
+        is_added = False
+        for under, sub_pos in zip(self.underliers, self.submitted_pos):
+            if set(under) == set(etrade.instIDs):
+                sub_pos.append(etrade)
+                is_added = True
+                break
+        return is_added
+
+    def day_finalize(self):    
+        self.save_state()
+        self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
+        pass
+		
 	def get_opt_map(self, underliers, cont_mths, strikes)
 		pass
+	
+	def run_tick(self, ctick):
+		pass
+	
+	def run_min(self, inst):
+		pass
+
+    def save_state(self):
+        filename = self.folder + 'strat_status.csv'
+        self.logger.info('save state for strat = %s' % (self.name))
+        with open(filename,'wb') as log_file:
+            file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            file_writer.writerow(tradepos_header)
+            for tplist in self.positions:
+                for tradepos in tplist:
+                    tradedict = tradepos2dict(tradepos)
+                    file_writer.writerow([tradedict[itm] for itm in tradepos_header])
+        return
+    
+    def load_state(self):
+        logfile = self.folder + 'strat_status.csv'
+        positions  = [[] for under in self.underliers]
+        if not os.path.isfile(logfile):
+            self.positions  = positions
+            return 
+        self.logger.info('load state for strat = %s' % (self.name))
+        with open(logfile, 'rb') as f:
+            reader = csv.reader(f)
+            for idx, row in enumerate(reader):
+                if idx > 0:
+                    insts = row[0].split(' ')
+                    vols = [ int(n) for n in row[1].split(' ')]
+                    pos = int(row[2])
+                    #direction = int(row[3])
+                    entry_target = float(row[6])
+                    exit_target = float(row[10])
+                    price_unit = float(row[14])
+                    tradepos = TradePos(insts, vols, pos, entry_target, exit_target, price_unit)
+                    if row[5] == '':
+                        entry_time = ''
+                        entry_price = 0
+                    else:
+                        entry_time = datetime.datetime.strptime(row[5], '%Y%m%d %H:%M:%S %f')
+                        entry_price = float(row[4])
+                        tradepos.open(entry_price,entry_time)
+
+                    tradepos.entry_tradeid = int(row[7])           
+                    tradepos.exit_tradeid = int(row[11])    
+                    
+                    if row[9] == '':
+                        exit_time = ''
+                        exit_price = 0
+                    else:                    
+                        exit_time = datetime.datetime.strptime(row[9], '%Y%m%d %H:%M:%S %f')
+                        exit_price = float(row[8])
+                        tradepos.close(exit_price, exit_time)
+                    
+                    is_added = False
+                    for under, tplist in zip(self.underliers, positions):
+                        if set(under) == set(insts):
+                            tplist.append(tradepos)
+                            is_added = True
+                            break
+                    if is_added == False:
+                        self.underliers.append(insts)
+                        positions.append([tradepos])
+                        self.logger.warning('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
+        self.positions = positions
+        return    
 		
 class EquityOptStrat(OptionStrategy):
 	def __init__(self, name, underliers, cont_mths, strikes, agent = None):
 		OptionStrategy.__init__(name, underliers, cont_mths, strikes, agent)
-	
-	
+		
 		
 	def get_opt_map(self, underliers, cont_mths, strikes):
 		for under in underliers:
