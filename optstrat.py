@@ -86,13 +86,14 @@ class OptionStrategy(object):
         self.underliers = underliers
 		self.option_map = {}
 		self.get_option_map(underliers, cont_mths, strikes)
-        self.instIDs = list(set().union(*underliers))
+		self.option_insts = self.option_map.values()
+        self.instIDs = self.underliers + self.option_insts
         self.agent = agent
         self.logger = None
         if self.agent != None:
             self.logger = self.agent.logger 
-        self.positions  = [[] for under in underliers]
-        self.submitted_pos = [ [] for under in underliers ]
+        self.positions  = [[] for inst in self.instIDs]
+        self.submitted_pos = []
         if agent == None:
             self.folder = ''
         else:
@@ -111,12 +112,12 @@ class OptionStrategy(object):
 
 	def add_submitted_pos(self, etrade):
         is_added = False
-        for under, sub_pos in zip(self.underliers, self.submitted_pos):
-            if set(under) == set(etrade.instIDs):
-                sub_pos.append(etrade)
-                is_added = True
-                break
-        return is_added
+        for trade in self.submitted_pos:
+            if trade.id == etrade.id:
+                is_added = False
+                return
+		self.submitted_pos.append(etrade)
+        return True
 
     def day_finalize(self):    
         self.save_state()
