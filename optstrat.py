@@ -5,6 +5,7 @@ Created on Feb 03, 2015
 @author: Harvey
 '''
 BDAYS_PER_YEAR = 261.0
+from pyktlib import pyktlib
 
 def fut2opt(fut_inst, expiry, otype, strike):
 	product = inst2product(fut_inst)
@@ -128,9 +129,6 @@ class OptionStrategy(object):
 		pass
 	
 	def run_tick(self, ctick):
-		pass
-	
-	def run_min(self, inst):
 		pass
 
     def save_state(self):
