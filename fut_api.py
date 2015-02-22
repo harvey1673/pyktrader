@@ -149,8 +149,8 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
         Is_Set = False
         if len(self.ctp_orders)>0:
             for order_ref in self.ctp_orders:
-                if order_ref in self.ref2order:
-                    iorder = self.ref2order[order_ref]
+                if order_ref in self.agent.ref2order:
+                    iorder = self.agent.ref2order[order_ref]
                     sorder = self.ctp_orders[order_ref]
                     iorder.sys_id = sorder.OrderSysID
                     if sorder.OrderStatus in [self.ApiStruct.OST_NoTradeQueueing, self.ApiStruct.OST_PartTradedQueueing, self.ApiStruct.OST_Unknown]:
@@ -196,8 +196,8 @@ def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.
                              agent = myagent,
                        )
     trader.Create('trader')
-    trader.SubscribePublicTopic(trader.ApiStruct.THOST_TERT_QUICK)
-    trader.SubscribePrivateTopic(trader.ApiStruct.THOST_TERT_QUICK)
+    trader.SubscribePublicTopic(trader.ApiStruct.TERT_QUICK)
+    trader.SubscribePrivateTopic(trader.ApiStruct.TERT_QUICK)
     for port in trader_cfg.ports:
         trader.RegisterFront(port)
     trader.Init()

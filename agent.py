@@ -171,7 +171,7 @@ class CTPTraderQryMixin(object):
         return r
 
     def query_trading_account(self):            
-        req = self.ApiStruct.QryTradingAccount(BrokerID=self.trader.broker_id, InvestorID=self.trader.investor_id)
+        req = self.ApiStruct.QryTradingAccount(BrokerID=self.broker_id, InvestorID=self.investor_id)
         r=self.ReqQryTradingAccount(req,self.agent.inc_request_id())
         #self.logger.info(u'A:查询资金账户, 函数发出返回值:%s' % r)
         return r
@@ -438,7 +438,7 @@ class CTPTraderRspMixin(object):
 
     def OnRspQryOrder(self, porder, pRspInfo, nRequestID, bIsLast):
         '''请求查询报单响应'''
-        print porder
+        #print porder
         if (porder!= None) and (porder.InstrumentID in self.agent.instruments):
             self.ctp_orders[porder.OrderRef] = porder
         if bIsLast and self.isRspSuccess(pRspInfo):
@@ -448,7 +448,7 @@ class CTPTraderRspMixin(object):
         
     def OnRspQryTrade(self, ptrade, pRspInfo, nRequestID, bIsLast):
         '''请求查询成交响应'''
-        print ptrade
+        #print ptrade
         if (ptrade != None) and (ptrade.InstrumentID in self.agent.instruments):
             self.ctp_trades[ptrade.OrderRef] = ptrade
             
@@ -597,12 +597,19 @@ class Instrument(object):
                 self.otype = prod_info['otype']  
                 self.underlying = prod_info['underlying']
                 self.cont_mth = prod_info['cont_mth']
+                self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
             elif self.name in CHN_Stock_Exch['SZE']:
                 self.exchange = 'SZE'
             else:
                 self.exchange = 'SSE'
             return
         self.product = inst2product(self.name)
+        if self.product == 'IO':
+            self.underlying = self.name[:6].replace('IO','IF')
+            self.strike = float(self.name[-4:])
+            self.otype = self.name[7]
+            self.cont_mth = int(self.underlying[-4:]) + 200000 
+            self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
         self.start_tick_id =  prod_info['start_min'] * 1000
@@ -1404,7 +1411,7 @@ class Agent(AbsAgent):
                 all_orders[inst] = orders
                 
             if required_margin + self.locked_margin > self.margin_cap:
-                self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
+                self.logger.warning("ETrade %s is cancelled due to margin cap: %s" % (exec_trade.id, inst))
                 exec_trade.status = order.ETradeStatus.Cancelled                
                 return False
 
@@ -1583,8 +1590,10 @@ class Agent(AbsAgent):
             必须处理，如果已成交，撤单后必然到达这个位置
         '''
         self.logger.info(u'撤单时已成交，error_id=%s,error_msg=%s, order_ref=%s' %(error_id,error_msg, order_ref))
+        if len(order_ref) == 0:
+            return
         myorder = self.ref2order[int(order_ref)]
-        print order_ref, error_id, error_msg
+        #print order_ref, error_id, error_msg
         if int(error_id) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
             self.logger.info(u'撤销开仓单')
             myorder.on_cancel()

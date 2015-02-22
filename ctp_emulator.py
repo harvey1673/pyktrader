@@ -16,6 +16,7 @@ class TraderMock(agent.CTPTraderQryMixin):
     ApiStruct = ctp.futures.ApiStruct
     logger = logging.getLogger('ctp.MockTrader') 
     def __init__(self,myagent):
+        self.name = 'Mock-TD'
         self.broker_id = '0'
         self.investor_id = '0'
         self.front_id = '0'
@@ -98,6 +99,7 @@ class MarketDataMock(object):
     '''
     ApiStruct = ctp.futures.ApiStruct
     def __init__(self,myagent):
+        self.name = 'Mock-MD'
         self.instIDs = myagent.instruments.keys()
         self.data_freq = 'tick'
         self.agent = myagent

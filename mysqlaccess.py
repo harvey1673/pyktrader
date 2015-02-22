@@ -169,6 +169,19 @@ def load_stockopt_info(inst):
     cnx.close()
     return out
 
+def get_stockopt_map(underlying, cont_mths, strikes):
+    cnx = mysql.connector.connect(**dbconfig)
+    cursor = cnx.cursor()
+    stmt = "select underlying, opt_mth, otype, strike, strike_scale, instID from stock_opt_map where underlying='{under}' and opt_mth in ({opt_mth_str}) and strike in ({strikes}) ".format(under=underlying, 
+            opt_mth_str=','.join([str(mth) for mth in cont_mths]), strikes = ','.join([str(s) for s in strikes]))     
+    cursor.execute(stmt)
+    out = {}
+    for (underlying, opt_mth, otype, strike, strike_scale, instID) in cursor:
+        key = (str(underlying), int(opt_mth), str(otype), float(strike)/float(strike_scale))
+        out[key] = instID
+    cnx.close()
+    return out
+    
 def load_alive_cont(sdate):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
