@@ -462,7 +462,7 @@ class CTPTraderRspMixin(object):
             报单未通过参数校验,被CTP拒绝
             正常情况后不应该出现
         '''
-        print pRspInfo,nRequestID
+        #print pRspInfo,nRequestID
         self.logger.warning(u'TD:CTP报单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
         #self.logger.warning(u'报单校验错误,ErrorID=%s,ErrorMsg=%s,pRspInfo=%s,bIsLast=%s' % (pRspInfo.ErrorID,pRspInfo.ErrorMsg,str(pRspInfo),bIsLast))
         #self.agent.rsp_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
@@ -474,7 +474,7 @@ class CTPTraderRspMixin(object):
             正常情况后不应该出现
             这个回报因为没有request_id,所以没办法对应
         '''
-        print u'ERROR Order Insert'
+        #print u'ERROR Order Insert'
         self.logger.warning(u'TD:交易所报单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
         self.agent.err_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
     
@@ -483,7 +483,7 @@ class CTPTraderRspMixin(object):
             CTP、交易所接受报单(CTP接受的已经被过滤)
             Agent中不区分，所得信息只用于撤单,暂时只处理撤单的回报.
         '''
-        print repr(porder)
+        #print repr(porder)
         self.logger.info(u'成交/撤单回报,Order=%s' % str(porder))
         if porder.OrderStatus == 'a':
             #CTP接受，但未发到交易所
@@ -514,7 +514,7 @@ class CTPTraderRspMixin(object):
             #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''
         self.logger.info(u'TD:成交回报,Trade=%s' % repr(ptrade))
-        print ptrade
+        #print ptrade
         self.logger.info(u'A_RT1:成交回报,%s:OrderRef=%s,OrderSysID=%s,price=%s' % (ptrade.InstrumentID,ptrade.OrderRef,ptrade.OrderSysID,ptrade.Price))
         if int(ptrade.OrderRef) not in self.agent.ref2order or ptrade.InstrumentID not in self.agent.instruments:
             self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))

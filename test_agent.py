@@ -14,6 +14,11 @@ import order
 from misc import *
 from base import *
 
+PROD_USER1 = BaseObject( broker_id="8070", 
+                             investor_id="*", 
+                             passwd="*", 
+                             ports=["tcp://zjzx-md1.ctp.shcifco.com:41213"])
+
 class TestStrat(strategy.Strategy):
     def run_min(self, instID):
         pass
@@ -39,12 +44,12 @@ def test_main(tday, name='test_trade'):
     under_turtle = [[inst] for inst in insts_turtle]
     units_turtle = [[1]]*len(insts_turtle)
     
-    insts_daily = ['IF1502']
+    insts_daily = ['IF1503']
     under_daily = [[inst] for inst in insts_daily]
     units_daily = [[1]]*len(insts_daily)
     lookbacks_daily = [0]*len(insts_daily)
 
-    dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = True, email_notify = [])
+    dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = False, email_notify = [])
     dt_daily = strat_dt.DTTrader('DT_Daily', under_daily, trade_unit = units_daily, lookbacks = lookbacks_daily, agent = None, daily_close = True, email_notify = ['harvey_wwu@hotmail.com'])
     turtle_strat = strat_turtle.TurtleTrader('Turtle_test', under_turtle, trade_unit = units_turtle, agent=None, email_notify = ['harvey_wwu@hotmail.com'] )
     strategies = [dt_strat, dt_daily, turtle_strat]
@@ -66,7 +71,7 @@ def test_main(tday, name='test_trade'):
 def prod_test(tday, name='prod_test'):
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     #trader_cfg = TEST_TRADER
-    user_cfg = PROD_USER
+    user_cfg = PROD_USER1
     agent_name = name
     ins_setup = {'m1505':(1, 0.7, 8),
                 'RM505':(0, 0.5, 10),

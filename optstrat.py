@@ -50,10 +50,19 @@ class OptionStrategy(object):
         #self.fwds  = [1] * len(cont_mths)
         #self.volparams = dict([(mth, [0.2, 0.0, 0.0, 0.0, 0.0]) for mth in cont_mths])
         self.volgrids = dict([(expiry, None) for expiry in expiries])
-        self.option_map = {}
         self.accrual = 'CFE'
-        self.get_option_map(underliers, expiries, strikes)
-        self.option_insts = dict([(inst, None) for inst in self.option_map.values()])
+        opt_dict = self.get_option_map(underliers, expiries, strikes)
+        self.option_insts = dict([(inst, None) for inst in opt_dict.values()])
+        self.option_map = pd.DataFrame(0, index = self.underliers + opt_dict.values(), \
+                                       columns = ['underlier', 'cont_mth', 'otype', 'strike', 'multiple', \
+                                                  'pv', 'delta', 'gamma', 'vega', 'theta', 'pos'])
+        for inst in underliers:
+            inst_info = {'underlier': inst, 'delta': 1 }
+            self.option_map.loc[inst, 'underlier'] = pd.Series(inst_info)
+        for key in opt_dict:
+            inst = opt_dict[key]
+            opt_info = {'underlier': key[0], 'cont_mth': key[1], 'otype': key[2], 'strike': key[3]}
+            self.option_map.loc[inst] = pd.Series(opt_info) 
         self.instIDs = self.underliers + self.option_insts.keys()
         self.irate = RISK_FREE_RATE
         self.agent = agent
@@ -73,6 +82,8 @@ class OptionStrategy(object):
         else:
             self.folder = self.agent.folder + self.name + '_'
             self.logger = self.agent.logger
+            for inst in self.instIDs:
+                self.option_map.loc[inst, 'multiple'] = self.agent.instruments[inst].multiple
         self.load_state()
 
     def initialize(self):
@@ -82,20 +93,32 @@ class OptionStrategy(object):
             dexp = datetime2xl(expiry)
             fwd = self.agent.instruments[under].price
             if self.volgrids[expiry] == None:
-                self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, 0.3, 0.0, 0.0, 0.0, 0.0, self.accrual)
-                
+                self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, 0.24, 0.0, 0.0, 0.0, 0.0, self.accrual)                
             self.volgrids[expiry].setFwd(fwd)
             self.volgrids[expiry].setToday(dtoday)
             self.volgrids[expiry].setExp(dexp)
             self.volgrids[expiry].initialize()
             cont_mth = expiry.year * 100 + expiry.month
-            for (fut_inst, mth, otype, strike) in self.option_map:
-                if (fut_inst == under) and (mth == cont_mth):
-                    key = (fut_inst, mth, otype, strike)
-                    inst = self.option_map[key]
-                    self.option_insts[inst] = pyktlib.BlackPricer(dtoday, dexp, fwd, self.volgrids[expiry], strike, self.irate, otype)
+            self.option_map.loc[under, 'multiple'] = self.agent.instruments[under].multiple
+            indices = self.option_map.index((self.option_map.underlier == under) & (self.option_map.cont_mth == cont_mth))
+            for inst in indices:
+                strike = self.option_map.loc[inst].strike
+                otype  = self.option_map.loc[inst].otype
+                self.option_insts[inst] = pyktlib.BlackPricer(dtoday, dexp, fwd, self.volgrids[expiry], strike, self.irate, otype)
+                self.option_map.loc[inst, 'multiple'] = self.agent.instruments[inst].multiple
+                self.update_greeks(inst)
         return
 
+    def update_greeks(selfself, inst):
+        pv = self.option_insts[inst].price()
+        delta = self.option_insts[inst].delta()
+        gamma = self.option_insts[inst].gamma()
+        vega  = self.option_insts[inst].vega()
+        theta = self.option_insts[inst].theta()
+        opt_info = {'pv': pv, 'delta': delta, 'gamma': gamma, 'vega': vega, 'theta': theta}
+        self.option_map.loc[inst] = pd.Series(opt_info)
+        return 
+    
     def add_submitted_pos(self, etrade):
         is_added = False
         for trade in self.submitted_pos:
@@ -122,8 +145,7 @@ class OptionStrategy(object):
                         instID = instID.replace('IF', 'IO')
                     instID = instID + '-' + otype + '-' + str(strike)
                     opt_map[key] = instID
-        self.option_map.update(opt_map)
-        return
+        return opt_map
     
     def run_tick(self, ctick):
         pass
@@ -145,18 +167,27 @@ class OptionStrategy(object):
                             volnode.d25Vol_(),
                             volnode.d10Vol_() ]
                     file_writer.writerow(row)
-            for inst in self.positions:
-                row = ['Pos', inst, self.positions[inst]]
+            for inst in self.option_map.index:
+                row = ['Pos', str(inst), self.option_map.loc[inst, 'pos']]
                 file_writer.writerow(row)
         return
     
     def load_state(self):
         logfile = self.folder + 'strat_status.csv'
         if not os.path.isfile(logfile):
-            for expiry in self.expiries:
+            for idx, expiry in enumerate(self.expiries):
                 dtoday = datetime2xl(datetime.datetime.now())
                 dexp   = datetime2xl(expiry)
-                self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, 100, 0.3, 0.0, 0.0, 0.0, 0.0, self.accrual)
+                fwd = 100.0
+                atm = 0.24
+                if self.agent != None:
+                    if len(self.expiries) == len(self.underliers):
+                        fwd = self.agent.instruments[self.underliers[idx]].price
+                    else:
+                        spot = self.agent.instruments[self.underliers[0]].price
+                        fwd = spot * exp(self.irate * (dexp - dtoday)/365.0)
+                self.logger.info('strat=%s status file is not found, use default fwd=%s, vol=%s' % (self.name, fwd, atm))
+                self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, 0.0, 0.0, 0.0, 0.0, self.accrual)
             return 
         self.logger.info('load state for strat = %s' % (self.name))
         with open(logfile, 'rb') as f:
@@ -175,7 +206,7 @@ class OptionStrategy(object):
                     self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, self.accrual)
                 elif row[0]== 'Pos':
                     instID = str(row[1])
-                    self.positions[instID] = int(row[2]) 
+                    self.option_map.loc[instID, 'pos'] = int(row[2]) 
         return    
         
 class EquityOptStrat(OptionStrategy):
@@ -183,17 +214,18 @@ class EquityOptStrat(OptionStrategy):
         OptionStrategy.__init__(self, name, underliers, expiries, strikes, agent)
         self.accrual = 'SSE'
         
-        
     def get_option_map(self, underliers, expiries, strikes):
         cont_mths = [expiry.year*100 + expiry.month for expiry in expiries]
+        all_map = {}
         for under in underliers:
             map = mysqlaccess.get_stockopt_map(under, cont_mths, strikes)
-            self.option_map.update(map)
-        return
+            all_map.update(map)
+        return all_map
     
     def initialize(self):
         self.load_state()
         spot = self.agent.instruments[self.underliers[0]].price
+        
         for expiry in zip(self.volgrids):
             dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
             dexp = datetime2xl(expiry)
