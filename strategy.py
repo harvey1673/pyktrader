@@ -79,10 +79,6 @@ class Strategy(object):
         self.name = name
         self.underliers = underliers
         self.instIDs = list(set().union(*underliers))
-        self.agent = agent
-        self.logger = None
-        if self.agent != None:
-            self.logger = self.agent.logger 
         if len(trade_unit) > 0: 
             self.trade_unit = trade_unit
         else:
@@ -90,27 +86,24 @@ class Strategy(object):
         self.positions  = [[] for under in underliers]
         self.submitted_pos = [ [] for under in underliers ]
         self.data_func = []
-        if agent == None:
-            self.folder = ''
-        else:
-            self.folder = self.folder + self.name + '_'
+        self.agent = agent
+        self.folder = ''
+        self.logger = None
+        self.reset()
         self.email_notify = email_notify
         
     def reset(self):
-        if self.agent == None:
-            self.folder = ''
-        else:
+        if self.agent != None:
             self.folder = self.agent.folder + self.name + '_'
             self.logger = self.agent.logger
-        if len(self.data_func)>0:
-            for (freq, fobj) in self.data_func:
-                self.agent.register_data_func(freq,fobj)
-        self.load_state()
-        self.update_trade_unit()
+            if len(self.data_func)>0:
+                for (freq, fobj) in self.data_func:
+                    self.agent.register_data_func(freq,fobj)
+        return
     
     def initialize(self):
         self.load_state()
-        pass 
+        return
     
     def get_index(self, under):
         idx = -1

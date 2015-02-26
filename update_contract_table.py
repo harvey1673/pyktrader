@@ -167,7 +167,7 @@ class MyTraderApi(TraderApi):
         '''
             合约回报。
         '''
-        print pInst
+        #print pInst
         if bIsLast and self.isRspSuccess(pRspInfo):
             if (pInst.ExchangeID in self.instruments) and (pInst.ProductClass=='1'):
                 cont = {}
@@ -307,7 +307,7 @@ class MyTraderApi(TraderApi):
 def main():
     
     #user = MyTraderApi(broker_id="8000",investor_id="24661668",passwd="121862")
-    tradercfg = misc.TEST_TRADER
+    tradercfg = misc.PROD_TRADER
     user = MyTraderApi(broker_id = tradercfg.broker_id, 
                        investor_id = tradercfg.investor_id, 
                        passwd=tradercfg.passwd)
@@ -318,14 +318,14 @@ def main():
     user.Init()
 
     time.sleep(3)
-    user.fetch_instruments_by_exchange('CFFEX')
+    user.fetch_instruments_by_exchange('')
     #user.fetch_instrument('IO1502-C-3600')
     time.sleep(20)
     #print user.instruments['CFFEX']
-    #for exch in user.instruments:
-    #    for inst in user.instruments[exch]:
-    #        mysqlaccess.insert_cont_data(inst)
+    for exch in user.instruments:
+        for inst in user.instruments[exch]:
+            mysqlaccess.insert_cont_data(inst)
             
-    #return user.instruments
+    return user.instruments
 
 if __name__=="__main__": main()

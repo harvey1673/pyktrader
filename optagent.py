@@ -28,9 +28,9 @@ def test_main(tday, name='test_trade'):
     trader_cfg = TEST_TRADER
     user_cfg = TEST_USER
     agent_name = name
-    opt_strat = optstrat.OptionStrategy(name, 
-                                    ['IF1502', 'IF1503'], 
-                                    [datetime.datetime(2015, 2, 25, 15, 0, 0), datetime.datetime(2015,3,20,15,0,0)],
+    opt_strat = optstrat.IndexFutOptStrat(name, 
+                                    ['IF1503', 'IF1506'], 
+                                    [datetime.datetime(2015, 3, 20, 15, 0, 0), datetime.datetime(2015,6,19,15,0,0)],
                                     [[3400, 3450, 3500, 3550, 3600, 3650]]*2)
     strategies = [opt_strat]
     all_insts = opt_strat.instIDs
@@ -50,4 +50,4 @@ def test_main(tday, name='test_trade'):
 
 
 if __name__=="__main__":
-    test_main(datetime.date(2015,2,25), 'test_trade')
+    test_main(datetime.date(2015,2,27), 'test_trade')
