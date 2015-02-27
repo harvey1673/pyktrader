@@ -47,16 +47,17 @@ class OptionStrategy(object):
     def __init__(self, name, underliers, expiries, strikes, agent = None):
         self.name = name
         self.underliers = underliers
+		self.main_cont = 0
         self.expiries = expiries
         self.volgrids = dict([(expiry, None) for expiry in expiries])
         self.accrual = 'CFE'
         opt_dict = self.get_option_map(underliers, expiries, strikes)
         self.option_insts = dict([(inst, None) for inst in opt_dict.values()])
-        self.option_map = pd.DataFrame(index = self.underliers + opt_dict.values(), 
+        self.option_map = pd.DataFrame(0, index = self.underliers + opt_dict.values(), 
                                 columns = ['underlier', 'cont_mth', 'otype', 'strike', 'multiple', 
                                            'pv', 'delta', 'gamma', 'vega', 'theta',  
                                            'ppv', 'pdelta', 'pgamma', 'pvega', 'ptheta', 
-                                           'pos', 'outbuy', 'outsell']).fillna(0)
+                                           'pos', 'outlong', 'outshort', 'margin_short','margin_long'])
         self.group_risk = None
         for inst in underliers:
             self.option_map.loc[inst, 'underlier'] = inst
@@ -71,10 +72,10 @@ class OptionStrategy(object):
         self.folder = ''
         self.logger = None
         self.reset()
-        self.positions  = dict([(inst, 0) for inst in self.instIDs])
-        self.submitted_pos = []
+        self.submitted_pos = dict([(inst, []) for inst in self.instIDs])
         self.is_initialized = False
         self.proxy_flag = {'delta': False, 'gamma': True, 'vega': True, 'theta': True} 
+		self.hedge_config = {'order_type': OPT_MARKET_ORDER, 'num_tick':1}
 
     def reset(self):
         if self.agent != None:
@@ -117,18 +118,20 @@ class OptionStrategy(object):
         self.is_initialized = True
         return
 
-    def update_greeks(self, inst):
+    def update_greeks(self, inst): 
+		'''update option instrument greeks'''
         multiple = self.option_map.loc[inst, 'multiple']
-        pv = self.option_insts[inst].price()
-        delta = self.option_insts[inst].delta()
-        gamma = self.option_insts[inst].gamma()
-        vega  = self.option_insts[inst].vega()
-        theta = self.option_insts[inst].theta()
-        opt_info = {'pv': pv * multiple, 'delta': delta * multiple, 'gamma': gamma * multiple, 'vega': vega * multiple, 'theta': theta * multiple}
+        pv = self.option_insts[inst].price() * multiple
+        delta = self.option_insts[inst].delta() * multiple
+        gamma = self.option_insts[inst].gamma() * multiple
+        vega  = self.option_insts[inst].vega() * multiple/100.0
+        theta = self.option_insts[inst].theta() * multiple
+        opt_info = {'pv': pv, 'delta': delta, 'gamma': gamma, 'vega': vega, 'theta': theta}
         self.option_map.loc[inst, opt_info.keys()] = pd.Series(opt_info)
         return 
     
     def update_pos_greeks(self):
+		'''update position greeks according to current positions'''
         keys = ['pv', 'delta', 'gamma', 'vega', 'theta']
         for key in keys:
             pos_key = 'p' + key
@@ -136,6 +139,7 @@ class OptionStrategy(object):
         return 
     
     def risk_reval(self, is_recalib):
+		'''recalibrate vol surface per fwd move, get greeks update for instrument greeks'''
         dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
         if is_recalib:
             spot = self.agent.instruments[self.underliers[0]].price
@@ -236,12 +240,37 @@ class OptionStrategy(object):
                     instID = str(row[1])
                     self.option_map.loc[instID, 'pos'] = int(row[2]) 
         return
-            
-    def trade_status_callback(self, trade_ref, status):
-        pass
     
-    def position_hedger(self):
-        pass
+    def delta_hedger(self):
+		tot_deltas = self.group_risk.pdelta.sum()
+		cum_vol = 0
+		if (self.accrual not in ['SSE','SZE']) and (self.proxy_flag['delta']== False):
+			for inst in self.underliers:
+				multiple = self.option_map[inst, 'multiple']
+				cont_mth = self.option_map[inst, 'cont_mth']
+				pdelta = self.group_risk[cont_mth, 'delta'] 
+				volume = int( - pdeltas/multiple + 0.5)
+				cum_vol += volume
+				if volume!=0:
+					curr_price = self.agent.instruments[inst].price
+					buysell = 1 if volume > 0 else -1
+					valid_time = self.agent.tick_id + 600
+					etrade = order.ETrade( [inst], [volume], [self.hedge_config['order_type']], curr_price*buysell, [self.hedge_config['num_tick']], \
+                                               valid_time, self.name, self.agent.name)
+					self.submitted_pos[inst].append(etrade)
+					self.agent.submit_trade(etrade)
+		inst = self.underliers[self.main_cont]
+		multiple = self.option_map[inst, 'multiple']
+		tot_deltas += cum_vol
+		volume = int( tot_deltas/multiple + 0.5)
+		if volume!=0:
+			curr_price = self.agent.instruments[inst].price
+			buysell = 1 if volume > 0 else -1
+			etrade = order.ETrade( [inst], [volume], [self.hedge_config['order_type']], curr_price*buysell, [self.hedge_config['num_tick']], \
+                                valid_time, self.name, self.agent.name)
+            self.submitted_pos[inst].append(etrade)
+            self.agent.submit_trade(etrade)
+        return
         
 class EquityOptStrat(OptionStrategy):
     def __init__(self, name, underliers, expiries, strikes, agent = None):
@@ -263,5 +292,3 @@ class IndexFutOptStrat(OptionStrategy):
         self.accrual = 'CFE'
         self.proxy_flag = {'delta': True, 'gamma': True, 'vega': True, 'theta': True} 
         
-    def position_hedger(self):
-        pass
