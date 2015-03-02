@@ -588,7 +588,7 @@ class Instrument(object):
             self.tick_base = 0.01
             self.broker_fee = 0
             if len(self.name) == 8:
-                self.product = 'StockOpt'
+                self.product = 'ETF_Opt'
                 prod_info = mysqlaccess.load_stockopt_info(self.name)
                 self.exchange = prod_info['exch']
                 self.multiple = prod_info['lot_size']
@@ -604,12 +604,20 @@ class Instrument(object):
                 self.exchange = 'SSE'
             return
         self.product = inst2product(self.name)
-        if self.product == 'IO':
+        if self.product == 'IO_Opt':
             self.underlying = self.name[:6].replace('IO','IF')
             self.strike = float(self.name[-4:])
             self.otype = self.name[7]
             self.cont_mth = int(self.underlying[-4:]) + 200000 
             self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
+            self.product = 'IO'
+        elif '_Opt' in self.product:
+            self.underlying = self.name[:5]
+            self.strike = float(self.name[-4:])
+            self.otype = self.name[7]
+            self.cont_mth = int(self.underlying[-4:]) + 200000 
+            self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
+
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
         self.start_tick_id =  prod_info['start_min'] * 1000
@@ -631,10 +639,27 @@ class Instrument(object):
         self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
         return
 
-    def calc_margin_amount(self,price,direction):   
-        my_marginrate = self.marginrate[0] if direction == ORDER_BUY else self.marginrate[1]
-        #print 'self.name=%s,price=%s,multiple=%s,my_marginrate=%s' % (self.name,price,self.multiple,my_marginrate)
-        return price * self.multiple * my_marginrate * 1.05
+    def calc_margin_amount(self, direction, price = 0.0):
+        if self.product in option_market_products:
+            if self.product == 'IO':
+                a = 0.15
+                b= 0.1
+            elif self.product == 'ETF_Opt':
+                a = 0.12
+                b = 0.07
+            my_margin = self.price
+            if direction == ORDER_SELL:
+                if price == 0.0:
+                    price = self.strike
+                if self.otype == 'C':
+                    my_margin += max(price * a - max(self.strike-price, 0), price * b)
+                else:
+                    my_margin += max(price * a - max(price - self.strike, 0), self.strike * b)
+            return my_margin * self.multiple
+        else:
+            my_marginrate = self.marginrate[0] if direction == ORDER_BUY else self.marginrate[1]
+            #print 'self.name=%s,price=%s,multiple=%s,my_marginrate=%s' % (self.name,price,self.multiple,my_marginrate)
+            return self.price * self.multiple * my_marginrate
      
 class AbsAgent(object):
     ''' 抽取与交易无关的功能，便于单独测试
@@ -959,11 +984,14 @@ class Agent(AbsAgent):
         for instID in self.instruments:
             inst = self.instruments[instID]
             pos = self.positions[instID]
-            #print inst.name, inst.marginrate, inst.calc_margin_amount(inst.price,ORDER_BUY), inst.calc_margin_amount(inst.price,ORDER_SELL)
-            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
-            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
-            used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
-            used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL)
+            under_price = 0.0
+            if len(inst.underlying) > 0:
+                under_price = self.instruments[inst.underlying].price
+            #print inst.name, inst.marginrate, inst.calc_margin_amount(ORDER_BUY), inst.calc_margin_amount(ORDER_SELL)
+            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
+            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price) 
+            used_margin += pos.curr_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
+            used_margin += pos.curr_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price)
             yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close) * inst.multiple
             tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
             tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple
@@ -1402,7 +1430,10 @@ class Agent(AbsAgent):
                         direction = ORDER_BUY
                     else:
                         direction = ORDER_SELL
-                    required_margin += vol * self.instruments[inst].calc_margin_amount(order_prices[idx],direction)
+                    under_price = 0.0
+                    if len(self.instruments[inst].underlying) > 0:
+                        under_price = self.instruments[self.instruments[inst].underlying].price
+                    required_margin += vol * self.instruments[inst].calc_margin_amount(direction, under_price)
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}

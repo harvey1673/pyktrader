@@ -57,7 +57,7 @@ class TurtleTrader(Strategy):
                                            [self.order_type], cur_price, [0],  \
                                            valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                     tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        cur_price, cur_price - cur_atr*self.stop_loss*buysell, price_unit)
+                                        cur_price, cur_price, price_unit)
                     tradepos.entry_tradeid = etrade.id
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)
@@ -74,7 +74,7 @@ class TurtleTrader(Strategy):
                 units = len(self.positions[idx])
                 for tradepos in reversed(self.positions[idx]):
                     if (cur_price < ll[1] and buysell == 1) or (cur_price > hh[1] and buysell == -1) \
-                            or ((cur_price - tradepos.exit_target)*buysell < 0):
+                            or tradepos.check_SL(cur_price, self.stop_loss*cur_atr):
                         valid_time = self.agent.tick_id + 600
                         etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], cur_price, [0], \
@@ -82,10 +82,10 @@ class TurtleTrader(Strategy):
                         tradepos.exit_tradeid = etrade.id
                         save_status = True
                         self.logger.info('strat %s close a position on %s after a reverse breakout, cur_price=%s, chanhigh=%s, exit=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
-                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.exit_target, -buysell, self.trade_unit[idx][0], etrade.id))
+                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.stoploss(self.stop_loss*cur_atr), -buysell, self.trade_unit[idx][0], etrade.id))
                         if self.email_notify != None:
                             content = 'strat %s close a position on %s after a reverse breakout, cur_price=%s, chanhigh=%s, exit=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % \
-                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.exit_target, -buysell, self.trade_unit[idx][0], etrade.id)
+                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.stoploss(self.stop_loss*cur_atr), -buysell, self.trade_unit[idx][0], etrade.id)
                             send_mail(EMAIL_HOTMAIL, self.email_notify, 'Turtle trade signal', content) 
                         self.submitted_pos[idx].append(etrade)
                         self.agent.submit_trade(etrade)
@@ -94,13 +94,13 @@ class TurtleTrader(Strategy):
                         return
                 if  units < 4 and (cur_price - self.positions[idx][-1].entry_price)*buysell >= cur_atr/2.0:
                     for pos in self.positions[idx]:
-                        pos.exit_target = cur_price - cur_atr*self.stop_loss*buysell
+                        pos.entry_target = cur_price
                     valid_time = self.agent.tick_id + 600
                     etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
                                            [self.order_type], cur_price, [0],  \
                                            valid_time, self.name, self.agent.name, price_unit, [price_unit] )
                     tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        cur_price, cur_price - cur_atr*self.stop_loss*buysell, price_unit)
+                                        cur_price, cur_price, price_unit)
                     tradepos.entry_tradeid = etrade.id
                     self.submitted_pos[idx].append(etrade)
                     self.positions[idx].append(tradepos)

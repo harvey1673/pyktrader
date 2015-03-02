@@ -32,6 +32,25 @@ class TradePos(object):
         self.is_closed = False
         self.profit = 0.0
 
+    def check_TP(self, price, tp):
+        if (price - self.exit_target) * self.direction + tp <= 0:
+            return True
+        else:
+            self.exit_target = max(self.exit_target*self.direction, price*self.direction)*self.direction
+            return False
+    
+    def trailprofit(self, tp):
+        return self.exit_target - tp * self.direction
+    
+    def stoploss(self, sl):
+        return self.entry_target - sl * self.direction
+    
+    def check_SL(self, price, sl):
+        if (price - self.entry_target) * self.direction + sl <= 0:
+            return True
+        else:
+            return False
+        
     def open(self, price, start_time):
         self.entry_price = price
         self.entry_time = start_time
@@ -193,12 +212,12 @@ class Strategy(object):
     def update_trade_unit(self):
         pass
     
-	def save_local_variables(self, file_writer):
-		pass
-	
-	def load_local_variables(self, row):
-		pass
-		
+    def save_local_variables(self, file_writer):
+        pass
+    
+    def load_local_variables(self, row):
+        pass
+        
     def save_state(self):
         filename = self.folder + 'strat_status.csv'
         self.logger.info('save state for strat = %s' % (self.name))
@@ -207,9 +226,9 @@ class Strategy(object):
             for tplist in self.positions:
                 for tradepos in tplist:
                     tradedict = tradepos2dict(tradepos)
-					row = ['tradepos'] + [tradedict[itm] for itm in tradepos_header]
+                    row = ['tradepos'] + [tradedict[itm] for itm in tradepos_header]
                     file_writer.writerow(row)
-			self.save_local_variables(file_writer)
+            self.save_local_variables(file_writer)
         return
     
     def load_state(self):
@@ -221,7 +240,7 @@ class Strategy(object):
         self.logger.info('load state for strat = %s' % (self.name))
         with open(logfile, 'rb') as f:
             reader = csv.reader(f)
-            for idx, row in enumerate(reader):
+            for row in reader:
                 if row[0] == 'tradepos':
                     insts = row[1].split(' ')
                     vols = [ int(n) for n in row[2].split(' ')]
@@ -260,8 +279,8 @@ class Strategy(object):
                         self.underliers.append(insts)
                         positions.append([tradepos])
                         self.logger.warning('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
-				else:
-					self.load_local_variables(row)
+                else:
+                    self.load_local_variables(row)
         self.positions = positions
         return    
         
