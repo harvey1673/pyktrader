@@ -193,16 +193,23 @@ class Strategy(object):
     def update_trade_unit(self):
         pass
     
+	def save_local_variables(self, file_writer):
+		pass
+	
+	def load_local_variables(self, row):
+		pass
+		
     def save_state(self):
         filename = self.folder + 'strat_status.csv'
         self.logger.info('save state for strat = %s' % (self.name))
         with open(filename,'wb') as log_file:
             file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            file_writer.writerow(tradepos_header)
             for tplist in self.positions:
                 for tradepos in tplist:
                     tradedict = tradepos2dict(tradepos)
-                    file_writer.writerow([tradedict[itm] for itm in tradepos_header])
+					row = ['tradepos'] + [tradedict[itm] for itm in tradepos_header]
+                    file_writer.writerow(row)
+			self.save_local_variables(file_writer)
         return
     
     def load_state(self):
@@ -215,32 +222,32 @@ class Strategy(object):
         with open(logfile, 'rb') as f:
             reader = csv.reader(f)
             for idx, row in enumerate(reader):
-                if idx > 0:
-                    insts = row[0].split(' ')
-                    vols = [ int(n) for n in row[1].split(' ')]
-                    pos = int(row[2])
+                if row[0] == 'tradepos':
+                    insts = row[1].split(' ')
+                    vols = [ int(n) for n in row[2].split(' ')]
+                    pos = int(row[3])
                     #direction = int(row[3])
-                    entry_target = float(row[6])
-                    exit_target = float(row[10])
-                    price_unit = float(row[14])
+                    entry_target = float(row[7])
+                    exit_target = float(row[11])
+                    price_unit = float(row[15])
                     tradepos = TradePos(insts, vols, pos, entry_target, exit_target, price_unit)
-                    if row[5] == '':
+                    if row[6] == '':
                         entry_time = ''
                         entry_price = 0
                     else:
-                        entry_time = datetime.datetime.strptime(row[5], '%Y%m%d %H:%M:%S %f')
-                        entry_price = float(row[4])
+                        entry_time = datetime.datetime.strptime(row[6], '%Y%m%d %H:%M:%S %f')
+                        entry_price = float(row[5])
                         tradepos.open(entry_price,entry_time)
 
-                    tradepos.entry_tradeid = int(row[7])           
-                    tradepos.exit_tradeid = int(row[11])    
+                    tradepos.entry_tradeid = int(row[8])           
+                    tradepos.exit_tradeid = int(row[12])    
                     
-                    if row[9] == '':
+                    if row[10] == '':
                         exit_time = ''
                         exit_price = 0
                     else:                    
-                        exit_time = datetime.datetime.strptime(row[9], '%Y%m%d %H:%M:%S %f')
-                        exit_price = float(row[8])
+                        exit_time = datetime.datetime.strptime(row[10], '%Y%m%d %H:%M:%S %f')
+                        exit_price = float(row[9])
                         tradepos.close(exit_price, exit_time)
                     
                     is_added = False
@@ -253,6 +260,8 @@ class Strategy(object):
                         self.underliers.append(insts)
                         positions.append([tradepos])
                         self.logger.warning('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
+				else:
+					self.load_local_variables(row)
         self.positions = positions
         return    
         
