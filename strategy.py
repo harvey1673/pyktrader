@@ -94,14 +94,15 @@ def tradepos2dict(tradepos):
     return trade
   
 class Strategy(object):
-    def __init__(self, name, underliers, trade_unit = [], agent = None, email_notify = None):
+    def __init__(self, name, underliers, volumes, trade_unit = [], agent = None, email_notify = None):
         self.name = name
         self.underliers = underliers
+		self.volumes = volumes
         self.instIDs = list(set().union(*underliers))
         if len(trade_unit) > 0: 
             self.trade_unit = trade_unit
         else:
-            self.trade_unit = [ [1]*len(under) for under in underliers ]
+            self.trade_unit = [1] * len(underliers)
         self.positions  = [[] for under in underliers]
         self.submitted_pos = [ [] for under in underliers ]
         self.data_func = []
@@ -110,6 +111,8 @@ class Strategy(object):
         self.logger = None
         self.reset()
         self.email_notify = email_notify
+		self.trade_valid_time = 600
+		self.num_tick = 5
         
     def reset(self):
         if self.agent != None:
@@ -209,6 +212,44 @@ class Strategy(object):
     def liquidate(self):
         pass
     
+	def open_tradepos(self, idx, direction, price):
+        valid_time = self.agent.tick_id + self.trade_valid_time
+		insts = self.underliers[idx]
+		nAsset = len(insts)
+		trade_vol = [ v * self.trade_unit[idx] for v in tradepos.vols ]
+		order_type = [self.order_type] * nAsset
+		if (self.order_type == OPT_LIMIT_ORDER) and (nAsset > 1):
+			order_type[-1] = OPT_MARKET_ORDER
+		conv_f = [ self.agent.instruments[inst].multiple for inst in insts ]	
+        etrade = order.ETrade( insts, trade_vol, order_type, price * direction, [self.num_tick] * nAsset,  \
+                                valid_time, self.name, self.agent.name, conv_f[-1]*tradepos.pos, conv_f)
+        tradepos = TradePos(insts, self.volumes[idx], direction * self.trade_unit[idx], \
+                                price, price, conv_f[-1]*tradepos.pos)
+        tradepos.entry_tradeid = etrade.id
+        self.submitted_pos[idx].append(etrade)
+        self.positions[idx].append(tradepos)
+        self.agent.submit_trade(etrade)
+		return 
+	
+	def close_tradepos(self, idx, tradepos, price):
+		valid_time = self.agent.tick_id + self.trade_valid_time
+		insts = tradepos.insts
+		nAsset = len(insts)
+		if insts != self.underliers[idx]:
+			self.logger.warning('some inconsistency on underlier index and the refered tradepos for insts = %s' % (insts))
+			return
+		trade_vol = [ -v*tradepos.pos for v in tradepos.vols]
+		order_type = [self.order_type] * nAsset
+		if (self.order_type == OPT_LIMIT_ORDER) and (nAsset > 1):
+			order_type[-1] = OPT_MARKET_ORDER
+		con_f = [ self.agent.instruments[inst].multiple for inst in insts ]
+        etrade = order.ETrade( insts, trade_vol, order_type, -price*tradepos.direction, [self.num_tick] * nAsset, \
+                                valid_time, self.name, self.agent.name, conv_f[-1]*tradepos.pos, conv_f)
+        tradepos.exit_tradeid = etrade.id
+        self.submitted_pos[idx].append(etrade)
+        self.agent.submit_trade(etrade)
+		return
+		
     def update_trade_unit(self):
         pass
     
