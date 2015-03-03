@@ -11,23 +11,24 @@ class RBreakerTrader(Strategy):
     def __init__(self, name, underliers, agent = None, trade_unit = [], ratios = [], stop_loss = []):
         Strategy.__init__(name, underliers, trade_unit, agent)
         self.data_func = []   
-        self.ratios = [(0.35, 0.07, 0.25)]*len(underliers)
+        num_assets = len(underliers)
+        self.ratios = [(0.35, 0.07, 0.25)]*num_assets
         if len(ratios) > 1:
             self.ratio = ratios
         elif len(ratios) == 1: 
-            self.ratio = ratios*len(underliers)
+            self.ratio = ratios*num_assets
         self.order_type = OPT_MARKET_ORDER
-        self.ssetup = [0.0]*len(underliers)
-        self.bsetup = [0.0]*len(underliers)
-        self.senter = [0.0]*len(underliers)
-        self.benter = [0.0]*len(underliers)
-        self.sbreak = [0.0]*len(underliers)
-        self.bbreak = [0.0]*len(underliers)
+        self.ssetup = [0.0]*num_assets
+        self.bsetup = [0.0]*num_assets
+        self.senter = [0.0]*num_assets
+        self.benter = [0.0]*num_assets
+        self.sbreak = [0.0]*num_assets
+        self.bbreak = [0.0]*num_assets
         self.start_min_id = 1505
         self.end_min_id = 2055
         self.freq = 1
         self.num_tick = 1
-        self.num_trades = [0]*len(underliers)
+        self.num_trades = [0]*num_assets
 
     def initialize(self):
         self.load_state()

@@ -73,26 +73,30 @@ def prod_test(tday, name='prod_test'):
     #trader_cfg = TEST_TRADER
     user_cfg = PROD_USER1
     agent_name = name
-    ins_setup = {'m1505':(1, 0.7, 8),
-                'RM505':(0, 0.5, 10),
-                'rb1505':(0,0.5, 10),
-                'y1505':(0, 0.5, 4), 
-                'l1505':(0, 0.5, 4),
-                'pp1505':(0,0.5,4),
-                'ru1505':(2, 0.5, 1),
-                'ag1506':(0, 0.7, 6),
-                'au1506':(0, 0.5, 1),
-                'j1505':(0, 0.5, 2),
-                'al1504':(0, 0.9, 5)}
-    units_dt = [[ins_setup[inst][2]] for inst in ins_setup]
-    under_dt = [[inst] for inst in ins_setup]
-    ratios = [(ins_setup[inst][1], ins_setup[inst][1]) for inst in ins_setup]
-    lookbacks = [ins_setup[inst][0] for inst in ins_setup]
+    ins_setup = {'m1505':(1, 0.7, 8, False),
+                'RM505':(0, 0.5, 10, False),
+                'rb1505':(0,0.5, 10, False),
+                'y1505':(0, 0.5, 4, False), 
+                'l1505':(0, 0.5, 4, False),
+                'pp1505':(0,0.5,4, False),
+                'ru1505':(2, 0.5, 1, False),
+                'ag1506':(0, 0.7, 6, False),
+                'au1506':(0, 0.5, 1, False),
+                'j1505':(0, 0.5, 2, False),
+                'al1504':(0, 0.9, 5, True)}
+    insts = ins_setup.keys()
+    units_dt = [ins_setup[inst][2] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [(ins_setup[inst][1], ins_setup[inst][1]) for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][3] for inst in insts]
 
-    dt_strat = strat_dt.DTTrader('ProdDT', under_dt, trade_unit = units_dt,
+    dt_strat = strat_dt.DTTrader('ProdDT', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = False, 
                                  email_notify = ['harvey_wwu@hotmail.com'])
+    dt_strat.close_tday = daily_close
     strategies = [dt_strat]
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
@@ -164,7 +168,7 @@ def lts_test(tday, name='lts_test'):
 
         
 if __name__=="__main__":
-    lts_test(datetime.date(2015,2,4), 'lts_test')
+    prod_test(datetime.date(2015,3,4), 'prod_test')
 #     args = sys.argv[1:]
 #     if len(args) < 2:
 #         name= 'test_trade'
