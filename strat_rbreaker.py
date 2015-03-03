@@ -17,7 +17,6 @@ class RBreakerTrader(Strategy):
         elif len(ratios) == 1: 
             self.ratio = ratios*len(underliers)
         self.order_type = OPT_MARKET_ORDER
-        self.stop_loss = stop_loss
         self.ssetup = [0.0]*len(underliers)
         self.bsetup = [0.0]*len(underliers)
         self.senter = [0.0]*len(underliers)
@@ -53,7 +52,22 @@ class RBreakerTrader(Strategy):
         self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
         self.num_trades = [0]*len(underliers)
         return
-        
+    
+    def save_local_variables(self, file_writer):
+        for idx, underlier in enumerate(self.underliers):
+			inst = underlier[0]
+			row = ['NumTrade', str(inst), self.num_trades[idx]]
+			file_writer.writerow(row)
+		return
+    
+    def load_local_variables(self, row):
+        if row[0] == 'NumTrade':
+			inst = str(row[1])
+			idx = self.get_index([inst])
+			if idx >=0:
+				self.num_trades[idx] = int(row[2]) 
+        return
+		
     def run_min(self, inst, min_id):
         idx = self.get_index([inst])
         if idx < 0:
