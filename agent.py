@@ -1544,9 +1544,9 @@ class Agent(AbsAgent):
                 iorder.price_type = OPT_LIMIT_ORDER
                 # 以后可以改成涨停,跌停价
                 if iorder.direction == ORDER_BUY:
-                    iorder.limit_price = inst.ask_price1 + inst.tick_base * self.market_order_tick_multiple
+                    iorder.limit_price = min(inst.up_limit, inst.ask_price1 + inst.tick_base * self.market_order_tick_multiple)
                 else:
-                    iorder.limit_price = inst.bid_price1 - inst.tick_base * self.market_order_tick_multiple
+                    iorder.limit_price = max(inst.down_limit, inst.bid_price1 - inst.tick_base * self.market_order_tick_multiple)
             else:
                 iorder.limit_price = 0.0
         iorder.status = order.OrderStatus.Sent        
