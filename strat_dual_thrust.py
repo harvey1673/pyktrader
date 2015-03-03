@@ -8,22 +8,24 @@ import order as order
 import agent
  
 class DTTrader(Strategy):
-    def __init__(self, name, underliers, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None):
-        Strategy.__init__(self, name, underliers, trade_unit, agent, email_notify)
+    def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None):
+        Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.lookbacks = lookbacks
         self.data_func = []   
-        self.ratios = [(0.7,0.7)]*len(underliers)
+		numAssets = len(underliers)
+        self.ratios = [(0.7,0.7)] * numAssets
         if len(ratios) > 1:
             self.ratio = ratios
         elif len(ratios) == 1: 
-            self.ratio = ratios*len(underliers)
+            self.ratio = ratios * numAssets
         if len(lookbacks) > 0:
             self.lookbacks = lookbacks
         else: 
-            self.lookbacks = [0]*len(underliers)
+            self.lookbacks = [0] * numAssets
         self.order_type = OPT_LIMIT_ORDER
         self.last_tick_id = 2057000
-        self.close_tday = [daily_close]*len(underliers)
+		self.tday_open = [0.0] * numAssets
+        self.close_tday = daily_close
 
     def initialize(self):
         self.load_state()
@@ -61,7 +63,7 @@ class DTTrader(Strategy):
             curr_pos = self.positions[idx][0]
             buysell = curr_pos.direction
         if (tick_id >= self.last_tick_id):
-            if (buysell!=0) and (self.close_tday[idx]) and (len(self.submitted_pos[idx])==0):
+            if (buysell!=0) and (self.close_tday) and (len(self.submitted_pos[idx])==0):
                 valid_time = self.agent.tick_id + 600
                 etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
                                                [self.order_type], -curr_price*buysell*self.trade_unit[idx][0], [0], \
@@ -74,8 +76,6 @@ class DTTrader(Strategy):
                     content = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, trade_id = %s, current tick_id = %s' \
                                                             % (inst, buysell,self.trade_unit[idx][0], etrade.id, tick_id)
                     send_mail(EMAIL_HOTMAIL, self.email_notify, 'Dual Thrust trade signal', content)
-                self.submitted_pos[idx].append(etrade)
-                self.agent.submit_trade(etrade)
                 save_status = True
         elif len(self.submitted_pos[idx]) == 0:
             if ((curr_price >= buy_trig) and (buysell <=0)) or ((curr_price <= sell_trig) and (buysell >=0)):
