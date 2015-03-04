@@ -114,6 +114,7 @@ class Strategy(object):
         self.email_notify = email_notify
         self.trade_valid_time = 600
         self.num_tick = 0
+        self.num_daytrades = [(0,0)] * num_assets
         
     def reset(self):
         if self.agent != None:
@@ -148,6 +149,7 @@ class Strategy(object):
                         self.logger.info('strat %s successfully opened a position on %s after tradeid=%s is done, trade status is changed to confirmed' % 
                                          (self.name, tradepos.insts[0], etrade.id))
                         etrade.status = order.ETradeStatus.StratConfirm
+                        self.num_daytrades[idx][0] += 1
                         save_status = True
                         break
                     elif tradepos.exit_tradeid == etrade.id:
@@ -156,6 +158,7 @@ class Strategy(object):
                         self.logger.info('strat %s successfully closed a position on %s after tradeid=%s is done, the closed trade position is saved' % 
                                          (self.name, tradepos.insts[0], etrade.id))
                         etrade.status = order.ETradeStatus.StratConfirm
+                        self.num_daytrades[idx][1] += 1
                         save_status = True
                         break
                 if etrade.status != order.ETradeStatus.StratConfirm:
@@ -203,6 +206,7 @@ class Strategy(object):
         self.update_trade_unit()
         self.save_state()
         self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
+        self.num_daytrades = [(0,0)] * len(self.underliers)
         pass
         
     def run_tick(self, ctick):
@@ -340,6 +344,14 @@ class Strategy(object):
             tradedict = tradepos2dict(tradepos)
             file_writer.writerow([tradedict[itm] for itm in tradepos_header])
         return
+    
+    def check_price_limit(self, inst, curr_price, num_tick):
+        inst_obj = self.agent.instruments[inst]
+        tick_base = inst_obj.tick_base
+        if (curr_price >= inst_obj.up_limit - num_tick * tick_base) or (curr_price <= inst_obj.down_limit + num_tick * tick_base):
+            return True
+        else:
+            return False
     
     #def load_closed_pos(self):
     #    logfile = self.folder + 'hist_tradepos.csv'

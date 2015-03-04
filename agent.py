@@ -1175,8 +1175,6 @@ class Agent(AbsAgent):
             if mins % m == 0:
                 for fobj in self.min_data_func[m]:
                     fobj.rfunc(df_m)
-            if m > 1 and mins % m == 0:
-                print df_m.ix[-1]
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst])
             mysqlaccess.insert_min_data(inst, self.cur_min[inst])
