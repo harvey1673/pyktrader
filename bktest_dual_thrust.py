@@ -13,7 +13,8 @@ margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
                 'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
                 'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
-                'TA': 0.06, 'TC': 0.05, 'ME': 0.06 }
+                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'OI': 0.05,
+                'v': 0.05,  'IF': 0.1,  'FG': 0.06, 'IF': 0.1 }
 
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
@@ -27,6 +28,7 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     for ix, s in enumerate(scenarios):
         config['win'] = s[1]
         config['k'] = s[0]
+        config['m'] = s[2]
         (res, closed_trades, ts) = dual_thrust_sim( ddf, mdf, config)
         output[ix] = res
         print 'saving results for scen = %s' % str(ix)
@@ -50,11 +52,12 @@ def dual_thrust_sim( ddf, mdf, config):
     k = config['k']
     start_equity = config['capital']
     win = config['win']
+    multiplier = config['m']
     tcost = config['trans_cost']
     unit = config['unit']
     if win == 0:
-        tr = pd.concat([(pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.close, 2))/2.0, 
-                        (pd.rolling_max(ddf.close, 2) - pd.rolling_min(ddf.low, 2))/2.0,
+        tr = pd.concat([(pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.close, 2))*multiplier, 
+                        (pd.rolling_max(ddf.close, 2) - pd.rolling_min(ddf.low, 2))*multiplier,
                         ddf.high - ddf.close, 
                         ddf.close - ddf.low], 
                         join='outer', axis=1).max(axis=1).shift(1)
@@ -71,7 +74,7 @@ def dual_thrust_sim( ddf, mdf, config):
     closed_trades = []
     start_d = ddf.index[0]
     end_d = mdf.index[-1].date()
-    prev_d = start_d - datetime.timedelta(days=1)
+    #prev_d = start_d - datetime.timedelta(days=1)
     tradeid = 0
     for dd in mdf.index:
         mslice = mdf.ix[dd]
@@ -86,17 +89,17 @@ def dual_thrust_sim( ddf, mdf, config):
         if np.isnan(dslice.TR):
             continue
         d_open = dslice.open
-        if (prev_d < d):
-            d_open = mslice.open
-        else:
-            d_open = dslice.open
+        #if (prev_d < d):
+        #    d_open = mslice.open
+        #else:
+        #    d_open = dslice.open
         if (d_open <= 0):
             continue
-        prev_d = d
+        #prev_d = d
         buytrig  = d_open + dslice.TR * k
         selltrig = d_open - dslice.TR * k
         
-        if (min_id >= 2055):
+        if (min_id >= config['exit_min']):
             if (pos != 0) and (close_daily or (d == end_d)):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
@@ -151,17 +154,17 @@ def dual_thrust_sim( ddf, mdf, config):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
         
-def run_sim(end_date, daily_close = False):
-    
+def run_sim(start_date, end_date, daily_close = False):
     commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,10,1)] * 12 + \
-                [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH']
+                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
+    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH','pp', 'IF']
     start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
+                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
+                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF', 'ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn', 'i', 'j', 'jm']
+    sim_list = ['IF']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -169,37 +172,44 @@ def run_sim(end_date, daily_close = False):
     file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DT_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
-    file_prefix = file_prefix + '_'
-    config = {'nearby':1, 
-              'rollrule':'-50b', 
-              'capital': 10000,
+    #file_prefix = file_prefix + '_'
+    config = {'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0,
               'close_daily': daily_close, 
               'unit': 1,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.5, 0), (0.7, 0), (0.9, 0), (0.5, 1), (0.7, 1), (0.9, 1), (0.3, 2), (0.5, 2)]
+    scenarios = [(0.5, 0, 0.4), (0.7, 0, 0.4), (0.5, 0, 0.6), (0.7, 0, 0.6), (0.7, 1, 0.5), (0.5, 2, 0.5), (0.3, 2, 0.5)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
+        config['nearby'] = 1
+        config['rollrule'] = '-50b'
+        config['exit_min'] = 2055
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
         elif asset in ['IF']:
             config['rollrule'] = '-1b'
-        dual_thrust( asset, sdate, end_date, scenarios, config)
+        elif asset in ['au', 'ag']:
+            config['rollrule'] = '-25`b'       
+        dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config)
     return
 
 if __name__=="__main__":
     args = sys.argv[1:]
-    if len(args) < 2:
+    if len(args) < 3:
         d_close = False
     else:
-        d_close = (int(args[1])>0)
-    if len(args) < 1:
-        end_d = datetime.date(2014,12,19)
+        d_close = (int(args[2])>0)
+    if len(args) < 2:
+        end_d = datetime.date(2015,1,23)
     else:
-        end_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-    run_sim(end_d, d_close)
+        end_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
+    if len(args) < 1:
+        start_d = datetime.date(2013,1,2)
+    else:
+        start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+    run_sim(start_d, end_d, d_close)
     pass
             

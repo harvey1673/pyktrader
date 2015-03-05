@@ -9,6 +9,13 @@ import sys
 import backtest
 
 NO_OPEN_POS_PROTECT = 30
+margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
+                'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
+                'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
+                'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
+                'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
+                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'OI': 0.05,
+                'v': 0.05, 'IF': 0.1, 'FG':0.06, 'IF': 0.1}
 
 def turtle( asset, start_date, end_date, systems, config):
     rollrule = config['rollrule']
@@ -52,6 +59,8 @@ def turtle_sim( ddf, mdf, config ):
     ddf['OS_1'] = pd.Series(dh.DONCH_L(ddf, signals[0]).shift(1))
     ddf['CL_1'] = pd.Series(dh.DONCH_L(ddf, signals[1]).shift(1))
     ddf['CS_1'] = pd.Series(dh.DONCH_H(ddf, signals[1]).shift(1))
+    ddf['MA1'] = pd.Series(dh.MA(ddf, signals[2]).shift(1))
+    ddf['MA2'] = pd.Series(dh.MA(ddf, signals[3]).shift(1))
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -70,9 +79,15 @@ def turtle_sim( ddf, mdf, config ):
         if len(curr_pos) == 0 and idx < len(mdf.index)-NO_OPEN_POS_PROTECT:
             curr_atr = dslice.ATR
             direction = 0
-            if mslice.close   >= dslice.OL_1:
+            up_MA = False
+            down_MA = False
+            if np.isnan(dslice.MA1) or (dslice.MA1 < dslice.MA2):
+                up_MA = True
+            if np.isnan(dslice.MA1) or (dslice.MA1 > dslice.MA2):
+                down_MA = True                
+            if (mslice.close >= dslice.OL_1) and up_MA:
                 direction = 1
-            elif mslice.close <= dslice.OS_1:
+            elif (mslice.close <= dslice.OS_1) and down_MA:
                 direction = -1
             pos = direction * unit
             if direction != 0:
@@ -132,11 +147,8 @@ def turtle_sim( ddf, mdf, config ):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
     
-def run_sim(end_date):
-    config = {'nearby':1, 
-              'rollrule':'-50b', 
-              'marginrate':(0.05, 0.05), 
-              'capital': 10000,
+def run_sim(start_date, end_date):
+    config = {'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0, 
               'max_loss': 2,
@@ -144,37 +156,43 @@ def run_sim(end_date):
               'unit': 1,
               'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Turtle_'}
 
-    commod_list1= ['IF','m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
-    start_dates1 = [datetime.date(2010,10,1)] * 13 + \
-                 [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'RM', 'SR', 'FG', 'OI', 'TC', 'WH']
-    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + \
-                 [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
+    commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
+    start_dates1 = [datetime.date(2010,10,1)] * 12 + \
+                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
+    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH','pp', 'IF']
+    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
+                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
+                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
     commod_list = commod_list1+commod_list2
     start_dates = start_dates1 + start_dates2
-
-    systems = [(20,10), (20,5), (15,5), (10,5)]
-    for asset, start_date in zip(commod_list, start_dates):
+    sim_list = ['IF']
+    sdate_list = []
+    for c, d in zip(commod_list, start_dates):
+        if c in sim_list:
+            sdate_list.append(d)
+    systems = [(20, 10, 40, 10), (20, 10, 40, 5), (20, 10, 30, 5), (20, 10, 30, 10)]
+    for asset, sdate in zip(sim_list, sdate_list):
+        config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
+        config['nearby'] = 1
+        config['rollrule'] = '-50b'
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
         elif asset in ['IF']:
             config['rollrule'] = '-1b'
-        turtle( asset, start_date, end_date, systems, config)
+        elif asset in ['au', 'ag']:
+            config['rollrule'] = '-25b'  
+        turtle( asset, max(sdate, start_date), end_date, systems, config)
     return 
     
 if __name__=="__main__":
     args = sys.argv[1:]
-    if len(args) < 3:
+    if len(args) < 2:
         end_d = datetime.date(2014,11,30)
     else:
-        end_d = datetime.datetime.strptime(args[2], '%Y%m%d').date()
-    if len(args) < 2:
+        end_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
+    if len(args) < 1:
         start_d = datetime.date(2014,1,2)
     else:
-        start_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
-    if len(args) < 1:
-        asset = 'm'
-    else:
-        asset = args[0]
-    run_sim(asset, start_d, end_d)
+        start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+    run_sim(start_d, end_d)

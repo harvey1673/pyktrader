@@ -13,7 +13,7 @@ margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
                 'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
                 'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
-                'TA': 0.06, 'TC': 0.05, 'ME': 0.06 }
+                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1 }
 
 def r_breaker( asset, start_date, end_date, scenarios, freqs, config):
     nearby  = config['nearby']
@@ -96,7 +96,7 @@ def r_breaker_sim( ddf, mdf, config):
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos    
-        if (min_id >= 2055):
+        if (min_id >= config['exit_min']):
             if (pos != 0) and (close_daily or (d == end_d)):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
@@ -105,7 +105,7 @@ def r_breaker_sim( ddf, mdf, config):
                 curr_pos = []
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
-        elif (min_id <=905):
+        elif (min_id <= config['start_min']):
             continue
         else:
             if num_trades >=2:
@@ -150,14 +150,15 @@ def r_breaker_sim( ddf, mdf, config):
 def run_sim(end_date, daily_close):
     commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,10,1)] * 12 + \
-                [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH']
+                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
+    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH', 'IF']
     start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
+                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
+                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2010,7,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF'] 
-    sim_list = ['ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn', 'i', 'j', 'jm']
+    #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
+    sim_list = [ 'm', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'RM']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -165,23 +166,27 @@ def run_sim(end_date, daily_close):
     file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\RBreaker_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
-    config = {'nearby':1, 
-              'rollrule':'-50b', 
-              'capital': 10000,
+    config = {'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0,
               'close_daily': daily_close, 
               'unit': 1,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.35, 0.07, 0.25), (0.4, 0.1, 0.25)]
-    freqs = ['1min', '3min']
+    scenarios = [(0.35, 0.07, 0.25), (0.5, 0.1, 0.35)]
+    freqs = ['1min', '3min', '5min']
     for asset, sdate in zip(sim_list, sdate_list):
-        config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
+        config['marginrate'] = ( margin_dict[asset], margin_dict[asset])
+        config['rollrule'] = '-50b' 
+        config['nearby'] = 1 
+        config['start_min'] = 1505
+        config['exit_min'] = 2055
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
         elif asset in ['IF']:
+            config['start_min'] = 1520
+            config['exit_min'] = 2110
             config['rollrule'] = '-1b'
         r_breaker( asset, sdate, end_date, scenarios, freqs, config)
     return
@@ -193,7 +198,7 @@ if __name__=="__main__":
     else:
         d_close = (int(args[1])>0)
     if len(args) < 1:
-        end_d = datetime.date(2014,11,30)
+        end_d = datetime.date(2015,2,27)
     else:
         end_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
 
