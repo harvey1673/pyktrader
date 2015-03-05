@@ -31,22 +31,19 @@ class TradePos(object):
         self.exit_tradeid = 0
         self.is_closed = False
         self.profit = 0.0
-
-    def check_TP(self, price, tp):
-        if (price - self.exit_target) * self.direction + tp <= 0:
+    
+    def trail_loss(self, curr_price, margin):
+        self.entry_target = max(self.entry_target, curr_price)
+        self.exit_target  = min(self.exit_target, curr_price)
+        if (self.direction > 0) and (self.entry_target - margin >= curr_price):
+            return True
+        elif (self.direction < 0) and (self.exit_target + margin <= curr_price):
             return True
         else:
-            self.exit_target = max(self.exit_target*self.direction, price*self.direction)*self.direction
             return False
     
-    def trailprofit(self, tp):
-        return self.exit_target - tp * self.direction
-    
-    def stoploss(self, sl):
-        return self.entry_target - sl * self.direction
-    
-    def check_SL(self, price, sl):
-        if (price - self.entry_target) * self.direction + sl <= 0:
+    def check_stop(self, curr_price, margin):
+        if (curr_price - self.entry_price) * sign(margin) * self.direction >= abs(margin):
             return True
         else:
             return False
@@ -114,7 +111,8 @@ class Strategy(object):
         self.email_notify = email_notify
         self.trade_valid_time = 600
         self.num_tick = 0
-        self.num_daytrades = [(0,0)] * num_assets
+        self.num_entries = [0] * num_assets
+        self.num_exits   = [0] * num_assets
         
     def reset(self):
         if self.agent != None:
@@ -149,7 +147,7 @@ class Strategy(object):
                         self.logger.info('strat %s successfully opened a position on %s after tradeid=%s is done, trade status is changed to confirmed' % 
                                          (self.name, tradepos.insts[0], etrade.id))
                         etrade.status = order.ETradeStatus.StratConfirm
-                        self.num_daytrades[idx][0] += 1
+                        self.num_entries[idx] += 1
                         save_status = True
                         break
                     elif tradepos.exit_tradeid == etrade.id:
@@ -158,7 +156,7 @@ class Strategy(object):
                         self.logger.info('strat %s successfully closed a position on %s after tradeid=%s is done, the closed trade position is saved' % 
                                          (self.name, tradepos.insts[0], etrade.id))
                         etrade.status = order.ETradeStatus.StratConfirm
-                        self.num_daytrades[idx][1] += 1
+                        self.num_exits[idx] += 1
                         save_status = True
                         break
                 if etrade.status != order.ETradeStatus.StratConfirm:
@@ -206,7 +204,8 @@ class Strategy(object):
         self.update_trade_unit()
         self.save_state()
         self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
-        self.num_daytrades = [(0,0)] * len(self.underliers)
+        self.num_entries = [0] * len(self.underliers)
+        self.num_exits = [0] * len(self.underliers)
         pass
         
     def run_tick(self, ctick):
@@ -244,13 +243,13 @@ class Strategy(object):
         if insts != self.underliers[idx]:
             self.logger.warning('some inconsistency on underlier index and the refered tradepos for insts = %s' % (insts))
             return
-        trade_vol = [ -v*tradepos.pos for v in tradepos.vols]
+        trade_vol = [ -v*tradepos.pos for v in tradepos.volumes]
         order_type = [self.order_type] * nAsset
         if (self.order_type == OPT_LIMIT_ORDER) and (nAsset > 1):
             order_type[-1] = OPT_MARKET_ORDER
         conv_f = [ self.agent.instruments[inst].multiple for inst in insts ]
         etrade = order.ETrade( insts, trade_vol, order_type, -price*tradepos.direction, [self.num_tick] * nAsset, \
-                                valid_time, self.name, self.agent.name, conv_f[-1]*tradepos.pos, conv_f)
+                                valid_time, self.name, self.agent.name, conv_f[-1]*abs(tradepos.pos), conv_f)
         tradepos.exit_tradeid = etrade.id
         self.submitted_pos[idx].append(etrade)
         self.agent.submit_trade(etrade)

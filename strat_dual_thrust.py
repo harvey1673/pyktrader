@@ -83,25 +83,25 @@ class DTTrader(Strategy):
             return 
         if (tick_id >= last_tick_id):
             if (buysell!=0) and (self.close_tday[idx]):
-                self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
                 msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \
                                     % (inst, buysell, self.trade_unit[idx], tick_id)
+                self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
                 self.save_state()
                 return
         if ((curr_price >= buy_trig) and (buysell <=0)) or ((curr_price <= sell_trig) and (buysell >=0)):
             if buysell!=0:
-                self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
                 msg = 'DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
                                     % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
+                self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
             if  (curr_price >= buy_trig):
                 buysell = 1
             else:
                 buysell = -1
-            self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
             msg = 'DT to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
                                     % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
+            self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
             self.status_notifier(msg)
             save_status = True
         if save_status: 

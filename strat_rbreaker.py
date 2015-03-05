@@ -8,7 +8,7 @@ import order as order
 import agent
  
 class RBreakerTrader(Strategy):
-    def __init__(self, name, underliers, agent = None, trade_unit = [], ratios = [], min_rng = [], stop_loss = 0, trail_profit = 0):
+    def __init__(self, name, underliers, agent = None, trade_unit = [], ratios = [], min_rng = [], trail_loss = 0.0):
         Strategy.__init__(name, underliers, trade_unit, agent)
         self.data_func = []   
         num_assets = len(underliers)
@@ -32,8 +32,7 @@ class RBreakerTrader(Strategy):
         self.start_min_id = 1505
         self.end_min_id = 2055
         self.freq = 1
-        self.stop_loss = stop_loss
-        self.trail_profit = trail_profit
+        self.trail_loss = trail_loss
 
     def initialize(self):
         self.load_state()
@@ -55,7 +54,7 @@ class RBreakerTrader(Strategy):
     def save_local_variables(self, file_writer):
         for idx, underlier in enumerate(self.underliers):
 			inst = underlier[0]
-			row = ['NumTrade', str(inst), self.num_daytrades[idx][0],self.num_daytrades[idx][1]]
+			row = ['NumTrade', str(inst), self.num_entries[idx], self.num_exits[idx]]
 			file_writer.writerow(row)
 		return
     
@@ -64,7 +63,8 @@ class RBreakerTrader(Strategy):
 			inst = str(row[1])
 			idx = self.get_index([inst])
 			if idx >=0:
-				self.num_daytrades[idx] = (int(row[2]), int(row[3])) 
+				self.num_entries[idx] = int(row[2])
+                self.num_exits[idx] =int(row[3]) 
         return
 		
     def run_min(self, inst):
@@ -78,31 +78,39 @@ class RBreakerTrader(Strategy):
             return
         num_pos = len(self.positions[idx])
         curr_pos = None
+        curr_min = int(min_id/100)*60+ min_id % 100
+        if (curr_min % self.freq != 0) or (min_id < self.start_min_id):
+            return
+        inst_obj = self.agent.instruments[inst]
+        last_tick_id = inst_obj.last_tick_id - self.daily_close_buffer
+        tick_base = inst_obj.tick_base
+        dhigh = self.cur_day[inst].high
+        dlow  = self.cur_day[inst].low
+        curr_price = (inst_obj.ask_price1 + inst_obj.bid_price1)/2.0
+        
+        if curr_price < 0.001 or curr_price > 1000000:
+            self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bid_price1,  inst_obj.ask_price1))
+            return
+         
         if num_pos > 1:
             self.logger.warning('something wrong with position management - submitted trade is empty but trade position is more than 1')
             return
         elif num_pos == 1:
             curr_pos = self.positions[idx][0]
-            
-        curr_min = int(min_id/100)*60+ min_id % 100
-        if (curr_min % self.freq != 0) or (min_id < self.start_min_id):
-            return
-        inst_obj = self.agent.instruments[inst]
-		last_tick_id = inst_obj.last_tick_id - self.daily_close_buffer
-		tick_base = inst_obj.tick_base
-        dhigh = self.cur_day[inst].high
-        dlow  = self.cur_day[inst].low
-        curr_price = (inst_obj.ask_price1 + inst_obj.bid_price1)/2.0
-        if curr_price < 0.001 or curr_price > 1000000:
-            self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bid_price1,  inst_obj.ask_price1))
-            return 
+            if self.trail_loss > 0:
+                if curr_pos.trail_loss(curr_price, self.trail_loss*curr_price):
+                    msg = 'R-Breaker to close position after hitting trail loss for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s, max = %s, min = %s' \
+                                    % (inst, buysell, self.trade_unit[idx], min_id, curr_price, curr_pos.entry_target, curr_pos.exit_target)
+                    self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)
+                    self.status_notifier(msg)
+                    return 
 		buysell = 0 if curr_pos == None else curr_pos.direction
         if ((min_id >= last_tick_id) or self.check_price_limit(inst, curr_price, 5)): 
             if (curr_pos != None):
-                self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)
-                save_status = True
                 msg = 'R-Breaker to close position before EOD or hitting price limit for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s' \
                                     % (inst, buysell, self.trade_unit[idx], min_id, curr_price)
+                self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)
+                save_status = True
                 self.status_notifier(msg)
             return          
         if ((curr_price >= self.bbreak[idx]) or (curr_price <= self.sbreak[idx])) and (buysell == 0):
@@ -110,28 +118,28 @@ class RBreakerTrader(Strategy):
                 buysell = 1
             else:
                 buysell = -1
+            msg = 'R-Breaker to open position for inst = %s, bbreak=%s, sbreak=%s, curr_price= %s, direction=%s, volume=%s' \
+                    % (inst, self.bbreak[idx], self.sbreak[idx], curr_price, buysell, self.trade_unit[idx])
+			self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
+            save_status = True
+            self.status_notifier(msg)
+        elif ((dhigh< self.bbreak[idx]) and (dhigh >= self.ssetup[idx]) and (curr_price < self.senter[idx]) and (buysell >=0)) or \
+                 ((dlow > self.sbreak[idx]) and (dlow  <= self.bsetup[idx]) and (curr_price > self.benter[idx]) and (buysell <=0)):
+            if curr_pos != None:
+				self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)
+				save_status = True
+				msg = 'R-Breaker to close position for inst = %s, direction=%s, volume=%s, current min_id = %s' \
+                                    % (inst, buysell, self.trade_unit[idx], min_id)
+				self.status_notifier(msg)
+            if  (curr_price < self.senter[idx]):
+                buysell = -1
+            else:
+                buysell = 1
             self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
             save_status = True
             msg = 'R-Breaker to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
-                    % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
-			self.status_notifier(msg)
-            elif ((dhigh< self.bbreak[idx]) and (dhigh >= self.ssetup[idx]) and (curr_price < self.senter[idx]) and (buysell >=0)) or \
-                 ((dlow > self.sbreak[idx]) and (dlow  <= self.bsetup[idx]) and (curr_price > self.benter[idx]) and (buysell <=0)):
-                if curr_pos != None:
-					self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)
-					save_status = True
-					msg = 'R-Breaker to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \
-                                    % (inst, buysell, self.trade_unit[idx], tick_id)
-					self.status_notifier(msg)
-                if  (curr_price < self.senter[idx]):
-                    buysell = -1
-                else:
-                    buysell = 1
-                self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
-                save_status = True
-                msg = 'R-Breaker to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
                                     % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
-				self.status_notifier(msg)
+			self.status_notifier(msg)
         return 
         
     def update_trade_unit(self):
