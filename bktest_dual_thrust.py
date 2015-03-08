@@ -55,7 +55,11 @@ def dual_thrust_sim( ddf, mdf, config):
     multiplier = config['m']
     tcost = config['trans_cost']
     unit = config['unit']
-    if win == 0:
+    SL = config['stoploss']
+    min_rng = config['min_range']
+    if win == -1:
+        tr = (ddf.high - ddf.low).shift(1)
+    elif win == 0:
         tr = pd.concat([(pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.close, 2))*multiplier, 
                         (pd.rolling_max(ddf.close, 2) - pd.rolling_min(ddf.low, 2))*multiplier,
                         ddf.high - ddf.close, 
@@ -96,8 +100,8 @@ def dual_thrust_sim( ddf, mdf, config):
         if (d_open <= 0):
             continue
         #prev_d = d
-        buytrig  = d_open + dslice.TR * k
-        selltrig = d_open - dslice.TR * k
+        buytrig  = d_open + max(min_rng, dslice.TR * k)
+        selltrig = d_open - max(min_rng, dslice.TR * k)
         
         if (min_id >= config['exit_min']):
             if (pos != 0) and (close_daily or (d == end_d)):
@@ -109,14 +113,14 @@ def dual_thrust_sim( ddf, mdf, config):
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
         else:
-#             if (pos!=0) and (SL>0) and (curr_pos[0].entry_price-mslice.close)*misc.sign(pos)>SL*dslice.ATR:
-#                     curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
-#                     tradeid += 1
-#                     curr_pos[0].exit_tradeid = tradeid
-#                     closed_trades.append(curr_pos[0])
-#                     curr_pos = []
-#                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
-#                     pos = 0
+            if (pos!=0) and (SL>0) and (curr_pos[0].trail_loss(mslice.close, SL*mslice.close)):
+                curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
+                tradeid += 1
+                curr_pos[0].exit_tradeid = tradeid
+                closed_trades.append(curr_pos[0])
+                curr_pos = []
+                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
+                pos = 0
             if (mslice.close >= buytrig) and (pos <=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close+offset, dd)
@@ -178,9 +182,11 @@ def run_sim(start_date, end_date, daily_close = False):
               'trans_cost': 0.0,
               'close_daily': daily_close, 
               'unit': 1,
+              'stoploss': 0.015,
+              'min_range': 0.0,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.5, 0, 0.4), (0.7, 0, 0.4), (0.5, 0, 0.6), (0.7, 0, 0.6), (0.7, 1, 0.5), (0.5, 2, 0.5), (0.3, 2, 0.5)]
+    scenarios = [(0.3, -1, 0), (0.5, -1, 0), (0.7, 0, 0.5), (0.5, 0, 0.6), (0.7, 0, 0.6), (0.3, 2, 0), (0.5, 2, 0)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
         config['nearby'] = 1

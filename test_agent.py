@@ -9,8 +9,9 @@ import logging
 #import data_handler
 import strategy
 import strat_dual_thrust as strat_dt
+import strat_rbreaker as strat_rb
 import strat_turtle
-import order
+#import order
 from misc import *
 from base import *
 
@@ -88,7 +89,7 @@ def prod_test(tday, name='prod_test'):
     units_dt = [ins_setup[inst][2] for inst in insts]
     under_dt = [[inst] for inst in insts]
     vol_dt = [[1] for inst in insts]
-    ratios = [(ins_setup[inst][1], ins_setup[inst][1]) for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][1]] for inst in insts]
     lookbacks = [ins_setup[inst][0] for inst in insts]
     daily_close = [ins_setup[inst][3] for inst in insts]
 
@@ -101,6 +102,40 @@ def prod_test(tday, name='prod_test'):
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
                  'daily_data_days':3, \
+                 'min_data_days':1 }
+    #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
+    all_insts = ins_setup.keys()
+    myagent, my_trader = emulator.create_agent_with_mocktrader(agent_name, all_insts, strat_cfg, tday)
+    fut_api.make_user(myagent,user_cfg)
+    myagent.resume()
+    try:
+        while 1: time.sleep(1)
+    except KeyboardInterrupt:
+        myagent.mdapis = [] 
+        myagent.trader = None    
+
+def rbreaker_test(tday, name='rbreaker_test'):
+    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    #trader_cfg = TEST_TRADER
+    user_cfg = PROD_USER1
+    agent_name = name
+    ins_setup = {'IF1503': [[0.35, 0.07, 0.25], 1,  30],
+                'ru1505':  [[0.35, 0.07, 0.25], 1,  40],
+                'rb1505':  [[0.35, 0.07, 0.25], 10, 40]}
+    insts = ins_setup.keys()
+    units_rb = [ins_setup[inst][1] for inst in insts]
+    under_rb = [[inst] for inst in insts]
+    vol_rb = [[1] for inst in insts]
+    ratios = [ins_setup[inst][0] for inst in insts]
+    min_rng = [ins_setup[inst][2] for inst in insts]
+    stop_loss = 0.0
+    rb_strat = strat_rb.RBreakerTrader('RBreaker', under_rb, vol_rb, trade_unit = units_rb,
+                                 ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 1, 
+                                 agent = None, email_notify = ['harvey_wwu@hotmail.com'])
+    strategies = [rb_strat]
+    strat_cfg = {'strategies': strategies, \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':1, \
                  'min_data_days':1 }
     #myagent = create_agent(agent_name, user_cfg, trader_cfg, insts, strat_cfg)
     all_insts = ins_setup.keys()
@@ -168,7 +203,7 @@ def lts_test(tday, name='lts_test'):
 
         
 if __name__=="__main__":
-    prod_test(datetime.date(2015,3,4), 'prod_test')
+    prod_test(datetime.date(2015,3,6), 'prod_test')
 #     args = sys.argv[1:]
 #     if len(args) < 2:
 #         name= 'test_trade'

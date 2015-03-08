@@ -33,11 +33,8 @@ class TradePos(object):
         self.profit = 0.0
     
     def trail_loss(self, curr_price, margin):
-        self.entry_target = max(self.entry_target, curr_price)
-        self.exit_target  = min(self.exit_target, curr_price)
-        if (self.direction > 0) and (self.entry_target - margin >= curr_price):
-            return True
-        elif (self.direction < 0) and (self.exit_target + margin <= curr_price):
+        self.exit_target = max(self.exit_target * self.direction, curr_price * self.direction) * self.direction
+        if (self.direction * (self.exit_target - curr_price) >= margin):
             return True
         else:
             return False
@@ -101,8 +98,8 @@ class Strategy(object):
             self.trade_unit = trade_unit
         else:
             self.trade_unit = [1] * num_assets
-        self.positions  = [[]] *  num_assets
-        self.submitted_pos = [[]] * num_assets
+        self.positions  = [[] for _ in self.underliers]
+        self.submitted_pos = [[] for _ in self.underliers]
         self.data_func = []
         self.agent = agent
         self.folder = ''
@@ -113,6 +110,9 @@ class Strategy(object):
         self.num_tick = 0
         self.num_entries = [0] * num_assets
         self.num_exits   = [0] * num_assets
+        self.daily_close_buffer = 3000
+        self.close_tday = [False] * num_assets
+        self.order_type = OPT_LIMIT_ORDER
         
     def reset(self):
         if self.agent != None:
@@ -186,22 +186,25 @@ class Strategy(object):
                     save_status = True
         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
+        if save_status:
+            self.save_state()
         return save_status
         
     def resume(self):
         pass
     
     def add_submitted_pos(self, etrade):
-        is_added = False
-        for under, sub_pos in zip(self.underliers, self.submitted_pos):
+        for idx, under in enumerate(self.underliers):
             if set(under) == set(etrade.instIDs):
-                sub_pos.append(etrade)
-                is_added = True
-                break
-        return is_added
+                self.submitted_pos[idx].append(etrade)
+                return True
+        return False
     
     def day_finalize(self):    
         self.update_trade_unit()
+        self.load_state()
+        for idx, under in enumerate(self.underliers):
+            self.update_positions(idx)
         self.save_state()
         self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
         self.num_entries = [0] * len(self.underliers)
@@ -214,7 +217,7 @@ class Strategy(object):
     def run_min(self, inst):
         pass
     
-    def liquidate(self):
+    def sppedup(self, etrade):
         pass
     
     def open_tradepos(self, idx, direction, price):
@@ -328,8 +331,8 @@ class Strategy(object):
                             is_added = True
                             break
                     if is_added == False:
-                        self.underliers.append(insts)
-                        positions.append([tradepos])
+                        #self.underliers.append(insts)
+                        #positions.append([tradepos])
                         self.logger.warning('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
                 else:
                     self.load_local_variables(row)

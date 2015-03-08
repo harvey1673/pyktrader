@@ -1,5 +1,5 @@
 #-*- coding:utf-8 -*-
-from base import *
+#from base import *
 from misc import *
 from strategy import *
  
@@ -7,9 +7,8 @@ class DTTrader(Strategy):
     def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.lookbacks = lookbacks
-        self.data_func = []   
         numAssets = len(underliers)
-        self.ratios = [(0.7,0.7)] * numAssets
+        self.ratios = [[0.7,0.7]] * numAssets
         if len(ratios) > 1:
             self.ratio = ratios
         elif len(ratios) == 1: 
@@ -18,10 +17,10 @@ class DTTrader(Strategy):
             self.lookbacks = lookbacks
         else: 
             self.lookbacks = [0] * numAssets
-        self.order_type = OPT_LIMIT_ORDER
-        self.daily_close_buffer = 3000
         self.tday_open = [0.0] * numAssets
         self.cur_rng = [0.0] * numAssets
+        self.order_type = OPT_LIMIT_ORDER
+        self.daily_close_buffer = 3000
         self.close_tday = [daily_close] * numAssets
 
     def initialize(self):
@@ -60,9 +59,7 @@ class DTTrader(Strategy):
         if idx < 0:
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
             return
-        save_status = self.update_positions(idx)
-        if len(self.submitted_pos[idx]) > 0:
-            return
+        self.update_positions(idx)
         num_pos = len(self.positions[idx])
         buysell = 0
         if num_pos > 1:
@@ -83,12 +80,18 @@ class DTTrader(Strategy):
             return 
         if (tick_id >= last_tick_id):
             if (buysell!=0) and (self.close_tday[idx]):
-                msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \
+                if (len(self.submitted_pos[idx]) <= 0):
+                    msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \
                                     % (inst, buysell, self.trade_unit[idx], tick_id)
-                self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
-                self.status_notifier(msg)
-                self.save_state()
-                return
+                    self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
+                    self.status_notifier(msg)
+                    self.save_state()
+                else:
+                    for etrade in self.submitted_pos[idx]:
+                        self.speedup(etrade)
+            return
+        if len(self.submitted_pos[idx]) > 0:
+            return
         if ((curr_price >= buy_trig) and (buysell <=0)) or ((curr_price <= sell_trig) and (buysell >=0)):
             if buysell!=0:
                 msg = 'DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
@@ -103,8 +106,6 @@ class DTTrader(Strategy):
                                     % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
             self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
             self.status_notifier(msg)
-            save_status = True
-        if save_status: 
             self.save_state()
         return 
         

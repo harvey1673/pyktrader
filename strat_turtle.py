@@ -2,118 +2,109 @@
 from base import *
 from misc import *
 from strategy import *
-import pandas as pd
 import data_handler
-import order as order
  
 class TurtleTrader(Strategy):
-    def __init__(self, name, underliers,  trade_unit = [], agent = None, email_notify = None):
+    def __init__(self, name, underliers,  volumes, trade_unit = [], agent = None, email_notify = None, datafreq = 'd', freq = 1, windows = [10, 20]):
         Strategy.__init__(self, name, underliers, trade_unit, agent, email_notify)
         self.data_func = [ 
-                ('d', BaseObject(name = 'ATR_20', sfunc=fcustom(data_handler.ATR, n=20), rfunc=fcustom(data_handler.atr, n=20))), \
-                ('d', BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=10), rfunc=fcustom(data_handler.donch_l, n=10))),\
-                ('d', BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=10), rfunc=fcustom(data_handler.donch_h, n=10))),\
-                ('d', BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=20), rfunc=fcustom(data_handler.donch_l, n=20))),\
-                ('d', BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=20), rfunc=fcustom(data_handler.donch_h, n=20))),\
-                #('d', BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=55), rfunc=fcustom(data_handler.donch_l, n=55))),\
-                #('d', BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=55), rfunc=fcustom(data_handler.donch_h, n=55))),\
+                (datafreq, BaseObject(name = 'ATR', sfunc=fcustom(data_handler.ATR, n=windows[1]), rfunc=fcustom(data_handler.atr, n=windows[1]))), \
+                (datafreq, BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=windows[0]), rfunc=fcustom(data_handler.donch_l, n=windows[0]))),\
+                (datafreq, BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=windows[0]), rfunc=fcustom(data_handler.donch_h, n=windows[0]))),\
+                (datafreq, BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=windows[1]), rfunc=fcustom(data_handler.donch_l, n=windows[1]))),\
+                (datafreq, BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=windows[1]), rfunc=fcustom(data_handler.donch_h, n=windows[1]))),\
+                #(freq, BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=windows[2]), rfunc=fcustom(data_handler.donch_l, n=windows[2]))),\
+                #(freq, BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=windows[2]), rfunc=fcustom(data_handler.donch_h, n=windows[2]))),\
                 ]    
-        self.capital = 100000 
-        self.pos_ratio = 0.01
-        self.stop_loss = 2.0
-        self.order_type = OPT_LIMIT_ORDER
-        self.trade_unit = trade_unit
+        self.curr_atr  = [0.0] * len(underliers)
+        self.channels = windows
+        self.trail_loss = 2.0
+        self.freq = freq
     
-    def run_tick(self, ctick):
-        pass
-        
+    def initialize(self):
+        self.load_state()
+        atr_str = 'ATR_' + str(self.channels[1])
+        for idx, underlier in enumerate(self.underliers):
+            inst = underlier[0]
+            df = self.agent.day_data[inst]
+            if len(self.positions[idx]) == 0:
+                self.curr_atr[idx] = df.ix[-1, atr_str]
+        pass       
+
+    def save_local_variables(self, file_writer):
+        for idx, underlier in enumerate(self.underliers):
+            inst = underlier[0]
+            row = ['ATR', str(inst), self.curr_atr[idx]]
+            file_writer.writerow(row)
+        return
+    
+    def load_local_variables(self, row):
+        if row[0] == 'ATR':
+            inst = str(row[1])
+            idx = self.get_index([inst])
+            if idx >=0:
+                self.curr_atr[idx] = float(row[2])
+        return
+            
     def run_min(self, inst):
-        #print "min switched, running in strat turtle inst = %s tick_id = %s", inst, self.agent.tick_id
+        min_id = self.agent.cur_min[inst]['min_id']
+        curr_min = int(min_id/100)*60+ min_id % 100
+        if (curr_min % self.freq != 0):
+            return        
+        bb_str = 'DONCH_H' + str(self.channels[1])
+        sb_str = 'DONCH_L' + str(self.channels[1])
+        bs_str = 'DONCH_H' + str(self.channels[0])
+        ss_str = 'DONCH_L' + str(self.channels[0])
         df = self.agent.day_data[inst]
-        price_unit = self.agent.instruments[inst].multiple
-        cur_atr = df.ix[-1,'ATR_20']
-        hh = [df.ix[-1,'DONCH_H20'],df.ix[-1,'DONCH_H10']]
-        ll  = [df.ix[-1,'DONCH_L20'],df.ix[-1,'DONCH_L10']]
+        inst_obj = self.agent.instruments[inst]
+        tick_base = inst_obj.tick_base
+        
+        hh = [df.ix[-1, bb_str],df.ix[-1,bs_str]]
+        ll  = [df.ix[-1,sb_str],df.ix[-1,ss_str]]
         idx = self.get_index([inst])
         if idx < 0:
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
             return 
-        save_status = self.update_positions(idx)
-        inst_obj = self.agent.instruments[inst]
-        cur_price = inst_obj.price
-        if cur_price < 0.01 or cur_price > 100000:
+        self.update_positions(idx)
+        curr_price = (inst_obj.ask_price1 + inst_obj.bid_price1)/2.0
+        if curr_price < 0.01 or curr_price > 100000:
             self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bidPrice1,  inst_obj.askPrice1))
             return 
-        if len(self.submitted_pos[idx]) == 0:
-            if len(self.positions[idx]) == 0: 
-                buysell = 0
-                if (cur_price > hh[0]):
-                    buysell = 1
-                elif (cur_price < ll[0]):
-                    buysell = -1                 
-                if buysell !=0:
-                    valid_time = self.agent.tick_id + 600
-                    etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                           [self.order_type], cur_price, [0],  \
-                                           valid_time, self.name, self.agent.name, price_unit, [price_unit] )
-                    tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        cur_price, cur_price, price_unit)
-                    tradepos.entry_tradeid = etrade.id
-                    self.submitted_pos[idx].append(etrade)
-                    self.positions[idx].append(tradepos)
-                    save_status = True
-                    self.logger.info('strat %s open a new position on %s, cur_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing, stat status saved' % 
-                                     (self.name, inst, cur_price, hh[0], ll[0], buysell, self.trade_unit[idx][0], etrade.id))
-                    if self.email_notify != None:
-                        content = 'strat %s open a new position on %s, cur_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing, stat status saved' % \
-                                    (self.name, inst, cur_price, hh[0], ll[0], buysell, self.trade_unit[idx][0], etrade.id)
-                        send_mail(EMAIL_HOTMAIL, self.email_notify, 'Turtle trade signal', content)
-                    self.agent.submit_trade(etrade)
-            else:
-                buysell = self.positions[idx][0].direction
-                units = len(self.positions[idx])
-                for tradepos in reversed(self.positions[idx]):
-                    if (cur_price < ll[1] and buysell == 1) or (cur_price > hh[1] and buysell == -1) \
-                            or tradepos.check_SL(cur_price, self.stop_loss*cur_atr):
-                        valid_time = self.agent.tick_id + 600
-                        etrade = order.ETrade( [inst], [-self.trade_unit[idx][0]*buysell], \
-                                               [self.order_type], cur_price, [0], \
-                                               valid_time, self.name, self.agent.name, price_unit, [price_unit] )
-                        tradepos.exit_tradeid = etrade.id
-                        save_status = True
-                        self.logger.info('strat %s close a position on %s after a reverse breakout, cur_price=%s, chanhigh=%s, exit=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
-                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.stoploss(self.stop_loss*cur_atr), -buysell, self.trade_unit[idx][0], etrade.id))
-                        if self.email_notify != None:
-                            content = 'strat %s close a position on %s after a reverse breakout, cur_price=%s, chanhigh=%s, exit=%s, chanlow=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % \
-                                     (self.name, inst, cur_price, hh[1], ll[1], tradepos.stoploss(self.stop_loss*cur_atr), -buysell, self.trade_unit[idx][0], etrade.id)
-                            send_mail(EMAIL_HOTMAIL, self.email_notify, 'Turtle trade signal', content) 
-                        self.submitted_pos[idx].append(etrade)
-                        self.agent.submit_trade(etrade)
-                        if save_status:
-                            self.save_state()
-                        return
-                if  units < 4 and (cur_price - self.positions[idx][-1].entry_price)*buysell >= cur_atr/2.0:
-                    for pos in self.positions[idx]:
-                        pos.entry_target = cur_price
-                    valid_time = self.agent.tick_id + 600
-                    etrade = order.ETrade( [inst], [self.trade_unit[idx][0]*buysell], \
-                                           [self.order_type], cur_price, [0],  \
-                                           valid_time, self.name, self.agent.name, price_unit, [price_unit] )
-                    tradepos = TradePos([inst], self.trade_unit[idx], buysell, \
-                                        cur_price, cur_price, price_unit)
-                    tradepos.entry_tradeid = etrade.id
-                    self.submitted_pos[idx].append(etrade)
-                    self.positions[idx].append(tradepos)
-                    save_status = True
-                    self.logger.info('strat %s build a new position on top on %s, curr_price=%s, last entry=%s, cur_atr=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % 
-                                 (self.name, inst, cur_price, self.positions[idx][-1].entry_price, cur_atr, buysell, self.trade_unit[idx][0], etrade.id))
-                    if self.email_notify != None:
-                        content = 'strat %s build a new position on top on %s, curr_price=%s, last entry=%s, cur_atr=%s, direction=%s, vol=%s, tradeid=%s is sent for processing' % \
-                                 (self.name, inst, cur_price, self.positions[idx][-1].entry_price, cur_atr, buysell, self.trade_unit[idx][0], etrade.id)
-                        send_mail(EMAIL_HOTMAIL, self.email_notify, 'Turtle trade signal', content)                     
-                    self.agent.submit_trade(etrade)                 
-        if save_status:
-            self.save_state()
+        if len(self.submitted_pos[idx]) > 0:
+            return
+        if len(self.positions[idx]) == 0: 
+            buysell = 0
+            if (curr_price > hh[0]):
+                buysell = 1
+            elif (curr_price < ll[0]):
+                buysell = -1                 
+            if buysell !=0:
+                msg = 'Turtle to open a new position for inst = %s, curr_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s is sent for processing' \
+                        % (inst, curr_price, hh[0], ll[0], buysell, self.trade_unit[idx])
+                self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
+                self.status_notifier(msg)
+                self.save_state()
+        else:
+            buysell = self.positions[idx][0].direction
+            units = len(self.positions[idx])
+            for tradepos in reversed(self.positions[idx]):
+                if (curr_price < ll[1] and buysell == 1) or (curr_price > hh[1] and buysell == -1) \
+                        or ((tradepos.entry_price-curr_price)*buysell >= self.trail_loss*self.curr_atr[idx]):
+                    msg = 'Turtle to close a position for inst = %s, curr_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s , target=%s, ATR=%s' \
+                                % (inst, curr_price, hh[1], ll[1], buysell, self.trade_unit[idx], tradepos.entry_target, self.curr_atr[idx])
+                    self.close_tradepos(idx, tradepos, curr_price - buysell * self.num_tick * tick_base)
+                    self.status_notifier(msg)
+                    self.save_state()
+                    return
+            if  units < 4 and (curr_price - self.positions[idx][-1].entry_price)*buysell >= self.curr_atr[idx]/2.0:
+                last_entry = self.positions[idx][-1].entry_price
+                for pos in self.positions[idx]:
+                    pos.entry_target = curr_price                
+                msg = 'Turtle to add a new position after 0.5 ATR increase for inst = %s, curr_price=%s, last_entry=%s, direction=%s, vol=%s is sent for processing' \
+                        % (inst, curr_price, last_entry, buysell, self.trade_unit[idx])
+                self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
+                self.status_notifier(msg)
+                self.save_state()          
         return
     
     def update_trade_unit(self):

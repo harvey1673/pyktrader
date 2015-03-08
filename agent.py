@@ -801,6 +801,8 @@ class Agent(AbsAgent):
             初始化，如保证金率，账户资金等
         '''
         ##必须先把持仓初始化成配置值或者0
+        if not self.initialized:
+            self.resume()
         for inst in self.instruments:
             self.instruments[inst].get_margin_rate()
         for strat in self.strategies:
@@ -813,7 +815,7 @@ class Agent(AbsAgent):
         self.qry_commands.append(self.fetch_trade)
         self.check_qry_commands()
         self.calc_margin()
-        self.initialized = True #避免因为断开后自动重连造成的重复访问
+        #避免因为断开后自动重连造成的重复访问
 
     def register_data_func(self, freq, fobj):
         if 'd' in freq:
@@ -889,6 +891,8 @@ class Agent(AbsAgent):
     def resume(self):
         #self.fetch_order()   
         #self.fetch_trade()     
+        if self.initialized:
+            return 
         self.proc_lock = True
         #time.sleep(1)
         #self.get_eod_positions()
@@ -908,6 +912,7 @@ class Agent(AbsAgent):
             orderdict = etrade.order_dict
             for inst in orderdict:
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
+            etrade.update()
         
         for strat in self.strategies:
             strat.initialize()
@@ -919,6 +924,7 @@ class Agent(AbsAgent):
             self.positions[inst].re_calc()        
         self.calc_margin()
         self.proc_lock = False
+        self.initialized = True
         
     def check_qry_commands(self):
         #必然是在rsp中要发出另一个查询
