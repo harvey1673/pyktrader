@@ -275,13 +275,16 @@ class Order(object):
         logging.info(u'释放平仓锁,order=%s' % self.__str__())
         self.close_lock = False
 
-    def __str__(self):
+    def __unicode__(self):
         return u'Order_A: 合约=%s,方向=%s,目标数=%s,开仓数=%s,状态=%s' % (self.instrument.name,
                 u'多' if self.direction==ORDER_BUY else u'空',
                 self.volume,
                 self.filled_volume,
                 self.status,
             )
+        
+    def __str__(self):
+        return unicode(self).encode('utf-8')
 
         ####头寸
 class Position(object):
@@ -385,4 +388,7 @@ class Position(object):
         self.orders.append(order)
 
     def __str__(self):
-        return '%s' % (self.instrument.name)
+        return unicode(self).encode('utf-8')
+    
+    def __unicode__(self):
+        return '%s' % (self.instrument.name) 
