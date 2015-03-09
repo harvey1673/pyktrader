@@ -20,7 +20,7 @@ class DTTrader(Strategy):
         self.tday_open = [0.0] * numAssets
         self.cur_rng = [0.0] * numAssets
         self.order_type = OPT_LIMIT_ORDER
-        self.daily_close_buffer = 3000
+        self.daily_close_buffer = 5000
         self.close_tday = [daily_close] * numAssets
 
     def initialize(self):
@@ -51,6 +51,10 @@ class DTTrader(Strategy):
                 self.cur_rng[idx] = float(row[2])
         return
         
+    def run_min(self, inst):
+        #print self.agent.tick_id, self.agent.cur_min[inst]['min_id']
+        return 
+        
     def run_tick(self, ctick):
         inst = ctick.instID
         tick_id = ctick.tick_id
@@ -59,18 +63,23 @@ class DTTrader(Strategy):
         if idx < 0:
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
             return
-        self.update_positions(idx)
+        last_tick_id = self.agent.instruments[inst].last_tick_id - self.daily_close_buffer
+        if self.update_positions(idx):
+            self.save_state()
         num_pos = len(self.positions[idx])
         buysell = 0
         if num_pos > 1:
-            self.logger.warning('something wrong with position management - submitted trade is empty but trade position is more than 1')
+            if len(self.submitted_pos[idx]) == 0:
+                self.logger.warning('something wrong with position management - submitted trade is empty but trade position is more than 1')
+            elif (tick_id >= last_tick_id):
+                for etrade in self.submitted_pos[idx]:
+                    self.speedup(etrade)                
             return
         elif num_pos == 1:
             buysell = self.positions[idx][0].direction
         if (tday_open <= 0.0) or (self.cur_rng[idx] <= 0):
             self.logger.warning("warning: open price =0.0 or range = 0.0 for inst=%s for stat = %s" % (inst, self.name))
             return
-        last_tick_id = self.agent.instruments[inst].last_tick_id - self.daily_close_buffer
         tick_base = self.agent.instruments[inst].tick_base
         buy_trig  = tday_open + self.ratios[idx][0] * self.cur_rng[idx]
         sell_trig = tday_open - self.ratios[idx][1] * self.cur_rng[idx]

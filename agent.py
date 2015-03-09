@@ -500,7 +500,7 @@ class CTPTraderRspMixin(object):
         if porder.OrderStatus in [ self.ApiStruct.OST_Canceled, self.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
             self.logger.info(u'撤单, 撤销开/平仓单')            
             sorder = BaseObject(instID = porder.InstrumentID,
-                                order_ref = int(porder.order_ref),
+                                order_ref = int(porder.OrderRef),
                                 order_sysid = porder.OrderSysID,
                                 order_status = porder.OrderStatus)
             self.agent.rtn_order(sorder)
@@ -1465,11 +1465,11 @@ class Agent(AbsAgent):
         
     def process_trade_list(self):
         Is_Set = False
-        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes) for etrade in self.etrades if etrade.status == order.ETradeStatus.StratConfirm ] 
+        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes, etrade.filled_price, etrade.filled_vol, etrade.valid_time) for etrade in self.etrades if etrade.status == order.ETradeStatus.StratConfirm ] 
         if len(confirmed)>0:
             Is_Set = True
             print confirmed
-            self.logger.info('%s trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
+            self.logger.info('(%s) trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
         self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.StratConfirm ]
         for exec_trade in self.etrades:
             if exec_trade.status == order.ETradeStatus.Pending:

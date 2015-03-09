@@ -113,6 +113,7 @@ class Strategy(object):
         self.daily_close_buffer = 3000
         self.close_tday = [False] * num_assets
         self.order_type = OPT_LIMIT_ORDER
+        self.locked = False
         
     def reset(self):
         if self.agent != None:
@@ -186,8 +187,6 @@ class Strategy(object):
                     save_status = True
         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
-        if save_status:
-            self.save_state()
         return save_status
         
     def resume(self):
@@ -202,7 +201,6 @@ class Strategy(object):
     
     def day_finalize(self):    
         self.update_trade_unit()
-        self.load_state()
         for idx, under in enumerate(self.underliers):
             self.update_positions(idx)
         self.save_state()
