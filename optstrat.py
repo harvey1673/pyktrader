@@ -49,12 +49,13 @@ class OptionStrategy(object):
         self.underliers = underliers
         self.main_cont = 0
         self.expiries = expiries
+		self.DFs = [1.0] * len(expiries)
         self.volgrids = dict([(expiry, None) for expiry in expiries])
-        self.accrual = 'CFFEX'
+		self.accrual = 'CFFEX'
         opt_dict = self.get_option_map(underliers, expiries, strikes)
         self.option_insts = dict([(inst, None) for inst in opt_dict.values()])
         self.option_map = pd.DataFrame(0, index = self.underliers + opt_dict.values(), 
-                                columns = ['underlier', 'cont_mth', 'otype', 'strike', 'multiple', 
+                                columns = ['underlier', 'cont_mth', 'otype', 'strike', 'multiple', 'df',
                                            'pv', 'delta', 'gamma', 'vega', 'theta',  
                                            'ppv', 'pdelta', 'pgamma', 'pvega', 'ptheta', 
                                            'pos', 'outlong', 'outshort', 'margin_long', 'margin_short'])
@@ -90,17 +91,26 @@ class OptionStrategy(object):
     
     def day_start(self):
         pass
-
+	
+	def get_fwd(self, idx):
+		return self.agent.instruments[self.underliers[idx]].price
+	
+	def get_DF(self, dtoday, dexp):
+		return np.exp(-self.irate * max(dexp - dtoday,0)/365.0)
+		
     def initialize(self):
         self.load_state()
         dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
         for idx, expiry in enumerate(self.expiries):
             dexp = datetime2xl(expiry)
+			self.DFs[idx] = self.get_DF(dtoday, dexp)
+			fwd = self.get_fwd(idx) 
             if self.spot_model:
-                spot = self.agent.instruments[self.underliers[0]].price
-                fwd = spot * np.exp(self.irate * max(dexp - dtoday,0)/365.0)
+				self.option_map.loc[self.underliers[0], 'delta'] = 1.0
+				self.option_map.loc[self.underliers[0], 'df'] = 1.0
             else:
-                fwd = self.agent.instruments[self.underliers[idx]].price
+				self.option_map.loc[self.underliers[idx], 'delta'] = self.DFs[idx]
+				self.option_map.loc[self.underliers[idx], 'df'] = self.DFs[idx]
             if self.volgrids[expiry] == None:
                 self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, 0.24, 0.0, 0.0, 0.0, 0.0, self.accrual)                
             self.volgrids[expiry].setFwd(fwd)
@@ -110,11 +120,9 @@ class OptionStrategy(object):
             cont_mth = expiry.year * 100 + expiry.month
             indices = self.option_map[(self.option_map.cont_mth == cont_mth) & (self.option_map.otype != 0)].index
             for inst in indices:
-                #if self.is_initialized == False:
                 strike = self.option_map.loc[inst].strike
                 otype  = self.option_map.loc[inst].otype
                 self.option_insts[inst] = self.pricer(dtoday, dexp, fwd, self.volgrids[expiry], strike, self.irate, otype)
-                #print self.option_insts[inst].price()
                 self.update_greeks(inst)
         self.update_pos_greeks()
         self.update_group_risk()
@@ -141,13 +149,8 @@ class OptionStrategy(object):
         gamma = self.option_insts[inst].gamma() * multiple
         vega  = self.option_insts[inst].vega() * multiple/100.0
         theta = self.option_insts[inst].theta() * multiple
-        factor = 1.0
-        if self.spot_model:
-            dtoday = self.option_insts[inst].dtoday_()
-            dexp =  self.option_insts[inst].dexp_()
-            irate = self.option_insts[inst].irate_()
-            factor = np.exp(irate*max(dexp-dtoday,0)/365.0)
-        opt_info = {'pv': pv, 'delta': delta*factor, 'gamma': gamma*factor*factor, 'vega': vega, 'theta': theta}
+        df = self.option_map.loc[inst, 'df']
+        opt_info = {'pv': pv, 'delta': delta/df, 'gamma': gamma/df/df, 'vega': vega, 'theta': theta}
         self.option_map.loc[inst, opt_info.keys()] = pd.Series(opt_info)
         return 
     
@@ -165,11 +168,7 @@ class OptionStrategy(object):
         if is_recalib:
             for idx, expiry in enumerate(self.expiries):
                 dexp = datetime2xl(expiry)
-                if self.spot_model:
-                    spot = self.agent.instruments[self.underliers[0]].price
-                    fwd = spot * np.exp(self.irate * max(dexp - dtoday,0)/365.0)
-                else:
-                    fwd = self.agent.instruments[self.underliers[idx]].price
+                fwd = self.get_fwd(idx)
                 self.volgrids[expiry].setFwd(fwd)
                 self.volgrids[expiry].setToday(dtoday)            
                 self.volgrids[expiry].initialize()                
@@ -314,6 +313,10 @@ class EquityOptStrat(OptionStrategy):
             map = mysqlaccess.get_stockopt_map(under, cont_mths, strikes)
             all_map.update(map)
         return all_map
+	
+	def get_fwd(self, idx):
+		spot = self.agent.instruments[self.underliers[0]].price
+		return spot*self.DFs[idx]
     
 class IndexFutOptStrat(OptionStrategy):
     def __init__(self, name, underliers, expiries, strikes, agent = None):
