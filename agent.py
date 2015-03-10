@@ -800,7 +800,6 @@ class Agent(AbsAgent):
         '''
             初始化，如保证金率，账户资金等
         '''
-        ##必须先把持仓初始化成配置值或者0
         if not self.initialized:
             self.resume()
         for inst in self.instruments:
@@ -923,8 +922,9 @@ class Agent(AbsAgent):
         for inst in self.positions:
             self.positions[inst].re_calc()        
         self.calc_margin()
-        self.proc_lock = False
         self.initialized = True
+        self.proc_lock = False
+        
         
     def check_qry_commands(self):
         #必然是在rsp中要发出另一个查询
@@ -1165,7 +1165,7 @@ class Agent(AbsAgent):
     
     def min_switch(self, inst):
         min_id = self.cur_min[inst]['min_id']
-        mins = int(min_id/100)*60+ min_id % 100
+        mins = int(min_id/100)*60 + min_id % 100 + 1
         df = self.min_data[inst][1]
         mysqlaccess.insert_min_data_to_df(df, self.cur_min[inst])
         for m in self.min_data_func:

@@ -74,17 +74,18 @@ def prod_test(tday, name='prod_test'):
     #trader_cfg = TEST_TRADER
     user_cfg = PROD_USER1
     agent_name = name
-    ins_setup = {'m1505':(1, 0.7, 8, False),
+    ins_setup = {'m1505':(0, 0.5, 8, False),
                 'RM505':(0, 0.5, 10, False),
                 'rb1505':(0,0.5, 10, False),
                 'y1505':(0, 0.5, 4, False), 
                 'l1505':(0, 0.5, 4, False),
-                'pp1505':(0,0.5,4, False),
-                'ru1505':(2, 0.5, 1, False),
-                'ag1506':(0, 0.7, 6, False),
+                'pp1505':(0,0.5, 4, False),
+                'ru1505':(0, 0.5, 1, False),
+                'ag1506':(0, 0.5, 6, False),
                 'au1506':(0, 0.5, 1, False),
-                'j1505':(0, 0.5, 2, False),
-                'al1504':(0, 0.9, 5, True)}
+                'j1505':(0, 0.5,  2, False),
+                'al1505':(0, 0.5, 5, False),
+                'IF1503':(0, 0.5, 1, True)}
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][2] for inst in insts]
     under_dt = [[inst] for inst in insts]
@@ -120,8 +121,12 @@ def rbreaker_test(tday, name='rbreaker_test'):
     user_cfg = PROD_USER1
     agent_name = name
     ins_setup = {'IF1503': [[0.35, 0.07, 0.25], 1,  30],
-                'ru1505':  [[0.35, 0.07, 0.25], 1,  40],
-                'rb1505':  [[0.35, 0.07, 0.25], 10, 40]}
+                'ru1505':  [[0.35, 0.07, 0.25], 1,  120],
+                'rb1505':  [[0.35, 0.07, 0.25], 10, 20],
+                'RM505' :  [[0.35, 0.07, 0.25], 8,  20],
+                'm1505' :  [[0.35, 0.07, 0.25], 8,  30],
+                'ag1506' : [[0.35, 0.07, 0.25], 8,  40],
+                'y1505' : [[0.35, 0.07, 0.25], 8,  60]}
     insts = ins_setup.keys()
     units_rb = [ins_setup[inst][1] for inst in insts]
     under_rb = [[inst] for inst in insts]

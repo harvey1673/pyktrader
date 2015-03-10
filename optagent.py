@@ -60,6 +60,16 @@ def test_main(tday, name='option_test'):
     myagent = fut_api.create_agent(agent_name, user_cfg, trader_cfg, all_insts, strat_cfg, tday)
     #fut_api.make_user(myagent,user_cfg)
     myagent.resume()
+#     myagent.tick_id = 2100000
+#     myagent.instruments['IF1503'].day_finalized = False
+#     ctick = agent.TickData(instID='IF1503', timestamp=datetime.datetime(2015,3,10,15,0,0), 
+#                            openInterest=10000, 
+#                            volume=10, price=3520, 
+#                            high=3570, low=3500, 
+#                            bidPrice1=3519.6, bidVol1=3, 
+#                            askPrice1=3520.4, askVol1=2,
+#                            up_limit = 3700, down_limit = 3300)
+#     myagent.RtnTick(ctick)
     try:
         while 1: time.sleep(1)
     except KeyboardInterrupt:
@@ -68,4 +78,4 @@ def test_main(tday, name='option_test'):
 
 
 if __name__=="__main__":
-    test_main(datetime.date(2015,3,4), 'option_test')
+    test_main(datetime.date(2015,3,11), 'option_test')

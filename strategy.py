@@ -60,7 +60,7 @@ class TradePos(object):
         self.is_closed = True
     
     def cancel_close(self):
-        self.exit_tradeid = None
+        self.exit_tradeid = 0
 
 def tradepos2dict(tradepos):
     trade = {}
@@ -110,8 +110,9 @@ class Strategy(object):
         self.num_tick = 0
         self.num_entries = [0] * num_assets
         self.num_exits   = [0] * num_assets
-        self.daily_close_buffer = 3000
+        self.daily_close_buffer = 5
         self.close_tday = [False] * num_assets
+        self.last_min_id = [2055] * num_assets
         self.order_type = OPT_LIMIT_ORDER
         self.locked = False
         
@@ -215,7 +216,8 @@ class Strategy(object):
     def run_min(self, inst):
         pass
     
-    def sppedup(self, etrade):
+    def speedup(self, etrade):
+        self.logger.info('need to speed up the trade = ' % etrade.id)
         pass
     
     def open_tradepos(self, idx, direction, price):
@@ -352,7 +354,4 @@ class Strategy(object):
             return True
         else:
             return False
-    
-    #def load_closed_pos(self):
-    #    logfile = self.folder + 'hist_tradepos.csv'
     
