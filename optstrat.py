@@ -62,9 +62,10 @@ class OptionStrategy(object):
         self.group_risk = None
         for inst in underliers:
             self.option_map.loc[inst, 'underlier'] = inst
+			self.option_map.loc[inst, 'df'] = 1.0
         for key in opt_dict:
             inst = opt_dict[key]
-            opt_info = {'underlier': key[0], 'cont_mth': key[1], 'otype': key[2], 'strike': key[3]}
+            opt_info = {'underlier': key[0], 'cont_mth': key[1], 'otype': key[2], 'strike': key[3], 'df':1.0}
             self.option_map.loc[inst, opt_info.keys()] = pd.Series(opt_info) 
         self.instIDs = self.underliers + self.option_insts.keys()
         self.irate = RISK_FREE_RATE
@@ -122,6 +123,8 @@ class OptionStrategy(object):
             for inst in indices:
                 strike = self.option_map.loc[inst].strike
                 otype  = self.option_map.loc[inst].otype
+				if not self.spot_model:
+					self.option_map.loc[inst, 'df'] = self.DFs[idx]
                 self.option_insts[inst] = self.pricer(dtoday, dexp, fwd, self.volgrids[expiry], strike, self.irate, otype)
                 self.update_greeks(inst)
         self.update_pos_greeks()
@@ -325,3 +328,12 @@ class IndexFutOptStrat(OptionStrategy):
         self.proxy_flag = {'delta': True, 'gamma': True, 'vega': True, 'theta': True} 
         self.spot_model = False
         self.rate_diff = 0.0 
+
+class CommodOptStrat(OptionStrategy):
+    def __init__(self, name, underliers, expiries, strikes, agent = None):
+        OptionStrategy.__init__(self, name, underliers, expiries, strikes, agent)
+		self.accrual = 'COM'
+        self.proxy_flag = {'delta': False, 'gamma': False, 'vega': True, 'theta': True} 
+        self.spot_model = False
+        self.rate_diff = 0.0
+        
