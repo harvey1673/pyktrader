@@ -216,6 +216,9 @@ class CTPTraderQryMixin(object):
         
     ###交易操作
     def send_order(self, iorder):
+        if not self.is_logged:
+            self.logger.warning('The trader is not logged, can not send the order!')
+            return False 
         if iorder.direction == ORDER_BUY:
             direction = self.ApiStruct.D_Buy
         else:
@@ -323,6 +326,7 @@ class CTPTraderRspMixin(object):
             self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
             print u'综合交易平台登陆失败，请检查网络或用户名/口令'
             self.is_logged = False
+            self.login()
             return
         self.is_logged = True
         self.logger.info(u'TD:trader login success')
@@ -1363,7 +1367,7 @@ class Agent(AbsAgent):
                 return 0
    
         # lock the trade processing to avoid position conflict
-        if not self.proc_lock:
+        if (not self.proc_lock) and (not self.trader.is_logged):
             self.proc_lock = True
             for strat in self.strategies:
                 if (ctick.instID in strat.instIDs):

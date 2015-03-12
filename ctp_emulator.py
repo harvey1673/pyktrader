@@ -23,6 +23,7 @@ class TraderMock(agent.CTPTraderQryMixin):
         self.session_id = '0'
         self.agent = myagent
         self.available = 1000000    #初始100W
+        self.is_logged = True
         # self.myspi = BaseObject(is_logged=True,confirm_settlement_info=self.confirm_settlement_info)
         
     def ReqOrderInsert(self, order, request_id):
