@@ -78,8 +78,8 @@ class OptionStrategy(object):
         self.proxy_flag = {'delta': False, 'gamma': True, 'vega': True, 'theta': True} 
         self.hedge_config = {'order_type': OPT_MARKET_ORDER, 'num_tick':1}
         self.spot_model = False
-        self.rate_diff = 0.0
         self.pricer = pyktlib.BlackPricer
+		self.last_updated = dict([(expiry, {'dtoday':0, 'fwd':0.0}) for expiry in expireis]) 
 
     def reset(self):
         if self.agent != None:
@@ -106,6 +106,8 @@ class OptionStrategy(object):
             dexp = datetime2xl(expiry)
             self.DFs[idx] = self.get_DF(dtoday, dexp)
             fwd = self.get_fwd(idx) 
+			self.last_updated[expiry]['fwd'] = fwd
+			self.last_updated[expiry]['dtoday'] = dtoday
             if self.spot_model:
                 self.option_map.loc[self.underliers[0], 'delta'] = 1.0
                 self.option_map.loc[self.underliers[0], 'df'] = 1.0
@@ -164,18 +166,21 @@ class OptionStrategy(object):
             pos_key = 'p' + key
             self.option_map[pos_key] = self.option_map[key] * self.option_map['pos']
         return 
-    
-    def risk_reval(self, is_recalib):
+		
+    def risk_reval(self, expiry, is_recalib=True):
         '''recalibrate vol surface per fwd move, get greeks update for instrument greeks'''
         dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
-        if is_recalib:
-            for idx, expiry in enumerate(self.expiries):
-                dexp = datetime2xl(expiry)
-                fwd = self.get_fwd(idx)
-                self.volgrids[expiry].setFwd(fwd)
-                self.volgrids[expiry].setToday(dtoday)            
-                self.volgrids[expiry].initialize()                
-        for inst in self.option_insts:
+		cont_mth = expiry.year * 100 + expiry.month
+        indices = self.option_map[(self.option_map.cont_mth == cont_mth) & (self.option_map.otype != 0)].index
+        dexp = datetime2xl(expiry)
+        fwd = self.get_fwd(idx)
+		if is_recalib:
+			self.last_updated[expiry]['fwd'] = fwd
+			self.last_updated[expiry]['dtoday'] = dtoday
+            self.volgrids[expiry].setFwd(fwd)
+            self.volgrids[expiry].setToday(dtoday)            
+            self.volgrids[expiry].initialize()                
+        for inst in indices:
             self.option_insts[inst].setFwd(fwd)
             self.option_insts[inst].setFwd(dtoday)
             self.update_greeks(inst)
@@ -335,5 +340,11 @@ class CommodOptStrat(OptionStrategy):
 		self.accrual = 'COM'
         self.proxy_flag = {'delta': False, 'gamma': False, 'vega': True, 'theta': True} 
         self.spot_model = False
-        self.rate_diff = 0.0
-        
+		
+class DCEOptArbStrat(CommodOptStrat):
+    def __init__(self, name, underliers, expiries, strikes, agent = None):
+        CommodOptStrat.__init__(self, name, underliers, expiries, strikes, agent)
+		self.pricer = pyktlib.AmericanFutPricer
+	
+	def run_tick(self, ctick):		
+        pass
