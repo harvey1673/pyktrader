@@ -217,7 +217,7 @@ class Strategy(object):
         pass
     
     def speedup(self, etrade):
-        self.logger.info('need to speed up the trade = ' % etrade.id)
+        self.logger.info('need to speed up the trade = %s' % etrade.id)
         pass
     
     def open_tradepos(self, idx, direction, price):

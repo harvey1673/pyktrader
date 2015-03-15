@@ -62,7 +62,7 @@ class OptionStrategy(object):
         self.group_risk = None
         for inst in underliers:
             self.option_map.loc[inst, 'underlier'] = inst
-			self.option_map.loc[inst, 'df'] = 1.0
+            self.option_map.loc[inst, 'df'] = 1.0
         for key in opt_dict:
             inst = opt_dict[key]
             opt_info = {'underlier': key[0], 'cont_mth': key[1], 'otype': key[2], 'strike': key[3], 'df':1.0}
@@ -79,7 +79,7 @@ class OptionStrategy(object):
         self.hedge_config = {'order_type': OPT_MARKET_ORDER, 'num_tick':1}
         self.spot_model = False
         self.pricer = pyktlib.BlackPricer
-		self.last_updated = dict([(expiry, {'dtoday':0, 'fwd':0.0}) for expiry in expireis]) 
+        self.last_updated = dict([(expiry, {'dtoday':0, 'fwd':0.0}) for expiry in expireis]) 
 
     def reset(self):
         if self.agent != None:
@@ -106,8 +106,8 @@ class OptionStrategy(object):
             dexp = datetime2xl(expiry)
             self.DFs[idx] = self.get_DF(dtoday, dexp)
             fwd = self.get_fwd(idx) 
-			self.last_updated[expiry]['fwd'] = fwd
-			self.last_updated[expiry]['dtoday'] = dtoday
+            self.last_updated[expiry]['fwd'] = fwd
+            self.last_updated[expiry]['dtoday'] = dtoday
             if self.spot_model:
                 self.option_map.loc[self.underliers[0], 'delta'] = 1.0
                 self.option_map.loc[self.underliers[0], 'df'] = 1.0
@@ -125,8 +125,8 @@ class OptionStrategy(object):
             for inst in indices:
                 strike = self.option_map.loc[inst].strike
                 otype  = self.option_map.loc[inst].otype
-				if not self.spot_model:
-					self.option_map.loc[inst, 'df'] = self.DFs[idx]
+                if not self.spot_model:
+                    self.option_map.loc[inst, 'df'] = self.DFs[idx]
                 self.option_insts[inst] = self.pricer(dtoday, dexp, fwd, self.volgrids[expiry], strike, self.irate, otype)
                 self.update_greeks(inst)
         self.update_pos_greeks()
@@ -166,17 +166,17 @@ class OptionStrategy(object):
             pos_key = 'p' + key
             self.option_map[pos_key] = self.option_map[key] * self.option_map['pos']
         return 
-		
+        
     def risk_reval(self, expiry, is_recalib=True):
         '''recalibrate vol surface per fwd move, get greeks update for instrument greeks'''
         dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
-		cont_mth = expiry.year * 100 + expiry.month
+        cont_mth = expiry.year * 100 + expiry.month
         indices = self.option_map[(self.option_map.cont_mth == cont_mth) & (self.option_map.otype != 0)].index
         dexp = datetime2xl(expiry)
         fwd = self.get_fwd(idx)
-		if is_recalib:
-			self.last_updated[expiry]['fwd'] = fwd
-			self.last_updated[expiry]['dtoday'] = dtoday
+        if is_recalib:
+            self.last_updated[expiry]['fwd'] = fwd
+            self.last_updated[expiry]['dtoday'] = dtoday
             self.volgrids[expiry].setFwd(fwd)
             self.volgrids[expiry].setToday(dtoday)            
             self.volgrids[expiry].initialize()                
@@ -199,6 +199,27 @@ class OptionStrategy(object):
                 return
         self.submitted_pos.append(etrade)
         return True
+    
+    def update_positions(self):
+#         save_status = False
+#         for etrade in self.submitted_pos:
+#             if etrade.status == order.ETradeStatus.Done:
+#                 for inst, fvol, fp in zip(etrade.instIDs, etrade.filled_vol, etrade.filled_price):
+#                     
+#                 if etrade.status != order.ETradeStatus.StratConfirm:
+#                     etrade.status = order.ETradeStatus.StratConfirm
+#                     save_status = True                    
+#                     self.logger.warning('the trade %s is done but not found in the strat=%s tradepos table' % (etrade.id, self.name))
+#             elif etrade.status == order.ETradeStatus.Cancelled:
+#                 if etrade.status != order.ETradeStatus.StratConfirm: 
+#                     print "WARNING:the trade %s is cancelled but not found in the strat=%s tradepos table, removing the trade" % (etrade.id, self.name)
+#                     self.logger.warning('the trade %s is cancelled but not found in the strat=%s tradepos table' % (etrade.id, self.name))
+#                     etrade.status = order.ETradeStatus.StratConfirm
+#                     save_status = True
+#         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
+#         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
+#         return save_status        
+        pass
 
     def day_finalize(self):    
         self.save_state()
@@ -337,14 +358,15 @@ class IndexFutOptStrat(OptionStrategy):
 class CommodOptStrat(OptionStrategy):
     def __init__(self, name, underliers, expiries, strikes, agent = None):
         OptionStrategy.__init__(self, name, underliers, expiries, strikes, agent)
-		self.accrual = 'COM'
+        self.accrual = 'COM'
         self.proxy_flag = {'delta': False, 'gamma': False, 'vega': True, 'theta': True} 
         self.spot_model = False
-		
-class DCEOptArbStrat(CommodOptStrat):
+        self.pricer = pyktlib.AmericanFutPricer  
+        
+class OptArbStrat(CommodOptStrat):
     def __init__(self, name, underliers, expiries, strikes, agent = None):
         CommodOptStrat.__init__(self, name, underliers, expiries, strikes, agent)
-		self.pricer = pyktlib.AmericanFutPricer
-	
-	def run_tick(self, ctick):		
+              
+    def run_tick(self, ctick):         
+        inst = ctick.instID
         pass

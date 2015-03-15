@@ -74,6 +74,8 @@ class RBreakerTrader(Strategy):
         
     def run_min(self, inst):
         min_id = self.agent.cur_min[inst]['min_id']
+        if min_id <= 300 or min_id >= 2115:
+            return
         idx = self.get_index([inst])
         if idx < 0:
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
@@ -102,7 +104,7 @@ class RBreakerTrader(Strategy):
         elif num_pos == 1:
             curr_pos = self.positions[idx][0]
             if self.trail_loss > 0:
-                if curr_pos.trail_loss(curr_price, self.trail_loss*curr_price):
+                if curr_pos.trail_loss(curr_price, curr_pos.entry_price * self.trail_loss):
                     msg = 'R-Breaker to close position after hitting trail loss for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s, exit_target = %s' \
                                     % (inst, buysell, self.trade_unit[idx], min_id, curr_price, curr_pos.exit_target)
                     self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)

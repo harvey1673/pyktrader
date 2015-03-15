@@ -1367,7 +1367,7 @@ class Agent(AbsAgent):
                 return 0
    
         # lock the trade processing to avoid position conflict
-        if (not self.proc_lock) and (not self.trader.is_logged):
+        if not self.proc_lock:
             self.proc_lock = True
             for strat in self.strategies:
                 if (ctick.instID in strat.instIDs):

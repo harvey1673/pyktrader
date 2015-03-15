@@ -301,12 +301,10 @@ class MyTraderApi(TraderApi):
         
     def OnRtnDepthMarketData(self, depth_market_data):
         print "OnRtnDepthMarketData"
-        print depth_market_data.BidPrice1,depth_market_data.BidVolume1,depth_market_data.AskPrice1,depth_market_data.AskVolume1,depth_market_data.LastPrice,depth_market_data.Volume,depth_market_data.UpdateTime,depth_market_data.UpdateMillisec,depth_market_data.InstrumentID
+        #print depth_market_data.BidPrice1,depth_market_data.BidVolume1,depth_market_data.AskPrice1,depth_market_data.AskVolume1,depth_market_data.LastPrice,depth_market_data.Volume,depth_market_data.UpdateTime,depth_market_data.UpdateMillisec,depth_market_data.InstrumentID
 
 
 def main():
-    
-    #user = MyTraderApi(broker_id="8000",investor_id="24661668",passwd="121862")
     tradercfg = misc.PROD_TRADER
     user = MyTraderApi(broker_id = tradercfg.broker_id, 
                        investor_id = tradercfg.investor_id, 
@@ -316,16 +314,12 @@ def main():
     user.SubscribePrivateTopic(THOST_TERT_QUICK)
     user.RegisterFront(tradercfg.ports[0])
     user.Init()
-
     time.sleep(3)
     user.fetch_instruments_by_exchange('')
-    #user.fetch_instrument('IO1502-C-3600')
     time.sleep(20)
-    #print user.instruments['CFFEX']
     for exch in user.instruments:
         for inst in user.instruments[exch]:
             mysqlaccess.insert_cont_data(inst)
-            
-    return user.instruments
+    return True
 
 if __name__=="__main__": main()
