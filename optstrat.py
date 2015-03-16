@@ -79,7 +79,7 @@ class OptionStrategy(object):
         self.hedge_config = {'order_type': OPT_MARKET_ORDER, 'num_tick':1}
         self.spot_model = False
         self.pricer = pyktlib.BlackPricer
-        self.last_updated = dict([(expiry, {'dtoday':0, 'fwd':0.0}) for expiry in expireis]) 
+        self.last_updated = dict([(expiry, {'dtoday':0, 'fwd':0.0}) for expiry in expiries]) 
 
     def reset(self):
         if self.agent != None:

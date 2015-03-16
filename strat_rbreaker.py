@@ -50,6 +50,7 @@ class RBreakerTrader(Strategy):
             min_id = self.agent.instruments[inst].start_tick_id/1000
             min_id = int(min_id/100)*60 + min_id % 100 + self.daily_close_buffer
             self.start_min_id[idx] = int(min_id/60)*100 + min_id % 60   
+        self.save_state()
         return         
 
     def save_local_variables(self, file_writer):
@@ -111,6 +112,7 @@ class RBreakerTrader(Strategy):
                     self.status_notifier(msg)
                     self.save_state()
                     return 
+        #print inst, curr_min, curr_price, self.bbreak[idx], self.ssetup[idx], self.senter[idx], self.benter[idx], self.bsetup[idx],self.sbreak[idx]
         buysell = 0 if curr_pos == None else curr_pos.direction
         if ((min_id >= self.last_min_id[idx]) or self.check_price_limit(inst, curr_price, 5)): 
             if (buysell != 0) and (len(self.submitted_pos[idx]) == 0):
@@ -132,7 +134,7 @@ class RBreakerTrader(Strategy):
                 msg = 'R-Breaker to close position for inst = %s, direction=%s, volume=%s, current min_id = %s' \
                                     % (inst, buysell, self.trade_unit[idx], min_id)
                 self.status_notifier(msg)     
-            if self.num_entries < self.entry_limit:   
+            if self.num_entries[idx] < self.entry_limit:   
                 if  (curr_price >= self.bbreak[idx]):
                     buysell = 1
                 else:
@@ -150,7 +152,7 @@ class RBreakerTrader(Strategy):
                 msg = 'R-Breaker to close position for inst = %s, direction=%s, volume=%s, current min_id = %s' \
                                     % (inst, buysell, self.trade_unit[idx], min_id)
                 self.status_notifier(msg)
-            if self.num_entries < self.entry_limit:
+            if self.num_entries[idx] < self.entry_limit:
                 if  (curr_price < self.senter[idx]):
                     buysell = -1
                 else:
