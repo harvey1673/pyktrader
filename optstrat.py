@@ -366,6 +366,10 @@ class CommodOptStrat(OptionStrategy):
 class OptArbStrat(CommodOptStrat):
     def __init__(self, name, underliers, expiries, strikes, agent = None):
         CommodOptStrat.__init__(self, name, underliers, expiries, strikes, agent)
+		self.callspd = dict([exp, dict(s, {'upbnd':0.0, 'lowbnd':0.0, 'pos'}) for s in ss] for exp, ss in zip(expiries, strikes)])
+		self.putspd = dict([exp, dict(s, {'upbnd':0.0, 'lowbnd':0.0, 'pos'}) for s in ss] for exp, ss in zip(expiries, strikes)])
+		self.bfly = {}
+		
               
     def run_tick(self, ctick):         
         inst = ctick.instID
