@@ -31,60 +31,83 @@ class TextHandler(logging.Handler):
         # This is necessary because we can't modify the Text from other threads
         self.text.after(0, append)
 		
-class GuiApp(tk.Tk):
-    def __init__(self, name='SaveAgent', tday = datetime.date.today()):
-		tk.Tk.__init__(self)
-        self.name = name        
-        app = self.app = tk.Tk()
-        app.title(name)
-        self.scroll_text = ScrolledText.ScrolledText(self.app, state='disabled')
+class Gui(tk.Tk):
+    def __init__(self, app):
+		tk.Tk.__init__(self)       
+        self.title(app.name)
+        self.app = app
+        self.scroll_text = ScrolledText.ScrolledText(self, state='disabled')
         self.scroll_text.configure(font='TkFixedFont')
         # Create textLogger
         self.text_handler = TextHandler(self.scroll_text)
         self.scroll_text.pack()
-        self.agent = None
-        self.trader = None
-        self.user = None
-        self.scur_day = tday
-        menu = tk.Menu(self.app)
-        menu.add_command(label="Update contracts", command=self.onUpdateCont)
-        menu.add_command(label="Restart agent", command=self.onRestart)
-        menu.add_command(label="Exit", command=self.onExit)
-        app.config(menu=menu)
+        self.setup_win = None
+        self.setup_app = None
+        self.status_win = None
+        self.status_app = None
+        menu = tk.Menu(self)
+        menu.add_command(label="Agent Settings", command=self.onSetup)
+        menu.add_command(label="Agent Status", command=self.onStatus)
+        stratmenu = tk.Menu(menu)
+        menu.add_cascade(label="Strategies", menu=stratmenu)
+        for strat in self.app.agent.strategies:
+            stratmenu.add_command(label = strat.name, command=self.app.strat_func[strat.name])
+        menu.add_command(label="Reset agent", command=self.onReset)
+        menu.add_command(label="Exit", command=self.app.onExit)
+        self.config(menu=menu)
 
-    def onUpdateCont(self):
-        t = threading.Thread(target=update_contract_table.main)
-        t.start()
-
-    def onRestart(self):
-        if self.agent != None:
-            self.scur_day = self.agent.scur_day
-        save_insts = filter_main_cont(self.scur_day)
-        self.agent = agent.SaveAgent(name = self.name, trader = None, cuser = None, instruments=save_insts, daily_data_days=0, min_data_days=0, tday = tday)
-        self.agent.logger.addHandler(self.text_handler)
-        fut_api.make_user(self.agent, misc.PROD_USER)
-        return
+    def onSetup(self):
+        self.setup_win = tk.Toplevel(self)
+        self.setup_app = SetupGui(self.setup_win)
     
+    def onStatus(self):
+        self.status_win = tk.Toplevel(self)
+        self.status_app = StatusGui(self.status_win)        
+        
+    def onReset(self):
+        self.app.reset_agent()
+
     def onExit(self):
-        if self.agent != None:
-            self.agent.mdapis = []
-            self.agent.trader = None
-        self.app.destroy()
+        self.app.exit_agent()
+        self.destroy()
         return
 
+class SetupGui(object):
+    def __init__(self, master):
+        self.master = master
+        
+class StatusGui(object):
+    def __init__(self, master):
+        self.master = master
+        
 class MainApp(object):
-	def __init__(self, name, trader_cfg, user_cfg, strat_cfg):
+	def __init__(self, name, trader_cfg, user_cfg, strat_cfg, master = None):
 		self.trader_cfg = trader_cfg
 		self.user_cfg = user_cfg
 		self.name = name
 		self.agent = None
 		self.trader = None
 		self.user= None
-	def restart(self):
-		pass
+        self.master = master
+        self.reset_agent()
+        
+	def reset_agent(self):       
+        if self.agent != None:
+            self.scur_day = self.agent.scur_day
+        self.agent = agent.SaveAgent(name = self.name, trader = None, cuser = None, instruments=save_insts, daily_data_days=0, min_data_days=0, tday = tday)
+        self.agent.logger.addHandler(self.text_handler)
+        fut_api.make_user(self.agent, misc.PROD_USER)
+        return
 	
-	def 
-		
+	def setup_agent(self):
+        pass
+    
+    def exit_agent(self):
+        if self.agent != None:
+            self.agent.mdapis = []
+            self.agent.trader = None
+		return
+
 def restart(tday, name='option_test'):
 
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
