@@ -4,109 +4,159 @@ import fut_api
 import logging
 import misc
 import Tkinter as tk
+import ttk
 import ScrolledText
 import sys
 import optstrat
 import strat_dual_thrust as strat_dt
 import datetime
 
-class GuiDTTrader(object):
-	def __init__(self, strat):
-		self.master = None
-		self.lblframe = None
-		self.name = strat.name
-		self.underliers = strat.underliers
-		self.trade_units = strat.trade_unit
-		self.ratios = strat.ratios
-		self.lookbacks = strat.lookbacks
-		self.cur_rng = strat.cur_rng
-		self.tday_open = strat.tday_open
-		self.close_tday = strat.close_tday
-		self.daily_close_buffer = strat_daily_close_buffer
-		self.email_notify = strat.email_notify
-		self.entries = {}
-		self.stringvars = {}
-		self.entry_fields = ['trade_units', 'lookbacks', 'ratios', 'close_tday']
-		self.status_fields = ['tday_open', 'cur_rng'] 
-		
-	def get_params(self):
-		fields = self.entry_fields + self.status_fields
-        params = self.app.get_strat_params(self.name, fields)
-        for field in self.fields:
-			for idx, underlier in enumerate(self.underliers):
-				inst = underlier[0]
-				if field in self.entry_fields:
-					ent = self.entries[inst][field]
-					ent.delete(0, tk.END)
-					value = params[field][idx]
-					if field == 'close_tday':
-						value = 1 if value else 0
-					elif field == 'ratios':
-						value = ','.join([str(r) for r in value])
-					ent.insert(0, str(value))
-				elif field in self.status_fields:
-					self.stringvars[inst][field].set(str(params[field][idx])
-        return
-		
-	def set_params(self):
-        params = {}
-		for field in self.entry_fields:
-			params[field] = []
-			for underlier in self.underliers:
-				inst = underlier[0]
-				ent = self.entries[field]
-				value = ent.get()
-				if field == 'close_tday':
-					value = True if int(value)>0 else False
-				elif field == 'ratios':
-					value = tuple(value.split(','))
-				params[field].append(value)
-        self.app.set_strat_params(self.name, params)
-		return
-		
-	def start(self, root):
-		self.master = root
-		self.lblframe = tk.LabelFrame(root)
-		self.lblframe.grid_columnconfigure(1, weight=1)
-		fields = ['inst'] + self.entry_fields + self.status_fields
-		for idx, field in enumerate(fields):
-			lab = tk.Label(self.lblframe, text = field, anchor='w').grid(row=0, column=idx, sticky="ew")
-		row_id = 1
-		entries = {}
-		stringvars = {}
-        for underlier in self.underliers:
-			inst = str(underlier[0])
-			inst_lbl = tk.Label(self.lblframe, text=inst, anchor="w").grid(row=row_id, column=0, sticky="ew")
-			col_id = 1
-			entries[inst] = {}
-            for idx, field in enumerate(self.entry_fields):
-				ent = tk.Entry(self.lblframe).grid(row=row_id, column=col_id+idx, sticky="ew")
-				ent.insert(0, "0")
-				entries[inst][field] = ent
-			col_id += len(self.entry_fields)
-			stringvars[inst] = {}
-			for idx, field in enumerate(self.status_fields):
-				v = tk.StringVar()
-				v.set('0')
-				lab = tk.Label(self.lblframe, textvariable = v, anchor='w').grid(row=row_id, column=col_id+idx, sticky="ew")
-				stringvars[inst][field] = v
-			row_id +=1
-		self.entries = entries
-		self.stringvars = stringvars
-		self.lblframe.pack(side="top", fill="both", expand=True, padx=10, pady=10)		
-		set_btn = tk.Button(self.lblframe, text='Set', command=self.set_params).pack()
-		refresh_btn = tk.Button(self.lblframe, text='Refresh', command=self.get_params).pack()
-		recalc_btn = tk.Button(self.lblframe, text='Recalc', command=self.recalc).pack()
-	
-	def recalc(self):
-		self.app.run_strat_func(self.name, 'initialize')
-		
-class GuiRBTrader(object):
-	def __init__(self, strat):
+vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
 
-class GuiOptionTrader(object):
-	def __init__(self, strat):
-	
+def type2str(val, vtype):
+    ret = val
+    if vtype == 'bool':
+        ret = '1' if val else '0'
+    elif 'list' in vtype:
+        ret = ','.join([str(r) for r in val])
+    else:
+        ret = str(val)
+    return ret
+
+def str2type(val, vtype):
+    ret = val
+    if vtype == 'bool':
+        ret = True if int(float(val))>0 else False
+    elif 'list' in vtype:
+        key = 'float'    
+        if len(vtype) > 4:
+            key = vtype[:-4]
+        func = vtype_func_map[key]
+        ret = [func(s) for s in val.split(',')]
+    else:
+        func = vtype_func_map[vtype]
+        ret = func(float(val))
+    return ret
+                    
+class StratGui(object):
+    def __init__(self, strat, app):
+        self.name = strat.name
+        self.app = app
+        self.underliers = strat.underliers
+        self.entries = {}
+        self.stringvars = {}
+        self.entry_fields = []
+        self.status_fields = [] 
+        self.field_types = {}
+        
+    def get_params(self):
+        fields = self.entry_fields + self.status_fields
+        params = self.app.get_strat_params(self.name, fields)
+        for field in fields:
+            for idx, underlier in enumerate(self.underliers):
+                inst = underlier[0]
+                if field in self.entry_fields:
+                    ent = self.entries[inst][field]
+                    ent.delete(0, tk.END)
+                    value = params[field][idx]
+                    vtype = self.field_types[field]
+                    value = type2str(value, vtype)
+                    ent.insert(0, value)
+                elif field in self.status_fields:
+                    self.stringvars[inst][field].set(str(params[field][idx]))
+        return
+        
+    def set_params(self):
+        params = {}
+        for field in self.entry_fields:
+            params[field] = []
+            for underlier in self.underliers:
+                inst = underlier[0]
+                ent = self.entries[inst][field]
+                value = ent.get()
+                vtype = self.field_types[field]
+                value = str2type(value, vtype)
+                params[field].append(value)
+        self.app.set_strat_params(self.name, params)
+        return
+        
+    def start(self, root):
+        self.lblframe = tk.LabelFrame(root)
+        self.lblframe.grid_columnconfigure(1, weight=1)
+        fields = ['inst'] + self.entry_fields + self.status_fields
+        for idx, field in enumerate(fields):
+            lbl = tk.Label(self.lblframe, text = field, anchor='w')
+            lbl.grid(row=0, column=idx, sticky="ew")
+        row_id = 1
+        entries = {}
+        stringvars = {}
+        for underlier in self.underliers:
+            inst = str(underlier[0])
+            inst_lbl = tk.Label(self.lblframe, text=inst, anchor="w")
+            inst_lbl.grid(row=row_id, column=0, sticky="ew")
+            col_id = 1
+            entries[inst] = {}
+            for idx, field in enumerate(self.entry_fields):
+                ent = tk.Entry(self.lblframe)
+                ent.grid(row=row_id, column=col_id+idx, sticky="ew")
+                ent.insert(0, "0")
+                entries[inst][field] = ent
+            col_id += len(self.entry_fields)
+            stringvars[inst] = {}
+            for idx, field in enumerate(self.status_fields):
+                v = tk.StringVar()
+                lab = tk.Label(self.lblframe, textvariable = v, anchor='w')
+                lab.grid(row=row_id, column=col_id+idx, sticky="ew")
+                v.set('0')
+                stringvars[inst][field] = v       
+            row_id +=1
+        self.entries = entries
+        self.stringvars = stringvars
+        
+        set_btn = tk.Button(self.lblframe, text='Set', command=self.set_params)
+        set_btn.grid(row=row_id, column=1, sticky="ew")
+        refresh_btn = tk.Button(self.lblframe, text='Refresh', command=self.get_params)
+        refresh_btn.grid(row=row_id, column=2, sticky="ew")
+        recalc_btn = tk.Button(self.lblframe, text='Recalc', command=self.recalc)
+        recalc_btn.grid(row=row_id, column=3, sticky="ew")
+        self.lblframe.pack(side="top", fill="both", expand=True, padx=10, pady=10)
+        
+    def recalc(self):
+        self.app.run_strat_func(self.name, 'initialize')
+
+class DTStratGui(StratGui):
+    def __init__(self, strat, app):
+        StratGui.__init__(self, strat, app)
+        self.entry_fields = ['trade_unit', 'lookbacks', 'ratios', 'close_tday']
+        self.status_fields = ['tday_open', 'cur_rng'] 
+        self.field_types = {'trade_unit':'int', 
+                            'lookbacks':'int', 
+                            'ratios': 'floatlist', 
+                            'close_tday': 'bool',
+                            'tday_open': 'float', 
+                            'cur_rng':'float' }
+                        
+class RBStratGui(object):
+    def __init__(self, strat, app):
+        StratGui.__init__(self, strat, app)
+        self.entry_fields = ['trade_unit', 'min_rng', 'ratios', 'close_tday', 'start_min_id']
+        self.status_fields = ['sbreak', 'bsetup', 'benter', 'senter', 'ssetup', 'bbreak'] 
+        self.field_types = {'trade_unit':'int', 
+                            'min_rng':'float', 
+                            'ratios': 'floatlist', 
+                            'close_tday': 'bool',
+                            'start_min_id': 'int',
+                            'sbreak': 'float', 
+                            'bbreak':'float',
+                            'bsetup':'float', 
+                            'benter':'float', 
+                            'senter':'float', 
+                            'ssetup':'float' }        
+    
+class OptStratGui(object):
+    def __init__(self, strat, app):
+        pass
+    
 class Gui(tk.Tk):
     def __init__(self, app = None):
         tk.Tk.__init__(self)       
@@ -125,15 +175,15 @@ class Gui(tk.Tk):
         self.status_app = None
         self.setup_ents = {}
         self.status_ents = {}
-		self.strat_func = {}
-		self.strat_status_gui = {}
-		for strat in self.app.agent.strategies:
-			if strat.__class__.__name__ == 'DTTrader':
-				self.strat_status_gui[strat.name] = GuiDTTrader(strat)
-			elif strat.__class__.__name__ == 'RBreakerTrader':
-				self.strat_status_gui[strat.name] = GuiRBTrader(strat)
-			elif 'Opt' in strat.__class__.__name__:
-				self.strat_status_gui[strat.name] = GuiOptionTrader(strat)
+        self.strat_func = {}
+        self.strat_gui = {}
+        for strat in self.app.agent.strategies:
+            if strat.__class__.__name__ == 'DTTrader':
+                self.strat_gui[strat.name] = DTStratGui(strat, app)
+            elif strat.__class__.__name__ == 'RBreakerTrader':
+                self.strat_gui[strat.name] = RBStratGui(strat, app)
+            elif 'Opt' in strat.__class__.__name__:
+                self.strat_gui[strat.name] = OptStratGui(strat, app)
         menu = tk.Menu(self)
         menu.add_command(label="Settings", command=self.onSetup)
         menu.add_command(label="Status", command=self.onStatus)
@@ -149,12 +199,13 @@ class Gui(tk.Tk):
                               'CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Avail', 'PNL']
 
     def onStratNewWin(self, name):
-		strat_gui = self.strat_status_gui[name]
-		top_level = tk.Toplevel(self)
-		strat_gui.start(top_level)
-		return 
-		
-	def onSetup(self):
+        strat_gui = self.strat_gui[name]
+        top_level = tk.Toplevel(self)
+        top_level.title('strategy: %s' % name)
+        strat_gui.start(top_level)
+        return 
+        
+    def onSetup(self):
         self.setup_win = tk.Toplevel(self)
         self.setup_ents = self.make_setup_form(self.setup_win, self.setup_fields)
         #self.setup_win.bind('<Return>', self.set_agent_params)
@@ -313,30 +364,30 @@ class MainApp(object):
                 self.agent.margin_cap = float(params[field])
         return
     
-	def get_strat_params(self, strat_name, fields):
-		params = {}
-		for strat in self.agent.strategies:
-			if strat.name == strat_name:
-				for field in fields:
-					params[field] = getattr(strat, field)
-				break 
-		return params
-	
-	def set_strat_params(self, strat_name, params):
-		for strat in self.agent.strategies:
-			if strat.name == strat_name:
-				for field in params:
-					setattr(strat, field, params[field])
-				break 
-		return
-	
-	def run_strat_func(self, strat_name, func_name):
-		for strat in self.agent.strategies:
-			if strat.name == strat_name:
-				getattr(strat, func_name)()
-				break 
-		return 
-		
+    def get_strat_params(self, strat_name, fields):
+        params = {}
+        for strat in self.agent.strategies:
+            if strat.name == strat_name:
+                for field in fields:
+                    params[field] = getattr(strat, field)
+                break 
+        return params
+    
+    def set_strat_params(self, strat_name, params):
+        for strat in self.agent.strategies:
+            if strat.name == strat_name:
+                for field in params:
+                    setattr(strat, field, params[field])
+                break 
+        return
+    
+    def run_strat_func(self, strat_name, func_name):
+        for strat in self.agent.strategies:
+            if strat.name == strat_name:
+                getattr(strat, func_name)()
+                break 
+        return 
+        
     def exit_agent(self):
         if self.agent != None:
             self.agent.mdapis = []
