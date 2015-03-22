@@ -72,7 +72,7 @@ def test_main(tday, name='prod_trade'):
 def prod_test(tday, name='prod_test'):
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     #trader_cfg = TEST_TRADER
-    user_cfg = PROD_USER1
+    user_cfg = PROD_USER
     agent_name = name
     ins_setup = {'m1505':(0, 0.5, 8, False),
                 'RM505':(0, 0.5, 10, False),
@@ -85,7 +85,7 @@ def prod_test(tday, name='prod_test'):
                 'au1506':(0, 0.5, 1, False),
                 'j1505':(0, 0.5,  2, False),
                 'al1505':(0, 0.5, 5, False),
-                'IF1503':(0, 0.5, 1, True)}
+                'IF1504':(0, 0.5, 1, True)}
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][2] for inst in insts]
     under_dt = [[inst] for inst in insts]
@@ -118,9 +118,9 @@ def prod_test(tday, name='prod_test'):
 def rbreaker_test(tday, name='rbreaker_test'):
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     #trader_cfg = TEST_TRADER
-    user_cfg = PROD_USER1
+    user_cfg = PROD_USER
     agent_name = name
-    ins_setup = {'IF1503': [[0.35, 0.07, 0.25], 1,  30],
+    ins_setup = {'IF1504': [[0.35, 0.07, 0.25], 1,  30],
                 'ru1509':  [[0.35, 0.07, 0.25], 1,  120],
                 'rb1510':  [[0.35, 0.07, 0.25], 10, 20],
                 'RM509' :  [[0.35, 0.07, 0.25], 8,  20],

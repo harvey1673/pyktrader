@@ -52,9 +52,10 @@ class OptionStrategy(object):
         self.DFs = [1.0] * len(expiries)
         self.volgrids = dict([(expiry, None) for expiry in expiries])
         self.accrual = 'CFFEX'
-        opt_dict = self.get_option_map(underliers, expiries, strikes)
-        self.option_insts = dict([(inst, None) for inst in opt_dict.values()])
-        self.option_map = pd.DataFrame(0, index = self.underliers + opt_dict.values(), 
+        self.strikes = strikes
+        self.opt_dict = self.get_option_map(underliers, expiries, strikes)
+        self.option_insts = dict([(inst, None) for inst in self.opt_dict.values()])
+        self.option_map = pd.DataFrame(0, index = self.underliers + self.opt_dict.values(), 
                                 columns = ['underlier', 'cont_mth', 'otype', 'strike', 'multiple', 'df',
                                            'pv', 'delta', 'gamma', 'vega', 'theta',  
                                            'ppv', 'pdelta', 'pgamma', 'pvega', 'ptheta', 
@@ -63,8 +64,8 @@ class OptionStrategy(object):
         for inst in underliers:
             self.option_map.loc[inst, 'underlier'] = inst
             self.option_map.loc[inst, 'df'] = 1.0
-        for key in opt_dict:
-            inst = opt_dict[key]
+        for key in self.opt_dict:
+            inst = self.opt_dict[key]
             opt_info = {'underlier': key[0], 'cont_mth': key[1], 'otype': key[2], 'strike': key[3], 'df':1.0}
             self.option_map.loc[inst, opt_info.keys()] = pd.Series(opt_info) 
         self.instIDs = self.underliers + self.option_insts.keys()
@@ -134,6 +135,17 @@ class OptionStrategy(object):
         self.update_margin()
         self.is_initialized = True
         return
+    
+    def set_volgrids(self, expiry, vol_params):
+        if self.volgrids[expiry] != None:
+            self.volgrids[expiry].setFwd(vol_params['fwd'])
+            self.volgrids[expiry].setAtm(vol_params['atm'])
+            self.volgrids[expiry].setD90Vol(vol_params['v90'])
+            self.volgrids[expiry].setD75Vol(vol_params['v75'])
+            self.volgrids[expiry].setD25Vol(vol_params['v25'])
+            self.volgrids[expiry].setD10Vol(vol_params['v10'])
+            self.volgrids[expiry].initialize()
+        return 
     
     def update_margin(self):
         for inst in self.instIDs:

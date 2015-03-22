@@ -31,17 +31,17 @@ def test_main(tday, name='option_test'):
     user_cfg = TEST_USER
     agent_name = name
     opt_strat = optstrat.IndexFutOptStrat(name, 
-                                    ['IF1503', 'IF1506'], 
-                                    [datetime.datetime(2015, 3, 20, 15, 0, 0), datetime.datetime(2015,6,19,15,0,0)],
-                                    [[3400, 3450, 3500, 3550, 3600, 3650]]*2)
+                                    ['IF1504', 'IF1506'], 
+                                    [datetime.datetime(2015, 4, 17, 15, 0, 0), datetime.datetime(2015,6,19,15,0,0)],
+                                    [[3700, 3750, 3800, 3850, 3900, 3950, 4000, 4050]]*2)
 
-    insts_dt = ['IF1503']
+    insts_dt = ['IF1504']
     units_dt = [1]*len(insts_dt)
     under_dt = [[inst] for inst in insts_dt]
     vols_dt = [[1]]*len(insts_dt)
     lookbacks_dt = [0]*len(insts_dt)
     
-    insts_daily = ['IF1503']
+    insts_daily = ['IF1504']
     under_daily = [[inst] for inst in insts_daily]
     vols_daily = [[1]]*len(insts_daily)
     units_daily = [1]*len(insts_daily)
@@ -78,4 +78,4 @@ def test_main(tday, name='option_test'):
 
 
 if __name__=="__main__":
-    test_main(datetime.date(2015,3,11), 'option_test')
+    test_main(datetime.date(2015,3,23), 'option_test')
