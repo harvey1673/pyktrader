@@ -138,13 +138,18 @@ class OptionStrategy(object):
     
     def set_volgrids(self, expiry, vol_params):
         if self.volgrids[expiry] != None:
-            self.volgrids[expiry].setFwd(vol_params['fwd'])
+            dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
+            fwd = vol_params['fwd']
+            self.volgrids[expiry].setFwd(fwd)
+            self.volgrids[expiry].setToday(dtoday)
             self.volgrids[expiry].setAtm(vol_params['atm'])
             self.volgrids[expiry].setD90Vol(vol_params['v90'])
             self.volgrids[expiry].setD75Vol(vol_params['v75'])
             self.volgrids[expiry].setD25Vol(vol_params['v25'])
             self.volgrids[expiry].setD10Vol(vol_params['v10'])
             self.volgrids[expiry].initialize()
+            self.last_updated[expiry]['fwd'] = fwd
+            self.last_updated[expiry]['dtoday'] = dtoday            
         return 
     
     def update_margin(self):

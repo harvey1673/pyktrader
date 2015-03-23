@@ -326,7 +326,7 @@ class CTPTraderRspMixin(object):
             self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
             print u'综合交易平台登陆失败，请检查网络或用户名/口令'
             self.is_logged = False
-            self.login()
+            #self.login()
             return
         self.is_logged = True
         self.logger.info(u'TD:trader login success')
@@ -621,7 +621,7 @@ class Instrument(object):
             self.otype = self.name[7]
             self.cont_mth = int(self.underlying[-4:]) + 200000 
             self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
-
+            self.product = self.product[:-4]
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
         self.start_tick_id =  prod_info['start_min'] * 1000
@@ -1060,12 +1060,9 @@ class Agent(AbsAgent):
                 tick_status = True
                 break
         if not tick_status:
-            if (tick_id > 2116000):
+            if (tick_id > 2116000) and (not self.eod_flag):
                 self.logger.warning('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
-                for ins in self.instruments:
-                    if not self.instruments[ins].day_finalized:
-                        self.logger.warning('Late tick after trading hour triggers to finalize the inst=%s' % ins)
-                        self.day_finalize([ins])
+                self.day_finalize(self.instruments.keys())
                 if not self.eod_flag:
                     self.run_eod()
                     self.eod_flag = True
@@ -1203,6 +1200,8 @@ class Agent(AbsAgent):
         instruments = [inst for inst in insts if len(self.instruments[inst].underlying)==0]
         self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (instruments, self.scur_day))
         for inst in instruments:
+            if self.instruments[inst].day_finalized:
+                continue
             if (len(self.tick_data[inst]) > 0) :
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']

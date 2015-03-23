@@ -9,10 +9,21 @@ import ScrolledText
 import sys
 import optstrat
 import strat_dual_thrust as strat_dt
+import strat_rbreaker as strat_rb
 import datetime
 import re
+import pyktlib
 
 vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
+
+def get_type_var(vtype):
+    if vtype == 'int':
+        v=tk.IntVar()
+    elif vtype == 'float':
+        v=tk.DoubleVar()
+    else: 
+        v=tk.StringVar()
+    return v
 
 def type2str(val, vtype):
     ret = val
@@ -23,7 +34,7 @@ def type2str(val, vtype):
     elif vtype == 'date':
         ret = val.strftime('%Y%m%d')
     elif vtype == 'datetime':
-        ret = val.strftime('%Y%m%d %H:%M:%S')
+        ret = val.strftime('%Y%m%d')
     else:
         ret = str(val)
     return ret
@@ -71,7 +82,7 @@ class StratGui(object):
         for field in fields:
             for idx, underlier in enumerate(self.underliers):
                 inst = underlier[0]
-				value = params[field][idx]
+                value = params[field][idx]
                 vtype = self.field_types[field]
                 value = type2str(value, vtype)
                 if field in self.entry_fields:
@@ -120,7 +131,7 @@ class StratGui(object):
             col_id += len(self.entry_fields)
             stringvars[inst] = {}
             for idx, field in enumerate(self.status_fields):
-                v = tk.StringVar()
+                v= get_type_var(self.field_types[field])
                 lab = ttk.Label(self.lblframe, textvariable = v, anchor='w')
                 lab.grid(row=row_id, column=col_id+idx, sticky="ew")
                 v.set('0')
@@ -156,7 +167,8 @@ class DTStratGui(StratGui):
                         
 class RBStratGui(StratGui):
     def __init__(self, strat, app, master):
-        StratGui.__init__(self, strat, app)
+        StratGui.__init__(self, strat, app, master)
+        self.root = master
         self.entry_fields = ['TradeUnit', 'MinRng', 'Ratios', 'CloseTday', 'StartMinId']
         self.status_fields = ['Sbreak', 'Bsetup', 'Benter', 'Senter', 'Ssetup', 'Bbreak'] 
         self.field_types = {'TradeUnit':'int', 
@@ -189,20 +201,21 @@ class OptStratGui(object):
         self.canvas = None
         self.frame = None
         self.vsb = None
-		vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10']
-        self.volgids = {}
-		for expiry in self.expiries:
-			vol = strat.volgrids[expiry]
-			dtoday = vol.dtoday_(), 
-			dexp = vol.dexp_()
-			fwd = vol.fwd_()
-			atm = vol.atmVol_()
-			v90 = vol.d90Vol_()
-			v75 = vol.d75Vol_()
-			v25 = vol.d25Vol_()
-			v10 = vol.d10Vol_()
-			accr= strat.accrual
-			self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, accr)
+        vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10', 'Updated']
+        self.volgrids = {}
+        for expiry in self.expiries:
+            vol = strat.volgrids[expiry]
+            dtoday = vol.dtoday_()
+            dexp = vol.dexp_()
+            fwd = vol.fwd_()
+            atm = vol.atmVol_()
+            v90 = vol.d90Vol_()
+            v75 = vol.d75Vol_()
+            v25 = vol.d25Vol_()
+            v10 = vol.d10Vol_()
+            accr= strat.accrual
+            #print dtoday, dexp, fwd, atm, v90, v75, v25, v10, accr
+            self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, accr)
         self.entries = {}
         self.stringvars = {'Insts':{}, 'Volgrid':{}}
         self.entry_fields = []
@@ -211,41 +224,58 @@ class OptStratGui(object):
 
     def get_T_table(self):
         params = self.app.get_agent_params(['Insts'])
-        inst_labels = ['Name', 'Price', 'Traded', 'BidPrice', 'BidVol','AskPrice', 'AskVol','Updated']
-        for inst in params['Insts']:
-            if inst in self.root.stringvars['Insts']:
-                for instlbl in inst_labels:
-                    self.root.stringvars['Insts'][inst][instlbl].set(params['Insts'][inst][instlbl])
-        vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10']
+        inst_labels = ['Name', 'Price','BidPrice', 'BidVol','AskPrice', 'AskVol']
+        for inst in self.option_insts:
+            for instlbl in inst_labels:
+                value = params['Insts'][inst][instlbl]
+                value = type2str(value, value.__class__.__name__)
+                self.root.stringvars[inst][instlbl].set(value)
+        vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10','Updated']
         params = self.app.get_strat_params(self.name, ['Volgrid'])
         for expiry in params['Volgrid']:
             if expiry in self.stringvars['Volgrid']:
                 for vlbl in vol_labels:
-                    self.stringvars['Volgrid'][inst][vlbl].set(params['Volgrid'][inst][vlbl]
-			self.volgrids[expiry].setFwd(
+                    value = params['Volgrid'][expiry][vlbl]
+                    value = type2str(value, value.__class__.__name__)
+                    self.stringvars['Volgrid'][expiry][vlbl].set(value)
+            self.volgrids[expiry].setFwd(params['Volgrid'][expiry]['Fwd'])
+            self.volgrids[expiry].setAtm(params['Volgrid'][expiry]['Atm'])
+            self.volgrids[expiry].setD90Vol(params['Volgrid'][expiry]['V90'])
+            self.volgrids[expiry].setD75Vol(params['Volgrid'][expiry]['V75'])
+            self.volgrids[expiry].setD25Vol(params['Volgrid'][expiry]['V25'])
+            self.volgrids[expiry].setD10Vol(params['Volgrid'][expiry]['V10'])
+            self.volgrids[expiry].initialize()
+        
         return
     
-    def get_volgrids(self):
-		pass
+    def calib_volgrids(self):
+        pass
             
-    def set_volgrids(self, params):
+    def pos_greeks(self):
+        pass
+    
+    def trade_setup(self):
         pass
     
     def set_frame(self, root):
-        self.canvas = tk.Canvas(root, borderwidth=0, background="#ffffff")
-        self.frame = tk.Frame(self.canvas, background="#ffffff")
-        self.vsb = tk.Scrollbar(root, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=self.vsb.set)
-        self.vsb.pack(side="right", fill="y")
+        self.canvas = tk.Canvas(root)
+        self.frame = tk.Frame(self.canvas)
+        self.vsby = tk.Scrollbar(root, orient="vertical", command=self.canvas.yview)
+        self.vsbx = tk.Scrollbar(root, orient="horizontal", command=self.canvas.xview)
+        self.canvas.configure(yscrollcommand=self.vsby.set, xscrollcommand=self.vsbx.set)
+        self.vsbx.pack(side="bottom", fill="x")
+        self.vsby.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
         self.canvas.create_window((4,4), window=self.frame, anchor="nw", tags="self.frame")
         self.frame.bind("<Configure>", self.OnFrameConfigure)
         self.populate()
 
     def populate(self):
-        vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10']
-        inst_labels = ['Name', 'Price', 'Traded', 'BidPrice', 'BidVol', 'BidIV', 'AskPrice','AskVol','AskIV','Updated','MyVol']
-		calc_labels = [ 'BidIV', 'AskIV', 'ModelPV']
+        vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10','Updated']
+        vol_types =  ['string', 'string', 'float','float','float','float','float','float','float','float']
+        inst_labels = ['Name', 'Price', 'BidPrice', 'BidVol', 'BidIV', 'AskPrice','AskVol','AskIV','MyVol']
+        inst_types  = ['string','float', 'float', 'int', 'float', 'float', 'int','float','float']
+        calc_labels = [ 'BidIV', 'AskIV', 'MyVol']
         underliers = self.underliers
         if len(self.underliers) == 1:
             underliers = self.underliers * len(self.expiries)
@@ -256,55 +286,58 @@ class OptStratGui(object):
             col_id = 0
             for idx, vlbl in enumerate(vol_labels):
                 tk.Label(self.frame, text=vlbl).grid(row=row_id, column=col_id + idx)
-                v = tk.StringVar()
+                v= get_type_var(vol_types[idx])
                 tk.Label(self.frame, textvariable = v).grid(row=row_id+1, column=col_id + idx)
                 self.stringvars['Volgrid'][expiry][vlbl] = v
-			ttk.Button(self.frame, text='Refresh', command= self.get_T_table).grid(row=row_id, column=9, columnspan=2)
-			ttk.Button(self.frame, text=
+            ttk.Button(self.frame, text='Refresh', command= self.get_T_table).grid(row=row_id, column=10, columnspan=2)
+            ttk.Button(self.frame, text='CalibVol', command= self.calib_volgrids).grid(row=row_id+1, column=10, columnspan=2)
+            ttk.Button(self.frame, text='PosGreeks', command= self.pos_greeks).grid(row=row_id, column=12, columnspan=2)
+            ttk.Button(self.frame, text='SetupTrade', command= self.trade_setup).grid(row=row_id+1, column=12, columnspan=2)
+            #ttk.Button(self.frame, text=
             row_id += 2
             col_id = 0
             for idx, instlbl in enumerate(inst_labels + ['strike']):
-                tk.Label(self.frame, text=instlbl).grid(row=row_id, column=col_id + idx)
+                tk.Label(self.frame, text=instlbl).grid(row=row_id, column=col_id+idx)
                 if instlbl != 'strike':
-                    tk.Label(self.frame, text=instlbl).grid(row=row_id, column=col_id + 2 * len(inst_labels) - idx)
+                    tk.Label(self.frame, text=instlbl).grid(row=row_id, column=col_id+2*len(inst_labels)-idx)
                 for idy, strike in enumerate(strikes):
                     if instlbl == 'strike':
-                        tk.Label(self.frame, text = str(strike)).grid(row=row_id+idy, column=col_id + idx)
-					else:
+                        tk.Label(self.frame, text = str(strike), padx=10).grid(row=row_id+1+idy, column=col_id+idx)
+                    else:
                         key1 = (under, cont_mth, 'C', strike)
                         inst1 = self.opt_dict[key1]
-						if instlbl in calc_labels:
-							if idx == 0:
-								self.stringvars[inst1] = {}
-							v1 = tk.StringVar()
-							self.stringvars[inst1][instlbl] = v1
-						elif (inst1 in self.root.stringvars) and (instlbl in self.root.stringvars[inst1]):
-							v1 = self.root.stringvars[inst1][instlbl]
+                        if instlbl in calc_labels:
+                            if inst1 not in self.stringvars:
+                                self.stringvars[inst1] = {}
+                            v1 = tk.DoubleVar()
+                            self.stringvars[inst1][instlbl] = v1
+                        elif (inst1 in self.root.stringvars) and (instlbl in self.root.stringvars[inst1]):
+                            v1 = self.root.stringvars[inst1][instlbl]
                         else:
-							if idx == 0:
-								self.root.stringvars[inst1] = {}
-							v1 = tk.StringVar()
-							self.root.stringvars[inst1][instlbl] = v1
-                        tk.Label(self.frame, textvariable = v1).grid(row=row_id+idy, column=col_id + idx)
+                            if inst1 not in self.root.stringvars:
+                                self.root.stringvars[inst1] = {}
+                            v1 = get_type_var(inst_types[idx])
+                            self.root.stringvars[inst1][instlbl] = v1
+                        tk.Label(self.frame, textvariable = v1, padx=10).grid(row=row_id+1+idy, column=col_id + idx)
 
                         key2 = (under, cont_mth, 'P', strike)
                         inst2 = self.opt_dict[key2]
-						if instlbl in calc_labels:
-							if idx == 0:
-								self.stringvars[inst2] = {}
-							v2 = tk.StringVar()
-							self.stringvars[inst2][instlbl] = v2
-						elif (inst2 in self.root.stringvars) and (instlbl in self.root.stringvars[inst2]):
-							v2 = self.root.stringvars[inst2][instlbl]
+                        if instlbl in calc_labels:
+                            if inst2 not in self.stringvars:
+                                self.stringvars[inst2] = {}
+                            v2 = tk.DoubleVar()
+                            self.stringvars[inst2][instlbl] = v2
+                        elif (inst2 in self.root.stringvars) and (instlbl in self.root.stringvars[inst2]):
+                            v2 = self.root.stringvars[inst2][instlbl]
                         else:
-							if idx == 0:
-								self.root.stringvars[inst2] = {}
-							v2 = tk.StringVar()
-							self.root.stringvars[inst2][instlbl] = v2
-                        tk.Label(self.frame, textvariable = v2).grid(row=row_id+idy, column=col_id + 2 * len(inst_labels) - idx)
-
-            row_id = row_id + len(strikes) + 1
-        self.get
+                            if inst2 not in self.root.stringvars:
+                                self.root.stringvars[inst2] = {}
+                            v2 = get_type_var(inst_types[idx])
+                            self.root.stringvars[inst2][instlbl] = v2
+                        tk.Label(self.frame, textvariable = v2, padx=10).grid(row=row_id+1+idy, column=col_id+2*len(inst_labels)-idx)
+            row_id = row_id + len(strikes) + 2
+        self.get_T_table()
+        return
 
     def OnFrameConfigure(self, event):
         '''Reset the scroll region to encompass the inner frame'''
@@ -326,7 +359,7 @@ class Gui(tk.Tk):
         self.settings_win = None
         self.status_win = None
         self.entries = {}
-        self.stringvars = {}
+        self.stringvars = {'Insts':{}}
         self.status_ents = {}
         self.strat_frame = {}
         self.strat_gui = {}
@@ -344,7 +377,8 @@ class Gui(tk.Tk):
                             'LockedMargin':'float', 
                             'UsedMargin':'float', 
                             'Available':'float', 
-                            'PnlTotal':'float'}
+                            'PnlTotal':'float',
+                            'Initialized': 'bool'}
     
         for strat in self.app.agent.strategies:
             if strat.__class__.__name__ == 'DTTrader':
@@ -400,7 +434,7 @@ class Gui(tk.Tk):
             self.entries[field1] = ent
             ent.insert(0,"0")
             ent.grid(column=1, row=row_idx, sticky="ew")
-            v = tk.StringVar()
+            v = tk.IntVar()
             lab1 = ttk.Label(lbl_frame, text=field2+": ", anchor='w')
             self.stringvars[field2] = v
             lab1.grid(column=2, row=row_idx, sticky="ew")
@@ -413,14 +447,14 @@ class Gui(tk.Tk):
             #row = tk.Frame(root)
             lab1 = ttk.Label(lbl_frame, text=field1+": ", anchor='w')
             lab1.grid(column=0, row=row_idx, sticky="ew")
-            v1 = tk.StringVar()
+            v1 = tk.DoubleVar()
             lab2 = ttk.Label(lbl_frame, textvariable = v1, anchor='w')
             self.stringvars[field1] = v1
             lab2.grid(column=1, row=row_idx, sticky="ew")
 
             lab3 = ttk.Label(lbl_frame, text=field2+": ", anchor='w')
             lab3.grid(column=2, row=row_idx, sticky="ew")
-            v2 = tk.StringVar()
+            v2 = tk.DoubleVar()
             lab4 = ttk.Label(lbl_frame, textvariable = v2, anchor='w')
             self.stringvars[field2] = v2
             lab4.grid(column=3, row=row_idx, sticky="ew")
@@ -438,17 +472,17 @@ class Gui(tk.Tk):
         for field in fields:
             ent = self.entries[field]
             value = ent.get()
-			vtype = self.field_types[field]
-			params[field] = str2type(value, vtype)
+            vtype = self.field_types[field]
+            params[field] = str2type(value, vtype)
         self.app.set_agent_params(params)
         pass
     
     def get_agent_params(self, fields):
         params = self.app.get_agent_params(fields)
         for field in fields:
-			#vtype = params[field].__class__.__name__
-			vtype = self.field_types[field]
-			value = type2str(params[field], vtype)
+            #vtype = params[field].__class__.__name__
+            vtype = self.field_types[field]
+            value = type2str(params[field], vtype)
             if field in self.entries:
                 ent = self.entries[field]
                 ent.delete(0, tk.END)
@@ -566,13 +600,13 @@ class MainApp(object):
                             else:
                                 under = strat.underliers[idx]
                             vn = strat.volgrids[expiry]
-                            vol_info[expiry] = {'Under': under, 'Df':strat.DFs[idx], 'Fwd': vn.fwd_(), 
+                            vol_info[expiry] = {'Under': under, 'Df':strat.DFs[idx], 'Fwd': vn.fwd_(), 'Expiry': expiry,
                                                 'Atm': vn.atmVol_(), 'V90': vn.d90Vol_(), 
                                                 'V75': vn.d75Vol_(), 'V25': vn.d25Vol_(), 
-                                                'V10': vn.d10Vol_()}
+                                                'V10': vn.d10Vol_(), 'Updated': strat.last_updated[expiry]['dtoday']}
                         params[field] = vol_info
                     else:
-						var = field2variable(field)
+                        var = field2variable(field)
                         params[field] = getattr(strat, var)
                 break 
         return params
@@ -585,8 +619,8 @@ class MainApp(object):
                         for idx, expiry in enumerate(strat.expiries):
                             strat.set_volgrids(expiry, params[field][expiry])
                     else:
-						var = field2variable(field)
-						value = params[field]
+                        var = field2variable(field)
+                        value = params[field]
                         setattr(strat, var, value)
                 break 
         return
@@ -638,10 +672,52 @@ def main(tday, name='option_test'):
     myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')
     myGui.mainloop()
     
+def m_opt_sim(tday, name='Soymeal_Opt'):
+    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    trader_cfg = misc.TEST_TRADER
+    user_cfg = misc.TEST_USER
+    opt_strat = optstrat.CommodOptStrat(name, 
+                                    ['m1505', 'm1509', 'm1601'], 
+                                    [datetime.datetime(2015, 4, 8, 15, 0, 0), 
+                                     datetime.datetime(2015, 8, 7, 15, 0, 0), 
+                                     datetime.datetime(2015, 12,7, 15, 0, 0)],
+                                    [[2700 + 50 * i for i in range(7)], 
+                                     [2600 + 50 * i for i in range(10)],
+                                     [2500 + 50 * i for i in range(13)]])
+    insts_dt = ['m1509']
+    units_dt = [2]*len(insts_dt)
+    under_dt = [[inst] for inst in insts_dt]
+    vols_dt = [[1]]*len(insts_dt)
+    lookbacks_dt = [0]*len(insts_dt)
+    
+    ins_setup = {'m1509': [[0.35, 0.07, 0.25], 2,  30]}
+    insts_rb = ins_setup.keys()
+    units_rb = [ins_setup[inst][1] for inst in insts_rb]
+    under_rb = [[inst] for inst in insts_rb]
+    vol_rb = [[1] for inst in insts_rb]
+    ratios = [ins_setup[inst][0] for inst in insts_rb]
+    min_rng = [ins_setup[inst][2] for inst in insts_rb]
+    stop_loss = 0.0
+    
+    dt_strat = strat_dt.DTTrader('DT_test', under_dt, vols_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = False, email_notify = [])
+    rb_strat = strat_rb.RBreakerTrader('RBreaker', under_rb, vol_rb, trade_unit = units_rb,
+                                 ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 1, 
+                                 agent = None, email_notify = [])
+    strategies = [opt_strat, dt_strat, rb_strat]
+    strat_cfg = {'strategies': strategies, \
+                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'daily_data_days':3, \
+                 'min_data_days':1 }
+    
+    myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None)
+    myGui = Gui(myApp)
+    myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')
+    myGui.mainloop()
+    
 if __name__ == '__main__':
     args = sys.argv[1:]
     if len(args) < 2:
-        app_name = 'option_test'
+        app_name = 'Soymeal_Opt'
     else:
         app_name = args[1]       
     if len(args) < 1:
@@ -649,5 +725,5 @@ if __name__ == '__main__':
     else:
         tday = datetime.datetime.strptime(args[0], '%Y%m%d').date()
 
-    main(tday, app_name)    
+    m_opt_sim(tday, app_name)    
     
