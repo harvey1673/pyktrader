@@ -185,6 +185,7 @@ class RBStratGui(StratGui):
     
 class OptStratGui(object):
     def __init__(self, strat, app, master):
+        self.pricer = strat.pricer
         self.root = master
         self.name = strat.name
         self.app = app
@@ -199,24 +200,33 @@ class OptStratGui(object):
         self.strikes = strat.strikes
         self.opt_dict = strat.opt_dict
         self.canvas = None
+        self.pos_canvas = None
         self.frame = None
-        self.vsb = None
-        vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10', 'Updated']
+        self.pos_frame = None
+
+        #vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10', 'Updated']
         self.volgrids = {}
+        self.fwds = {}
+        self.vol_params = {}
+        self.curr_insts = {} 
+        self.rf = optstrat.RISK_FREE_RATE
         for expiry in self.expiries:
             vol = strat.volgrids[expiry]
             dtoday = vol.dtoday_()
             dexp = vol.dexp_()
             fwd = vol.fwd_()
+            self.fwds[expiry] = fwd
             atm = vol.atmVol_()
             v90 = vol.d90Vol_()
             v75 = vol.d75Vol_()
             v25 = vol.d25Vol_()
             v10 = vol.d10Vol_()
+            self.vol_params = [atm, v90, v75, v25, v10]
             accr= strat.accrual
             #print dtoday, dexp, fwd, atm, v90, v75, v25, v10, accr
             self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, accr)
         self.entries = {}
+        self.option_map = {}
         self.stringvars = {'Insts':{}, 'Volgrid':{}}
         self.entry_fields = []
         self.status_fields = [] 
@@ -225,11 +235,15 @@ class OptStratGui(object):
     def get_T_table(self):
         params = self.app.get_agent_params(['Insts'])
         inst_labels = ['Name', 'Price','BidPrice', 'BidVol','AskPrice', 'AskVol']
-        for inst in self.option_insts:
+        for inst in self.opt_dict.values():
+            if inst not in self.curr_insts:
+                self.curr_insts[inst] = {}
             for instlbl in inst_labels:
                 value = params['Insts'][inst][instlbl]
+                self.curr_insts[inst][instlbl] = value
                 value = type2str(value, value.__class__.__name__)
                 self.root.stringvars[inst][instlbl].set(value)
+
         vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10','Updated']
         params = self.app.get_strat_params(self.name, ['Volgrid'])
         for expiry in params['Volgrid']:
@@ -245,15 +259,61 @@ class OptStratGui(object):
             self.volgrids[expiry].setD25Vol(params['Volgrid'][expiry]['V25'])
             self.volgrids[expiry].setD10Vol(params['Volgrid'][expiry]['V10'])
             self.volgrids[expiry].initialize()
-        
+            
+        for key in self.opt_dict:
+            inst = self.opt_dict[key]
+            bid_price = self.curr_insts[inst]['BidPrice']
+            ask_price = self.curr_insts[inst]['BidPrice']
+            idx = self.cont_mth.index(key[1])
+            expiry = self.expiries[idx]
+            fwd = self.volgrids[expiry].fwd_()
+            strike = key[3]
+            otype = key[2]
+            Texp =  self.volgrids[expiry].expiry_()
+            bvol = pyktlib.BlackImpliedVol(bid_price, fwd, strike, self.rf, Texp, otype) if bid_price > 0 else 0
+            avol = pyktlib.BlackImpliedVol(ask_price, fwd, strike, self.rf, Texp, otype) if bid_price > 0 else 0 
+            self.stringvars[inst]['BidIV'].set(bvol)
+            self.curr_insts[inst]['BidIV'] = bvol
+            self.stringvars[inst]['AskIV'].set(avol)
+            self.curr_insts[inst]['AskIV'] = avol
         return
     
     def calib_volgrids(self):
         pass
             
     def pos_greeks(self):
+        params = self.app.get_strat_params(self.name, ['OptionMap'])
+        self.option_map = params['OptionMap']
+        pos_win   = tk.Toplevel(self.frame)
+        self.pos_canvas = tk.Canvas(pos_win)
+        self.pos_frame = tk.Frame(self.pos_canvas)
+        pos_vsby = tk.Scrollbar(pos_win, orient="vertical", command=self.pos_canvas.yview)
+        pos_vsbx = tk.Scrollbar(pos_win, orient="horizontal", command=self.pos_canvas.xview)
+        self.pos_canvas.configure(yscrollcommand=pos_vsby.set, xscrollcommand=pos_vsbx.set)
+        pos_vsbx.pack(side="bottom", fill="x")
+        pos_vsby.pack(side="right", fill="y")
+        self.pos_canvas.pack(side="left", fill="both", expand=True)
+        self.pos_canvas.create_window((4,4), window=self.pos_frame, anchor="nw", tags="self.pos_frame")
+        self.pos_frame.bind("<Configure>", self.OnPosFrameConfigure)
+        insts = self.underliers + self.option_insts
+        fields = ['inst', 'underlier', 'cont_mth', 'pv', 'delta', 'gamma', 'vega', 'theta', \
+                  'pos', 'ppv', 'pdelta', 'pgamma', 'pvega', 'ptheta']
+        for idx, field in enumerate(fields):
+            tk.Label(self.pos_frame, text = field).grid(row=0, column=idx)
+            for idy, inst in enumerate(insts): 
+                if idx == 0:
+                    txt = inst
+                else:
+                    txt = self.option_map[field][inst]
+                tk.Label(self.pos_frame, text = txt).grid(row=idy+1, column=idx)
+        #pos_win.pack()
+        return
+
+    def OnPosFrameConfigure(self, event):
+        '''Reset the scroll region to encompass the inner frame'''
+        self.pos_canvas.configure(scrollregion=self.pos_canvas.bbox("all"))        
         pass
-    
+        
     def trade_setup(self):
         pass
     
@@ -273,9 +333,9 @@ class OptStratGui(object):
     def populate(self):
         vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10','Updated']
         vol_types =  ['string', 'string', 'float','float','float','float','float','float','float','float']
-        inst_labels = ['Name', 'Price', 'BidPrice', 'BidVol', 'BidIV', 'AskPrice','AskVol','AskIV','MyVol']
+        inst_labels = ['Name', 'Price', 'BidPrice', 'BidVol', 'BidIV', 'AskPrice','AskVol','AskIV']
         inst_types  = ['string','float', 'float', 'int', 'float', 'float', 'int','float','float']
-        calc_labels = [ 'BidIV', 'AskIV', 'MyVol']
+        calc_labels = [ 'BidIV', 'AskIV']
         underliers = self.underliers
         if len(self.underliers) == 1:
             underliers = self.underliers * len(self.expiries)
@@ -409,12 +469,6 @@ class Gui(tk.Tk):
             self.notebook.add(self.strat_frame[name], text = name)
         self.notebook.pack(side="top", fill="both", expand=True, padx=10, pady=10)
 
-    # def onStratNewWin(self, name):
-        # strat_gui = self.strat_gui[name]
-        # top_level = tk.Toplevel(self)
-        # top_level.title('strategy: %s' % name)
-        # strat_gui.start(top_level)
-        # return 
     def market_view(self):
         pass
 
@@ -512,7 +566,7 @@ class Gui(tk.Tk):
         
         
 class MainApp(object):
-    def __init__(self, name, trader_cfg, user_cfg, strat_cfg, tday, master = None):
+    def __init__(self, name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = True):
         self.trader_cfg = trader_cfg
         self.user_cfg = user_cfg
         self.strat_cfg = strat_cfg
@@ -520,9 +574,9 @@ class MainApp(object):
         self.name = name
         self.agent = None
         self.master = master
-        self.reset_agent()
+        self.reset_agent(save_test)
                         
-    def reset_agent(self):       
+    def reset_agent(self, save_test):       
         if self.agent != None:
             self.scur_day = self.agent.scur_day
         all_insts= []
@@ -531,6 +585,11 @@ class MainApp(object):
         self.agent = fut_api.create_agent(self.name, self.user_cfg, self.trader_cfg, all_insts, self.strat_cfg, self.scur_day)
         #self.agent.logger.addHandler(self.text_handler)
         #fut_api.make_user(self.agent, self.user_cfg)
+        if save_test:
+            self.agent.tick_db_table = 'test_fut_tick'
+            self.agent.min_db_table  = 'test_fut_min'
+            self.agent.daily_db_table= 'test_fut_daily'
+            self.save_flag = True
         self.agent.resume()
         return
     
@@ -605,6 +664,10 @@ class MainApp(object):
                                                 'V75': vn.d75Vol_(), 'V25': vn.d25Vol_(), 
                                                 'V10': vn.d10Vol_(), 'Updated': strat.last_updated[expiry]['dtoday']}
                         params[field] = vol_info
+                    elif field == 'OptionMap':
+                        var = field2variable(field)
+                        value = getattr(strat, var)
+                        params[field] = value.to_dict()
                     else:
                         var = field2variable(field)
                         params[field] = getattr(strat, var)

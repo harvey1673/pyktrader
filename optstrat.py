@@ -4,9 +4,6 @@ optstrat.py
 Created on Feb 03, 2015
 @author: Harvey
 '''
-BDAYS_PER_YEAR = 245.0
-RISK_FREE_RATE = 0.04
-
 import os
 import csv
 import pyktlib
@@ -14,6 +11,9 @@ import mysqlaccess
 import numpy as np
 import pandas as pd
 from misc import *
+
+RISK_FREE_RATE = 0.04
+
 
 def fut2opt(fut_inst, expiry, otype, strike):
     product = inst2product(fut_inst)
@@ -30,18 +30,6 @@ def fut2opt(fut_inst, expiry, otype, strike):
 
 def get_opt_margin(fut_price, strike, type):
     return 0.0
-
-def time2exp(opt_expiry, curr_time):
-    curr_date = curr_time.date()
-    exp_date = opt_expiry.date()
-    if curr_time > opt_expiry:
-        return 0.0
-    elif exp_date < curr_date:
-        return workdays.networkdays(curr_date, exp_date, misc.CHN_Holidays)/BDAYS_PER_YEAR
-    else:
-        delta = opt_expiry - curr_time 
-        return (delta.hour*3600+delta.min*60+delta.second)/3600.0/5.5/BDAYS_PER_YEAR
-
 
 class OptionStrategy(object):
     def __init__(self, name, underliers, expiries, strikes, agent = None):

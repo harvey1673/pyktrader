@@ -726,6 +726,9 @@ class Agent(AbsAgent):
         self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
+        self.tick_db_table = 'fut_tick'
+        self.min_db_table  = 'fut_min'
+        self.daily_db_table = 'fut_daily'
         self.eod_flag = False
         # market data
         self.daily_data_days = daily_data_days
@@ -1183,10 +1186,10 @@ class Agent(AbsAgent):
                 for fobj in self.min_data_func[m]:
                     fobj.rfunc(df_m)
         if self.save_flag:
-            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst])
-            mysqlaccess.insert_min_data(inst, self.cur_min[inst])
+            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+            mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)
             if len(self.late_tick[inst])>0:
-                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst])
+                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
                 self.late_tick[inst] = []                
         for strat in self.strategies:
             if inst in strat.instIDs:
@@ -1214,7 +1217,7 @@ class Agent(AbsAgent):
                 for fobj in self.day_data_func:
                     fobj.rfunc(df)
                 if self.save_flag:
-                    mysqlaccess.insert_daily_data(inst, self.cur_day[inst])
+                    mysqlaccess.insert_daily_data(inst, self.cur_day[inst], dbtable = self.daily_db_table)
             self.instruments[inst].day_finalized = True
         return
     
