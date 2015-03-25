@@ -1353,8 +1353,6 @@ class Agent(AbsAgent):
         r = self.trader.query_trade( start_time, end_time )
         self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
         return r
-        #if r < 0:
-        #    self.qry_commands.append(self.fetch_trade)
     
     def RtnTick(self,ctick):#行情处理主循环
         if (not self.validate_tick(ctick)):

@@ -16,6 +16,18 @@ import pyktlib
 
 vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
 
+def keepdigit(x): 
+    out = x
+    if isinstance(x, float):
+        if x >= 100000:
+            out = int(x)
+        elif x>=1:
+            n = 6 - len(str(int(x)))
+            out = int(x*(10**n)+0.5)/float(10**n)
+        else:
+            out = int(x*100000+0.5)/100000.0
+    return out    
+
 def get_type_var(vtype):
     if vtype == 'int':
         v=tk.IntVar()
@@ -90,7 +102,7 @@ class StratGui(object):
                     ent.delete(0, tk.END)
                     ent.insert(0, value)
                 elif field in self.status_fields:
-                    self.stringvars[inst][field].set(value)
+                    self.stringvars[inst][field].set(keepdigit(value))
         return
         
     def set_params(self):
@@ -241,8 +253,8 @@ class OptStratGui(object):
             for instlbl in inst_labels:
                 value = params['Insts'][inst][instlbl]
                 self.curr_insts[inst][instlbl] = value
-                value = type2str(value, value.__class__.__name__)
-                self.root.stringvars[inst][instlbl].set(value)
+                #value = type2str(value, value.__class__.__name__)
+                self.root.stringvars[inst][instlbl].set(keepdigit(value))
 
         vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10','Updated']
         params = self.app.get_strat_params(self.name, ['Volgrid'])
@@ -250,8 +262,8 @@ class OptStratGui(object):
             if expiry in self.stringvars['Volgrid']:
                 for vlbl in vol_labels:
                     value = params['Volgrid'][expiry][vlbl]
-                    value = type2str(value, value.__class__.__name__)
-                    self.stringvars['Volgrid'][expiry][vlbl].set(value)
+                    #value = type2str(value, value.__class__.__name__)
+                    self.stringvars['Volgrid'][expiry][vlbl].set(keepdigit(value))
             self.volgrids[expiry].setFwd(params['Volgrid'][expiry]['Fwd'])
             self.volgrids[expiry].setAtm(params['Volgrid'][expiry]['Atm'])
             self.volgrids[expiry].setD90Vol(params['Volgrid'][expiry]['V90'])
@@ -263,7 +275,7 @@ class OptStratGui(object):
         for key in self.opt_dict:
             inst = self.opt_dict[key]
             bid_price = self.curr_insts[inst]['BidPrice']
-            ask_price = self.curr_insts[inst]['BidPrice']
+            ask_price = self.curr_insts[inst]['AskPrice']
             idx = self.cont_mth.index(key[1])
             expiry = self.expiries[idx]
             fwd = self.volgrids[expiry].fwd_()
@@ -272,9 +284,9 @@ class OptStratGui(object):
             Texp =  self.volgrids[expiry].expiry_()
             bvol = pyktlib.BlackImpliedVol(bid_price, fwd, strike, self.rf, Texp, otype) if bid_price > 0 else 0
             avol = pyktlib.BlackImpliedVol(ask_price, fwd, strike, self.rf, Texp, otype) if bid_price > 0 else 0 
-            self.stringvars[inst]['BidIV'].set(bvol)
+            self.stringvars[inst]['BidIV'].set(keepdigit(bvol))
             self.curr_insts[inst]['BidIV'] = bvol
-            self.stringvars[inst]['AskIV'].set(avol)
+            self.stringvars[inst]['AskIV'].set(keepdigit(avol))
             self.curr_insts[inst]['AskIV'] = avol
         return
     
@@ -305,7 +317,7 @@ class OptStratGui(object):
                     txt = inst
                 else:
                     txt = self.option_map[field][inst]
-                tk.Label(self.pos_frame, text = txt).grid(row=idy+1, column=idx)
+                tk.Label(self.pos_frame, text = keepdigit(txt)).grid(row=idy+1, column=idx)
         #pos_win.pack()
         return
 
@@ -543,7 +555,7 @@ class Gui(tk.Tk):
                 ent.insert(0, value)
             elif field in self.stringvars:
                 var = self.stringvars[field]
-                var.set(value)
+                var.set(keepdigit(value))
         return
         
     def refresh_agent_status(self):
