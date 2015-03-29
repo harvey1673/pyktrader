@@ -88,6 +88,9 @@ class DTTrader(Strategy):
         buy_trig  = tday_open + self.ratios[idx][0] * self.cur_rng[idx]
         sell_trig = tday_open - self.ratios[idx][1] * self.cur_rng[idx]
         curr_price = (ctick.askPrice1+ctick.bidPrice1)/2.0
+        if (tday_open <= 0.0) or (self.cur_rng[idx] <= 0) or (curr_price <= 0.001):
+            self.logger.warning("warning: open price =0.0 or range = 0.0 or curr_price=0 for inst=%s for stat = %s" % (inst, self.name))
+            return
         if (min_id >= self.last_min_id[idx]):
             if (buysell!=0) and (self.close_tday[idx]):
                 if (len(self.submitted_pos[idx]) <= 0):

@@ -94,6 +94,8 @@ class RBreakerTrader(Strategy):
         tick_base = inst_obj.tick_base
         dhigh = self.agent.cur_day[inst]['high']
         dlow  = self.agent.cur_day[inst]['low']
+        mhigh = self.agent.cur_min[inst]['high']
+        mlow  = self.agent.cur_min[inst]['low']
         curr_price = (inst_obj.ask_price1 + inst_obj.bid_price1)/2.0                
         if num_pos > 1:
             if len(self.submitted_pos[idx]) == 0:
@@ -107,8 +109,8 @@ class RBreakerTrader(Strategy):
             if self.trail_loss > 0:
                 if curr_pos.trail_loss(curr_price, curr_pos.entry_price * self.trail_loss):
                     msg = 'R-Breaker to close position after hitting trail loss for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s, exit_target = %s' \
-                                    % (inst, buysell, self.trade_unit[idx], min_id, curr_price, curr_pos.exit_target)
-                    self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)
+                                    % (inst, curr_pos.direction, self.trade_unit[idx], min_id, curr_price, curr_pos.exit_target)
+                    self.close_tradepos(idx, curr_pos, curr_price - curr_pos.direction * self.num_tick * tick_base)
                     self.status_notifier(msg)
                     self.save_state()
                     return 
@@ -144,8 +146,8 @@ class RBreakerTrader(Strategy):
                 self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
                 save_status = True
                 self.status_notifier(msg)
-        elif ((dhigh< self.bbreak[idx]) and (dhigh >= self.ssetup[idx]) and (curr_price < self.senter[idx]) and (buysell >=0)) or \
-                 ((dlow > self.sbreak[idx]) and (dlow  <= self.bsetup[idx]) and (curr_price > self.benter[idx]) and (buysell <=0)):
+        elif ((dhigh<self.bbreak[idx]) and (dhigh>=self.ssetup[idx]) and (curr_price<=self.senter[idx]) and (mhigh>=self.senter[idx]) and (buysell>=0)) or \
+             ((dlow>self.sbreak[idx]) and (dlow<=self.bsetup[idx]) and (curr_price>=self.benter[idx]) and (mlow<=self.benter[idx]) and (buysell<=0)):
             if curr_pos != None:
                 self.close_tradepos(idx, curr_pos, curr_price - buysell * self.num_tick * tick_base)
                 save_status = True
@@ -153,14 +155,15 @@ class RBreakerTrader(Strategy):
                                     % (inst, buysell, self.trade_unit[idx], min_id)
                 self.status_notifier(msg)
             if self.num_entries[idx] < self.entry_limit:
-                if  (curr_price < self.senter[idx]):
+                if  (curr_price<=self.senter[idx]) and (mhigh>=self.senter[idx]):
                     buysell = -1
                 else:
                     buysell = 1
                 self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
                 save_status = True
-                msg = 'R-Breaker to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
-                                    % (inst, tday_open, buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
+                msg = 'R-Breaker to open position for inst = %s, bbreak= %s, ssetup=%s, senter=%s, sbreak= %s, bsetup=%s, benter=%s, curr_price= %s, direction=%s, volume=%s' \
+                                    % (inst, self.bbreak[idx], self.ssetup[idx], self.senter[idx], 
+                                       self.sbreak[idx], self.bsetup[idx], self.benter[idx], curr_price, buysell, self.trade_unit[idx])
                 self.status_notifier(msg)
         if save_status:
             self.save_state()

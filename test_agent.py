@@ -34,10 +34,10 @@ def test_main(tday, name='prod_trade'):
     trader.RegisterSpi(None)
     '''
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    trader_cfg = PROD_TRADER
-    user_cfg = PROD_USER
+    trader_cfg = DCE_OPT_TRADER
+    user_cfg = DCE_OPT_USER
     agent_name = name
-    insts_dt = ['IF1503']
+    insts_dt = ['m1505', 'm1509']
     units_dt = [[1]]*len(insts_dt)
     under_dt = [[inst] for inst in insts_dt]
     lookbacks_dt = [0]*len(insts_dt)
@@ -50,7 +50,7 @@ def test_main(tday, name='prod_trade'):
     #units_daily = [[1]]*len(insts_daily)
     #lookbacks_daily = [0]*len(insts_daily)
 
-    dt_strat = strat_dt.DTTrader('DT_test', under_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = False, email_notify = ['harvey_wwu@hotmail.com'])
+    dt_strat = strat_dt.DTTrader('DT_test', under_dt, units_dt, trade_unit = [2,2], lookbacks = lookbacks_dt, agent = None, daily_close = False, email_notify = ['harvey_wwu@hotmail.com'])
     #dt_daily = strat_dt.DTTrader('DT_Daily', under_daily, trade_unit = units_daily, lookbacks = lookbacks_daily, agent = None, daily_close = True, email_notify = ['harvey_wwu@hotmail.com'])
     #turtle_strat = strat_turtle.TurtleTrader('Turtle_test', under_turtle, trade_unit = units_turtle, agent=None, email_notify = ['harvey_wwu@hotmail.com'] )
     strategies = [dt_strat] #, dt_daily, turtle_strat]
@@ -72,7 +72,7 @@ def test_main(tday, name='prod_trade'):
 def prod_test(tday, name='prod_test'):
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     #trader_cfg = TEST_TRADER
-    user_cfg = PROD_USER
+    user_cfg = DCE_OPT_USER
     agent_name = name
     ins_setup = {'m1505':(0, 0.5, 8, False),
                 'RM505':(0, 0.5, 10, False),
@@ -125,7 +125,7 @@ def rbreaker_test(tday, name='rbreaker_test'):
                 'rb1510':  [[0.35, 0.07, 0.25], 10, 20],
                 'RM509' :  [[0.35, 0.07, 0.25], 8,  20],
                 'm1509' :  [[0.35, 0.07, 0.25], 8,  30],
-                'ag1506' : [[0.35, 0.07, 0.25], 8,  40],
+                'ag1506': [[0.35, 0.07, 0.25], 8,  40],
                 'y1509' : [[0.35, 0.07, 0.25], 8,  60]}
     insts = ins_setup.keys()
     units_rb = [ins_setup[inst][1] for inst in insts]

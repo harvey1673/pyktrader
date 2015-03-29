@@ -624,6 +624,11 @@ class Instrument(object):
             self.product = self.product[:-4]
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
+        if len(self.underlying) == 0:
+            if self.exchange == 'ZCE':
+                self.cont_mth = int(self.name[-3:]) + 201000
+            else:
+                self.cont_mth = int(self.name[-4:]) + 200000
         self.start_tick_id =  prod_info['start_min'] * 1000
         if self.product in night_session_markets:
             self.start_tick_id = 300000
