@@ -109,7 +109,10 @@ class OptionStrategy(object):
             self.volgrids[expiry].setToday(dtoday)
             self.volgrids[expiry].setExp(dexp)
             self.volgrids[expiry].initialize()
-            cont_mth = expiry.year * 100 + expiry.month
+            if self.spot_model:
+                cont_mth = expiry.year * 100 + expiry.month
+            else:
+                cont_mth = self.agent.instruments[self.underliers[idx]].cont_mth
             indices = self.option_map[(self.option_map.cont_mth == cont_mth) & (self.option_map.otype != 0)].index
             for inst in indices:
                 strike = self.option_map.loc[inst].strike
@@ -153,12 +156,12 @@ class OptionStrategy(object):
                  
     def update_greeks(self, inst): 
         '''update option instrument greeks'''
-        multiple = self.option_map.loc[inst, 'multiple']
-        pv = self.option_insts[inst].price() * multiple
-        delta = self.option_insts[inst].delta() * multiple
-        gamma = self.option_insts[inst].gamma() * multiple
-        vega  = self.option_insts[inst].vega() * multiple/100.0
-        theta = self.option_insts[inst].theta() * multiple
+        #multiple = self.option_map.loc[inst, 'multiple']
+        pv = self.option_insts[inst].price() 
+        delta = self.option_insts[inst].delta()
+        gamma = self.option_insts[inst].gamma()
+        vega  = self.option_insts[inst].vega()/100.0
+        theta = self.option_insts[inst].theta()
         df = self.option_map.loc[inst, 'df']
         opt_info = {'pv': pv, 'delta': delta/df, 'gamma': gamma/df/df, 'vega': vega, 'theta': theta}
         self.option_map.loc[inst, opt_info.keys()] = pd.Series(opt_info)
@@ -169,7 +172,7 @@ class OptionStrategy(object):
         keys = ['pv', 'delta', 'gamma', 'vega', 'theta']
         for key in keys:
             pos_key = 'p' + key
-            self.option_map[pos_key] = self.option_map[key] * self.option_map['pos']
+            self.option_map[pos_key] = self.option_map[key] * self.option_map['pos'] * self.option_map['multiple']
         return 
         
     def risk_reval(self, expiry, is_recalib=True):
@@ -189,7 +192,15 @@ class OptionStrategy(object):
             self.option_insts[inst].setFwd(fwd)
             self.option_insts[inst].setFwd(dtoday)
             self.update_greeks(inst)
-        return 
+        return
+    
+    def reval_all(self):
+        for inst in self.opt_dict.values():
+            self.update_greeks(inst)
+        self.update_pos_greeks()
+        self.update_group_risk()
+        self.update_margin()
+        return
     
     def update_group_risk(self):
         group_keys = ['cont_mth', 'ppv', 'pdelta', 'pgamma','pvega','ptheta']
