@@ -16,16 +16,16 @@ import pyktlib
 
 vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
 
-def keepdigit(x): 
+def keepdigit(x, pow=5): 
     out = x
     if isinstance(x, float):
-        if x >= 100000:
+        if x >= 10**pow:
             out = int(x)
         elif x>=1:
-            n = 6 - len(str(int(x)))
+            n = pow + 1- len(str(int(x)))
             out = int(x*(10**n)+0.5)/float(10**n)
         else:
-            out = int(x*100000+0.5)/100000.0
+            out = int(x*10**pow+0.5)/1.0/10**pow
     return out    
 
 def get_type_var(vtype):
@@ -102,7 +102,7 @@ class StratGui(object):
                     ent.delete(0, tk.END)
                     ent.insert(0, value)
                 elif field in self.status_fields:
-                    self.stringvars[inst][field].set(keepdigit(value))
+                    self.stringvars[inst][field].set(keepdigit(value, 4))
         return
         
     def set_params(self):
@@ -239,6 +239,7 @@ class OptStratGui(object):
             self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, accr)
         self.entries = {}
         self.option_map = {}
+        self.group_risk = {}
         self.stringvars = {'Insts':{}, 'Volgrid':{}}
         self.entry_fields = []
         self.status_fields = [] 
@@ -254,7 +255,7 @@ class OptStratGui(object):
                 value = params['Insts'][inst][instlbl]
                 self.curr_insts[inst][instlbl] = value
                 #value = type2str(value, value.__class__.__name__)
-                self.root.stringvars[inst][instlbl].set(keepdigit(value))
+                self.root.stringvars[inst][instlbl].set(keepdigit(value,4))
 
         vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10','Updated']
         params = self.app.get_strat_params(self.name, ['Volgrid'])
@@ -263,7 +264,7 @@ class OptStratGui(object):
                 for vlbl in vol_labels:
                     value = params['Volgrid'][expiry][vlbl]
                     #value = type2str(value, value.__class__.__name__)
-                    self.stringvars['Volgrid'][expiry][vlbl].set(keepdigit(value))
+                    self.stringvars['Volgrid'][expiry][vlbl].set(keepdigit(value,5))
             self.volgrids[expiry].setFwd(params['Volgrid'][expiry]['Fwd'])
             self.volgrids[expiry].setAtm(params['Volgrid'][expiry]['Atm'])
             self.volgrids[expiry].setD90Vol(params['Volgrid'][expiry]['V90'])
@@ -284,15 +285,34 @@ class OptStratGui(object):
             Texp =  self.volgrids[expiry].expiry_()
             bvol = pyktlib.BlackImpliedVol(bid_price, fwd, strike, self.rf, Texp, otype) if bid_price > 0 else 0
             avol = pyktlib.BlackImpliedVol(ask_price, fwd, strike, self.rf, Texp, otype) if bid_price > 0 else 0 
-            self.stringvars[inst]['BidIV'].set(keepdigit(bvol))
+            self.stringvars[inst]['BidIV'].set(keepdigit(bvol,4))
             self.curr_insts[inst]['BidIV'] = bvol
-            self.stringvars[inst]['AskIV'].set(keepdigit(avol))
+            self.stringvars[inst]['AskIV'].set(keepdigit(avol,4))
             self.curr_insts[inst]['AskIV'] = avol
         return
     
     def calib_volgrids(self):
         pass
-            
+    
+    def recalc_risks(self):
+        self.app.run_strat_func(self.name, 'reval_all')
+        return
+    
+    def group_risks(self):
+        params = self.app.get_strat_params(self.name, ['GroupRisk'])
+        self.group_risk = params['GroupRisk']
+        risk_win   = tk.Toplevel(self.frame)
+        fields = ['cont_mth', 'ppv', 'pdelta', 'pgamma','pvega','ptheta']
+        for idx, field in enumerate(fields):
+            tk.Label(risk_win, text = field).grid(row=0, column=idx)
+            for idy, mth in enumerate(self.cont_mth): 
+                if field == 'cont_mth':
+                    txt = mth
+                else:
+                    txt = self.group_risk[field][mth]
+                tk.Label(risk_win, text = keepdigit(txt,3)).grid(row=idy+1, column=idx)
+        return        
+                
     def pos_greeks(self):
         params = self.app.get_strat_params(self.name, ['OptionMap'])
         self.option_map = params['OptionMap']
@@ -316,8 +336,11 @@ class OptStratGui(object):
                 if idx == 0:
                     txt = inst
                 else:
-                    txt = self.option_map[field][inst]
-                tk.Label(self.pos_frame, text = keepdigit(txt)).grid(row=idy+1, column=idx)
+                    factor = 1
+                    if field in ['delta', 'gamma']: 
+                        factor = 100
+                    txt = self.option_map[field][inst]*factor
+                tk.Label(self.pos_frame, text = keepdigit(txt,3)).grid(row=idy+1, column=idx)
         #pos_win.pack()
         return
 
@@ -362,9 +385,11 @@ class OptStratGui(object):
                 tk.Label(self.frame, textvariable = v).grid(row=row_id+1, column=col_id + idx)
                 self.stringvars['Volgrid'][expiry][vlbl] = v
             ttk.Button(self.frame, text='Refresh', command= self.get_T_table).grid(row=row_id, column=10, columnspan=2)
-            ttk.Button(self.frame, text='CalibVol', command= self.calib_volgrids).grid(row=row_id+1, column=10, columnspan=2)
+            ttk.Button(self.frame, text='CalcRisk', command= self.recalc_risks).grid(row=row_id+1, column=10, columnspan=2) 
             ttk.Button(self.frame, text='PosGreeks', command= self.pos_greeks).grid(row=row_id, column=12, columnspan=2)
-            ttk.Button(self.frame, text='SetupTrade', command= self.trade_setup).grid(row=row_id+1, column=12, columnspan=2)
+            ttk.Button(self.frame, text='CalibVol', command= self.calib_volgrids).grid(row=row_id+1, column=12, columnspan=2)
+            ttk.Button(self.frame, text='RiskGroup', command= self.group_risks).grid(row=row_id, column=14, columnspan=2)
+            ttk.Button(self.frame, text='SetupTrade', command= self.trade_setup).grid(row=row_id+1, column=14, columnspan=2)
             #ttk.Button(self.frame, text=
             row_id += 2
             col_id = 0
@@ -430,6 +455,8 @@ class Gui(tk.Tk):
         #self.scroll_text.pack()
         self.settings_win = None
         self.status_win = None
+        self.pos_frame = None
+        self.pos_canvas = None
         self.entries = {}
         self.stringvars = {'Insts':{}}
         self.status_ents = {}
@@ -450,7 +477,8 @@ class Gui(tk.Tk):
                             'UsedMargin':'float', 
                             'Available':'float', 
                             'PnlTotal':'float',
-                            'Initialized': 'bool'}
+                            'Initialized': 'bool',
+                            'QryInst': 'string'}
     
         for strat in self.app.agent.strategies:
             if strat.__class__.__name__ == 'DTTrader':
@@ -485,6 +513,45 @@ class Gui(tk.Tk):
         pass
 
     def position_view(self):
+        params = self.app.get_agent_params(['Positions'])
+        positions = params['Positions']
+        pos_win   = tk.Toplevel(self)
+        self.pos_canvas = tk.Canvas(pos_win)
+        self.pos_frame = tk.Frame(self.pos_canvas)
+        pos_vsby = tk.Scrollbar(pos_win, orient="vertical", command=self.pos_canvas.yview)
+        pos_vsbx = tk.Scrollbar(pos_win, orient="horizontal", command=self.pos_canvas.xview)
+        self.pos_canvas.configure(yscrollcommand=pos_vsby.set, xscrollcommand=pos_vsbx.set)
+        pos_vsbx.pack(side="bottom", fill="x")
+        pos_vsby.pack(side="right", fill="y")
+        self.pos_canvas.pack(side="left", fill="both", expand=True)
+        self.pos_canvas.create_window((4,4), window=self.pos_frame, anchor="nw", tags="self.pos_frame")
+        self.pos_frame.bind("<Configure>", self.OnPosFrameConfigure)
+        
+        fields = ['inst', 'currlong', 'currshort', 'locklong', 'lockshort', 'ydaylong', 'ydayshort']
+        for idx, field in enumerate(fields):
+            tk.Label(self.pos_frame, text = field).grid(row=0, column=idx)
+            for idy, inst in enumerate(positions.keys()): 
+                if field == 'inst':
+                    txt = inst
+                else:
+                    txt = positions[inst][field]
+                tk.Label(self.pos_frame, text = txt).grid(row=idy+1, column=idx)
+        return      
+
+    def OnPosFrameConfigure(self, event):
+        '''Reset the scroll region to encompass the inner frame'''
+        self.pos_canvas.configure(scrollregion=self.pos_canvas.bbox("all"))        
+        pass
+    
+    def qry_agent_inst(self):
+        instfield = 'QryInst'
+        ent = self.entries[instfield]
+        inst = ent.get()
+        params = self.app.get_agent_params(['Insts.' + inst])
+        inst_fields = ['Price', 'PrevClose', 'Volume', 'OI', 'AskPrice', 'AskVol', 'BidPrice', 'BidVol', 'UpLimit', 'DownLimit']
+        for field in inst_fields:
+            v = self.stringvars['Insts.'+field]
+            v.set(params['Insts'][inst][field])
         pass
         
     def config_settings(self):
@@ -526,11 +593,30 @@ class Gui(tk.Tk):
             lab4.grid(column=3, row=row_idx, sticky="ew")
             row_idx += 1      
         all_fields = entry_fields+label_fields+pnl_fields+margin_fields
-        self.setup_setbtn = ttk.Button(lbl_frame, text='Set', command= lambda: self.set_agent_params(entry_fields))
-        self.setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
-        self.setup_loadbtn = ttk.Button(lbl_frame, text='Load', command= lambda: self.get_agent_params(all_fields))
-        self.setup_loadbtn.grid(column=2, row=row_idx, sticky="ew")
+        setup_setbtn = ttk.Button(lbl_frame, text='SetParam', command= lambda: self.set_agent_params(entry_fields))
+        setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(all_fields))
+        setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
+        setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
+        setup_qrybtn.grid(column=2, row=row_idx, sticky="ew")
+        row_idx +=1
+        field = 'QryInst'
+        lab = ttk.Label(lbl_frame, text= field, anchor='w')
+        lab.grid(column=0, row=row_idx, sticky="ew")
+        ent = tk.Entry(lbl_frame)
+        ent.grid(column=0, row=row_idx+1, sticky="ew")
+        self.entries[field] = ent
+        ent.insert(0,"IF1503")
+        inst_fields = ['Price', 'PrevClose', 'Volume', 'OI', 'AskPrice', 'AskVol', 'BidPrice', 'BidVol', 'UpLimit', 'DownLimit']        
+        for idx, field in enumerate(inst_fields):
+            lab1 = ttk.Label(lbl_frame, text=field, anchor='w')
+            lab1.grid(column=idx+1, row=row_idx, sticky="ew")
+            v = tk.DoubleVar()
+            lab2 = ttk.Label(lbl_frame, textvariable = v, anchor='w')
+            self.stringvars['Insts.' + field] = v
+            lab2.grid(column=idx+1, row=row_idx+1, sticky="ew")            
         lbl_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)
+        
         self.get_agent_params(all_fields)
     
     def set_agent_params(self, fields):
@@ -546,7 +632,6 @@ class Gui(tk.Tk):
     def get_agent_params(self, fields):
         params = self.app.get_agent_params(fields)
         for field in fields:
-            #vtype = params[field].__class__.__name__
             vtype = self.field_types[field]
             value = type2str(params[field], vtype)
             if field in self.entries:
@@ -555,7 +640,7 @@ class Gui(tk.Tk):
                 ent.insert(0, value)
             elif field in self.stringvars:
                 var = self.stringvars[field]
-                var.set(keepdigit(value))
+                var.set(keepdigit(value,4))
         return
         
     def refresh_agent_status(self):
@@ -575,7 +660,6 @@ class Gui(tk.Tk):
         self.app.exit_agent()
         self.destroy()
         return
-        
         
 class MainApp(object):
     def __init__(self, name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = True):
@@ -611,10 +695,15 @@ class MainApp(object):
             field_list = f.split('.')
             field = field_list[0]
             if field == 'Positions':
-                positions = []
+                positions = {}
                 for inst in self.agent.positions:
                     pos = self.agent.positions[inst]
-                    positions.append([inst, pos.curr_pos.long, pos.curr_pos.short, self.locked_pos.long, self.locked_pos.short])
+                    positions[inst] = {'currlong' : pos.curr_pos.long, 
+                                       'currshort': pos.curr_pos.short, 
+                                       'locklong' : pos.locked_pos.long, 
+                                       'lockshort': pos.locked_pos.short, 
+                                       'ydaylong':  pos.pos_yday.long, 
+                                       'ydayshort': pos.pos_yday.short}
                 res[field] = positions
             elif field == 'Orders':
                 order_list = []
@@ -644,7 +733,9 @@ class MainApp(object):
                                  'BidPrice': inst_obj.bid_price1, 'BidVol': inst_obj.bid_vol1, 
                                  'AskPrice': inst_obj.ask_price1, 'AskVol': inst_obj.ask_vol1, 
                                  'PrevClose': inst_obj.prev_close, 'MarginRate': inst_obj.marginrate, 
-                                 'Updated': inst_obj.last_update, 'Traded': inst_obj.last_traded}
+                                 'Updated': inst_obj.last_update, 'Traded': inst_obj.last_traded,
+                                 'UpLimit': inst_obj.up_limit, 'DownLimit': inst_obj.down_limit,
+                                 'Volume': inst_obj.volume, 'OI': inst_obj.open_interest }
                 res[field] = inst_dict
             else:
                 var = field2variable(field)
@@ -676,7 +767,7 @@ class MainApp(object):
                                                 'V75': vn.d75Vol_(), 'V25': vn.d25Vol_(), 
                                                 'V10': vn.d10Vol_(), 'Updated': strat.last_updated[expiry]['dtoday']}
                         params[field] = vol_info
-                    elif field == 'OptionMap':
+                    elif (field == 'OptionMap') or (field == 'GroupRisk'):
                         var = field2variable(field)
                         value = getattr(strat, var)
                         params[field] = value.to_dict()
@@ -691,7 +782,7 @@ class MainApp(object):
             if strat.name == strat_name:
                 for field in params:
                     if field == 'Volgrid':
-                        for idx, expiry in enumerate(strat.expiries):
+                        for expiry in strat.expiries:
                             strat.set_volgrids(expiry, params[field][expiry])
                     else:
                         var = field2variable(field)
@@ -749,8 +840,8 @@ def main(tday, name='option_test'):
     
 def m_opt_sim(tday, name='Soymeal_Opt'):
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    trader_cfg = misc.TEST_TRADER
-    user_cfg = misc.TEST_USER
+    trader_cfg = misc.DCE_OPT_TRADER
+    user_cfg = misc.DCE_OPT_USER
     opt_strat = optstrat.CommodOptStrat(name, 
                                     ['m1505', 'm1509', 'm1601'], 
                                     [datetime.datetime(2015, 4, 8, 15, 0, 0), 
