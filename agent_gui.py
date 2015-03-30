@@ -685,7 +685,7 @@ class MainApp(object):
             self.agent.tick_db_table = 'test_fut_tick'
             self.agent.min_db_table  = 'test_fut_min'
             self.agent.daily_db_table= 'test_fut_daily'
-            self.save_flag = True
+            self.agent.save_flag = True
         self.agent.resume()
         return
     
@@ -875,7 +875,7 @@ def m_opt_sim(tday, name='Soymeal_Opt'):
                  'daily_data_days':3, \
                  'min_data_days':1 }
     
-    myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None)
+    myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = True)
     myGui = Gui(myApp)
     myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')
     myGui.mainloop()

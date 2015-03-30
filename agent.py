@@ -271,8 +271,8 @@ class CTPTraderQryMixin(object):
     
     def cancel_order(self, iorder):
         inst = iorder.instrument
-        self.logger.info(u'A_CC:取消命令: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
-                % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
+        self.logger.info(u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
+                % (iorder.order_ref, iorder.sys_id, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
         if len(iorder.sys_id) >0:
             req = self.ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
@@ -574,7 +574,7 @@ class Instrument(object):
         self.up_limit = 0
         self.down_limit = 0
         self.last_traded = datetime.datetime.now()
-        self.max_holding = (10, 10)
+        self.max_holding = (20, 20)
         self.is_busy = False
         self.strike = 0.0 # only used by option
         self.otype = ''   # only used by option
@@ -850,15 +850,16 @@ class Agent(AbsAgent):
             self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
-            instruments = [inst for inst in self.instruments if self.instruments[inst].underlying=='']
-            for inst in instruments:  
+            for inst in self.instruments:  
+                if (len(self.instruments[inst].underlying) > 0):
+                    continue
+                self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
+                df = self.day_data[inst]
+                if len(df) > 0:
+                    self.instruments[inst].price = df['close'][-1]
+                    self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
+                    self.instruments[inst].prev_close = df['close'][-1]
                 if len(self.instruments[inst].underlying) == 0: 
-                    self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
-                    df = self.day_data[inst]
-                    if len(df) > 0:
-                        self.instruments[inst].price = df['close'][-1]
-                        self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
-                        self.instruments[inst].prev_close = df['close'][-1]
                     for fobj in self.day_data_func:
                         ts = fobj.sfunc(df)
                         df[ts.name]= pd.Series(ts, index=df.index)  
@@ -867,29 +868,28 @@ class Agent(AbsAgent):
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
             d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             d_end = self.scur_day
-            instruments = [inst for inst in self.instruments if self.instruments[inst].underlying=='']
-            for inst in instruments:
-                if (len(self.instruments[inst].underlying) == 0): 
-                    min_start = int(self.instruments[inst].start_tick_id/1000)
-                    min_end = int(self.instruments[inst].last_tick_id/1000)+1
-                    mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
-                    self.min_data[inst][1] = mindata
-                    if len(mindata)>0:
-                        min_date = mindata.index[-1].date()
-                        if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
-                            self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
-                            self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
-                            self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
-                            self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
-                            self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
-                            self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
-                            self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
-                            self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
-                            self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
-                            self.instruments[inst].price = float(mindata.ix[-1,'close'])
-                            self.instruments[inst].last_update = datetime.datetime.now()
-                            self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))
-                        
+            for inst in self.instruments: 
+                if (len(self.instruments[inst].underlying) > 0):
+                    continue
+                min_start = int(self.instruments[inst].start_tick_id/1000)
+                min_end = int(self.instruments[inst].last_tick_id/1000)+1
+                mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
+                self.min_data[inst][1] = mindata
+                if len(mindata)>0:
+                    min_date = mindata.index[-1].date()
+                    if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
+                        self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
+                        self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
+                        self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
+                        self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
+                        self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
+                        self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
+                        self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
+                        self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
+                        self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
+                        self.instruments[inst].price = float(mindata.ix[-1,'close'])
+                        self.instruments[inst].last_update = datetime.datetime.now()
+                        self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))                        
                     for m in self.min_data_func:
                         if m != 1:
                             self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
@@ -1149,7 +1149,14 @@ class Agent(AbsAgent):
                     last_tick = self.tick_data[inst][-1]
                     self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                     self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    self.min_switch(inst)                
+                    if (len(self.instruments[inst].underlying)==0):
+                        self.min_switch(inst)
+                    else:
+                        if self.save_flag:
+                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+                            if len(self.late_tick[inst])>0:
+                                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
+                                self.late_tick[inst] = []                     
                     self.cur_min[inst]['volume'] = last_tick.volume                    
                 
                 self.tick_data[inst] = []
@@ -1204,23 +1211,30 @@ class Agent(AbsAgent):
                     self.proc_lock = False
         return
         
-    def day_finalize(self, insts):
-        instruments = [inst for inst in insts if len(self.instruments[inst].underlying)==0]
-        self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (instruments, self.scur_day))
-        for inst in instruments:
+    def day_finalize(self, insts):        
+        for inst in insts:
             if self.instruments[inst].day_finalized:
                 continue
+            self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (inst, self.scur_day))
             if (len(self.tick_data[inst]) > 0) :
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                 self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                self.min_switch(inst)
+                if (len(self.instruments[inst].underlying)==0):
+                    self.min_switch(inst)
+                else:
+                    if self.save_flag:
+                        mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+                        if len(self.late_tick[inst])>0:
+                            mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
+                            self.late_tick[inst] = []      
 
             if self.cur_day[inst]['close'] > 0:
                 mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                 df = self.day_data[inst]
-                for fobj in self.day_data_func:
-                    fobj.rfunc(df)
+                if (len(self.instruments[inst].underlying)==0):
+                    for fobj in self.day_data_func:
+                        fobj.rfunc(df)
                 if self.save_flag:
                     mysqlaccess.insert_daily_data(inst, self.cur_day[inst], dbtable = self.daily_db_table)
             self.instruments[inst].day_finalized = True
@@ -1635,6 +1649,7 @@ class Agent(AbsAgent):
         '''
         self.logger.info(u'撤单时已成交，error_id=%s,error_msg=%s, order_ref=%s' %(error_id,error_msg, order_ref))
         if len(order_ref) == 0:
+            self.fetch_order()
             return
         myorder = self.ref2order[int(order_ref)]
         #print order_ref, error_id, error_msg
