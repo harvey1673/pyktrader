@@ -26,7 +26,7 @@ class RBreakerTrader(Strategy):
         self.start_min_id = [1503] * num_assets
         self.daily_close_buffer = 5
         self.freq = freq
-        self.trail_loss = trail_loss
+        self.trail_loss = [trail_loss] * num_assets
         self.entry_limit = 2
 
     def initialize(self):
@@ -72,7 +72,15 @@ class RBreakerTrader(Strategy):
                 self.num_entries[idx] = int(row[2])
                 self.num_exits[idx] =int(row[3]) 
         return
-        
+    
+    def run_tick(self, ctick):
+        inst = ctick.instID
+        idx = self.get_index([inst])
+        save_status = self.update_positions(idx)
+        if save_status:
+            self.save_state()
+        return    
+    
     def run_min(self, inst):
         min_id = self.agent.cur_min[inst]['min_id']
         if min_id <= 300 or min_id >= 2115:
@@ -89,8 +97,7 @@ class RBreakerTrader(Strategy):
             if save_status:
                 self.save_state()
             return
-        inst_obj = self.agent.instruments[inst]
-        #print inst, len(self.positions[idx]), len(self.submitted_pos[idx]), self.agent.cur_min[inst]['min_id'], self.agent.tick_id, self.last_min_id[idx]
+        inst_obj = self.agent.instruments[inst] 
         tick_base = inst_obj.tick_base
         dhigh = self.agent.cur_day[inst]['high']
         dlow  = self.agent.cur_day[inst]['low']
@@ -106,15 +113,14 @@ class RBreakerTrader(Strategy):
             return
         elif num_pos == 1:
             curr_pos = self.positions[idx][0]
-            if self.trail_loss > 0:
-                if curr_pos.trail_loss(curr_price, curr_pos.entry_price * self.trail_loss):
+            if self.trail_loss[idx] > 0:
+                if curr_pos.trail_loss(curr_price, curr_pos.entry_price * self.trail_loss[idx]):
                     msg = 'R-Breaker to close position after hitting trail loss for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s, exit_target = %s' \
                                     % (inst, curr_pos.direction, self.trade_unit[idx], min_id, curr_price, curr_pos.exit_target)
                     self.close_tradepos(idx, curr_pos, curr_price - curr_pos.direction * self.num_tick * tick_base)
                     self.status_notifier(msg)
                     self.save_state()
-                    return 
-        #print inst, curr_min, curr_price, self.bbreak[idx], self.ssetup[idx], self.senter[idx], self.benter[idx], self.bsetup[idx],self.sbreak[idx]
+                    return         
         buysell = 0 if curr_pos == None else curr_pos.direction
         if ((min_id >= self.last_min_id[idx]) or self.check_price_limit(inst, curr_price, 5)): 
             if (buysell != 0) and (len(self.submitted_pos[idx]) == 0):

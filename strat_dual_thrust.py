@@ -37,6 +37,7 @@ class DTTrader(Strategy):
             min_id = self.agent.instruments[inst].last_tick_id/1000
             min_id = int(min_id/100)*60 + min_id % 100 - self.daily_close_buffer
             self.last_min_id[idx] = int(min_id/60)*100 + min_id % 60
+        self.save_state()
         return
 
     def save_local_variables(self, file_writer):
@@ -55,10 +56,7 @@ class DTTrader(Strategy):
         return
         
     def run_min(self, inst):
-        #idx = self.get_index([inst])
-        #if (self.agent.cur_min[inst]['min_id'] + 1) % 3 == 0:
-        #    print inst, len(self.positions[idx]), len(self.submitted_pos[idx]), self.agent.cur_min[inst]['min_id'], self.last_min_id[idx]
-        return 
+        pass
         
     def run_tick(self, ctick):
         inst = ctick.instID

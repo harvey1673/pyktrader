@@ -204,11 +204,11 @@ class Strategy(object):
         self.update_trade_unit()
         for idx, under in enumerate(self.underliers):
             self.update_positions(idx)
-        self.save_state()
         self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
         self.num_entries = [0] * len(self.underliers)
         self.num_exits = [0] * len(self.underliers)
-        pass
+        self.initialize()
+        return
         
     def run_tick(self, ctick):
         pass

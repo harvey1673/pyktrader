@@ -1072,8 +1072,8 @@ class Agent(AbsAgent):
                 self.logger.warning('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
                 self.day_finalize(self.instruments.keys())
                 if not self.eod_flag:
-                    self.run_eod()
                     self.eod_flag = True
+                    self.run_eod()
                 return False
             elif (tick_id >= hrs[-1][1]*1000-1) and (not self.instruments[inst].day_finalized):
                 self.day_finalize([inst])
@@ -1259,6 +1259,7 @@ class Agent(AbsAgent):
             order.save_trade_list(self.scur_day, pfilled_list, file_prefix)    
         for strat in self.strategies:
             strat.day_finalize()
+            strat.initialize()
         self.calc_margin()
         self.save_eod_positions()
         eod_pos = {}
@@ -1483,7 +1484,7 @@ class Agent(AbsAgent):
             self.save_state()
             return True
         else:
-            print "do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price)
+            self.logger.info("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
             return False    
         
     def process_trade_list(self):
@@ -1604,7 +1605,8 @@ class Agent(AbsAgent):
         else:
             myorder.on_trade(price=strade.price,volume=strade.volume,trade_time=strade.trade_time)
             self.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (strade.price, strade.trade_time));
-        self.save_state()
+        self.process_trade_list()
+        #self.save_state()
         return
         
         ##查询可用资金
@@ -1622,8 +1624,8 @@ class Agent(AbsAgent):
         order_ref = sorder.order_ref
         myorder = self.agent.ref2order[order_ref]
         myorder.on_cancel()
-        self.save_state()
-        #self.process_trade_list()
+        self.process_trade_list()
+        #self.save_state()
         return
             
     def err_order_insert(self,order_ref,instrument_id,error_id,error_msg):
