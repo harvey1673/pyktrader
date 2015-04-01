@@ -859,7 +859,6 @@ class Agent(AbsAgent):
                     self.instruments[inst].price = df['close'][-1]
                     self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
                     self.instruments[inst].prev_close = df['close'][-1]
-                if len(self.instruments[inst].underlying) == 0: 
                     for fobj in self.day_data_func:
                         ts = fobj.sfunc(df)
                         df[ts.name]= pd.Series(ts, index=df.index)  
@@ -1205,10 +1204,10 @@ class Agent(AbsAgent):
                 self.late_tick[inst] = []                
         for strat in self.strategies:
             if inst in strat.instIDs:
-                if not self.proc_lock:
-                    self.proc_lock = True
+                if not self.instruments[inst].is_busy:
+                    self.instruments[inst].is_busy = True
                     strat.run_min(inst)
-                    self.proc_lock = False
+                    self.instruments[inst].is_busy = False
         return
         
     def day_finalize(self, insts):        
@@ -1381,17 +1380,20 @@ class Agent(AbsAgent):
         if (not self.update_instrument(ctick)):
             # print "stop at update inst"
             return 0
-        if len(self.instruments[ctick.instID].underlying) ==0:
-            if( not self.update_hist_data(ctick)):
-                # print "stop at update hist data"
-                return 0
+        
+        if( not self.update_hist_data(ctick)):
+            return 0
    
         # lock the trade processing to avoid position conflict
+        inst = ctick.instID
+        for strat in self.strategies:
+            if (inst in strat.instIDs):
+                if not self.instruments[inst].is_busy:
+                    self.instruments[inst].is_busy = True
+                    strat.run_tick(ctick)
+                    self.instruments[inst].is_busy = False
         if not self.proc_lock:
             self.proc_lock = True
-            for strat in self.strategies:
-                if (ctick.instID in strat.instIDs):
-                    strat.run_tick(ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1

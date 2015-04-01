@@ -599,7 +599,6 @@ class Gui(tk.Tk):
         ent = tk.Entry(lbl_frame)
         ent.grid(column=0, row=row_idx+1, sticky="ew")
         self.entries[field] = ent
-        ent.insert(0,"IF1503")
         inst_fields = ['Price', 'PrevClose', 'Volume', 'OI', 'AskPrice', 'AskVol', 'BidPrice', 'BidVol', 'UpLimit', 'DownLimit']        
         for idx, field in enumerate(inst_fields):
             lab1 = ttk.Label(lbl_frame, text=field, anchor='w')

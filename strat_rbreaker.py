@@ -28,6 +28,7 @@ class RBreakerTrader(Strategy):
         self.freq = freq
         self.trail_loss = [trail_loss] * num_assets
         self.entry_limit = 2
+        self.num_tick = 2
 
     def initialize(self):
         self.load_state()

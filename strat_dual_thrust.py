@@ -22,6 +22,7 @@ class DTTrader(Strategy):
         self.order_type = OPT_LIMIT_ORDER
         self.daily_close_buffer = 3
         self.close_tday = [daily_close] * numAssets
+        self.num_tick = 2
 
     def initialize(self):
         self.load_state()

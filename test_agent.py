@@ -15,15 +15,6 @@ import strat_turtle
 from misc import *
 from base import *
 
-PROD_USER1 = BaseObject( broker_id="8070", 
-                             investor_id="*", 
-                             passwd="*", 
-                             ports=["tcp://zjzx-md1.ctp.shcifco.com:41213"])
-
-class TestStrat(strategy.Strategy):
-    def run_min(self, instID):
-        pass
-    
 def test_main(tday, name='prod_trade'):
     '''
     import agent
@@ -72,7 +63,7 @@ def test_main(tday, name='prod_trade'):
 def prod_test(tday, name='prod_test'):
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     #trader_cfg = TEST_TRADER
-    user_cfg = DCE_OPT_USER
+    user_cfg = PROD_USER
     agent_name = name
     ins_setup = {'m1505':(0, 0.5, 8, False),
                 'RM505':(0, 0.5, 10, False),
