@@ -38,7 +38,7 @@ def prod_test(tday, name='prod_test'):
                 'TA509' :(0, 0.7, 4, False),
                 'ag1506':(0, 0.5, 6, False),
                 'au1506':(0, 0.5, 1, False),
-                'i1509' :(4, 0.3, 1, False),
+                'i1509' :(2, 0.3, 1, False),
                 'IF1504':(0, 0.5, 1, True)}
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][2] for inst in insts]
@@ -47,7 +47,6 @@ def prod_test(tday, name='prod_test'):
     ratios = [[ins_setup[inst][1], ins_setup[inst][1]] for inst in insts]
     lookbacks = [ins_setup[inst][0] for inst in insts]
     daily_close = [ins_setup[inst][3] for inst in insts]
-
     dt_strat = strat_dt.DTTrader('ProdDT', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, 

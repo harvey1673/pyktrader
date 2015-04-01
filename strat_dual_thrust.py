@@ -10,9 +10,9 @@ class DTTrader(Strategy):
         numAssets = len(underliers)
         self.ratios = [[0.7,0.7]] * numAssets
         if len(ratios) > 1:
-            self.ratio = ratios
+            self.ratios = ratios
         elif len(ratios) == 1: 
-            self.ratio = ratios * numAssets
+            self.ratios = ratios * numAssets
         if len(lookbacks) > 0:
             self.lookbacks = lookbacks
         else: 
@@ -21,7 +21,11 @@ class DTTrader(Strategy):
         self.cur_rng = [0.0] * numAssets
         self.order_type = OPT_LIMIT_ORDER
         self.daily_close_buffer = 3
-        self.close_tday = [daily_close] * numAssets
+        self.close_tday = [False] * numAssets
+        if len(daily_close) > 1:
+            self.close_tday = daily_close
+        elif len(daily_close) == 1: 
+            self.close_tday = daily_close * numAssets 
         self.num_tick = 2
 
     def initialize(self):
