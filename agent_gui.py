@@ -173,12 +173,11 @@ class RBStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'CloseTday', 'StartMinId']
+        self.entry_fields = ['TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId']
         self.status_fields = ['Sbreak', 'Bsetup', 'Benter', 'Senter', 'Ssetup', 'Bbreak'] 
         self.field_types = {'TradeUnit':'int', 
                             'MinRng':'float', 
                             'Ratios': 'floatlist', 
-                            'CloseTday': 'bool',
                             'StartMinId': 'int',
                             'Sbreak': 'float', 
                             'Bbreak':'float',
