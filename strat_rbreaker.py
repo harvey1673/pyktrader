@@ -9,9 +9,9 @@ class RBreakerTrader(Strategy):
         num_assets = len(underliers)
         self.ratios = [[0.4, 0.1, 0.1] for _ in underliers]
         if len(ratios) > 1:
-            self.ratio = ratios
+            self.ratios = ratios
         elif len(ratios) == 1: 
-            self.ratio = ratios*num_assets
+            self.ratios = ratios*num_assets
         self.min_rng = [1.0]*num_assets
         if len(min_rng) == num_assets:
             self.min_rng = min_rng

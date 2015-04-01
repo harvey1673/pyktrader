@@ -24,7 +24,7 @@ def prod_test(tday, name='prod_test'):
     ratios = [ins_setup[inst][0] for inst in insts]
     min_rng = [ins_setup[inst][2] for inst in insts]
     stop_loss = 0.0
-    rb_strat = strat_rb.RBreakerTrader('RBreaker', under_rb, vol_rb, trade_unit = units_rb,
+    rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 1, 
                                  agent = None, email_notify = ['harvey_wwu@hotmail.com'])
     ins_setup = {'m1509':(0, 0.5, 8, False),
@@ -38,7 +38,7 @@ def prod_test(tday, name='prod_test'):
                 'TA509' :(0, 0.7, 4, False),
                 'ag1506':(0, 0.5, 6, False),
                 'au1506':(0, 0.5, 1, False),
-                'i1509' :(2, 0.3,  1, False),
+                'i1509' :(4, 0.3, 1, False),
                 'IF1504':(0, 0.5, 1, True)}
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][2] for inst in insts]
@@ -55,12 +55,12 @@ def prod_test(tday, name='prod_test'):
     strategies = [rb_strat, dt_strat]
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':4, \
+                 'daily_data_days':3, \
                  'min_data_days':1 }
 
-    myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None)
+    myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
     myGui = Gui(myApp)
-    myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')
+    #myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')
     myGui.mainloop()
 
 if __name__ == '__main__':
