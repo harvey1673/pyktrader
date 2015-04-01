@@ -93,7 +93,7 @@ class TraderMock(agent.CTPTraderQryMixin):
         self.agent.isSettlementInfoConfirmed = True
 
     def check_order_status(self):
-        pass
+        return False
 
 class MarketDataMock(object):
     '''简单起见，只模拟一个合约，用于功能测试

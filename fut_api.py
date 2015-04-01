@@ -4,6 +4,7 @@ from agent import *
 from base import *
 import logging
 import order
+import ctp_emulator as emulator
 
 class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
     '''
@@ -182,25 +183,28 @@ def make_user(my_agent,hq_user):
         user.Init()
 
 def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.date.today()):
-    logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
+    #logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    #logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
     strategies = strat_cfg['strategies']
     folder = strat_cfg['folder']
     daily_days = strat_cfg['daily_data_days']
     min_days = strat_cfg['min_data_days']
     myagent = Agent(agent_name, None, None, instruments, strategies, tday, folder, daily_days, min_days) 
-    myagent.trader = trader = TraderSpiDelegate(instruments=myagent.instruments, 
+    if trader_cfg == None:
+        myagent, trader = emulator.create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
+    else:
+        myagent.trader = trader = TraderSpiDelegate(instruments=myagent.instruments, 
                              broker_id=trader_cfg.broker_id,
                              investor_id= trader_cfg.investor_id,
                              passwd= trader_cfg.passwd,
                              agent = myagent,
                        )
-    trader.Create('trader')
-    trader.SubscribePublicTopic(trader.ApiStruct.TERT_QUICK)
-    trader.SubscribePrivateTopic(trader.ApiStruct.TERT_QUICK)
-    for port in trader_cfg.ports:
-        trader.RegisterFront(port)
-    trader.Init()
+        trader.Create('trader')
+        trader.SubscribePublicTopic(trader.ApiStruct.TERT_QUICK)
+        trader.SubscribePrivateTopic(trader.ApiStruct.TERT_QUICK)
+        for port in trader_cfg.ports:
+            trader.RegisterFront(port)
+        trader.Init()
     return trader, myagent
 
 def create_agent(agent_name, usercfg, tradercfg, insts, strat_cfg, tday = datetime.date.today()):
