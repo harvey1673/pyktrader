@@ -113,6 +113,7 @@ class Strategy(object):
         self.daily_close_buffer = 5
         self.close_tday = [False] * num_assets
         self.last_min_id = [2055] * num_assets
+        self.trail_loss = [0] * num_assets
         self.order_type = OPT_LIMIT_ORDER
         self.locked = False
         

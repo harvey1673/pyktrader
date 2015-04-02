@@ -68,7 +68,7 @@ def m_opt_sim(tday, name='Soymeal_Opt'):
     min_rng = [ins_setup[inst][2] for inst in insts_rb]
     stop_loss = 0.0
     
-    dt_strat = strat_dt.DTTrader('DT_test', under_dt, vols_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = False, email_notify = [])
+    dt_strat = strat_dt.DTTrader('DT_test', under_dt, vols_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = [False], email_notify = [])
     rb_strat = strat_rb.RBreakerTrader('RBreaker', under_rb, vol_rb, trade_unit = units_rb,
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 1, 
                                  agent = None, email_notify = [])

@@ -124,7 +124,7 @@ def rbreaker_test(tday, name='rbreaker_test'):
     vol_rb = [[1] for inst in insts]
     ratios = [ins_setup[inst][0] for inst in insts]
     min_rng = [ins_setup[inst][2] for inst in insts]
-    stop_loss = 0.0
+    stop_loss = 0.02
     rb_strat = strat_rb.RBreakerTrader('RBreaker', under_rb, vol_rb, trade_unit = units_rb,
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 1, 
                                  agent = None, email_notify = ['harvey_wwu@hotmail.com'])

@@ -1204,10 +1204,7 @@ class Agent(AbsAgent):
                 self.late_tick[inst] = []                
         for strat in self.strategies:
             if inst in strat.instIDs:
-                if not self.instruments[inst].is_busy:
-                    self.instruments[inst].is_busy = True
-                    strat.run_min(inst)
-                    self.instruments[inst].is_busy = False
+                strat.run_min(inst)
         return
         
     def day_finalize(self, insts):        

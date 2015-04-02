@@ -23,7 +23,7 @@ class RBreakerTrader(Strategy):
         self.benter = [0.0]*num_assets
         self.sbreak = [0.0]*num_assets
         self.bbreak = [0.0]*num_assets
-        self.start_min_id = [1503] * num_assets
+        self.start_min_id = [303] * num_assets
         self.daily_close_buffer = 5
         self.freq = freq
         self.trail_loss = [trail_loss] * num_assets
@@ -31,7 +31,7 @@ class RBreakerTrader(Strategy):
         self.num_tick = 2
 
     def initialize(self):
-        self.load_state()
+        #self.load_state()
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
             ddf = self.agent.day_data[inst]
@@ -87,14 +87,14 @@ class RBreakerTrader(Strategy):
         if min_id <= 300 or min_id >= 2115:
             return
         idx = self.get_index([inst])
-        if idx < 0:
-            self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
+        if (idx < 0) or (min_id < self.start_min_id[idx]):
+            self.logger.warning('inst=%s has not started in this strategy = %s' % (inst, self.name))
             return
         save_status = self.update_positions(idx)
         num_pos = len(self.positions[idx])
         curr_pos = None
         curr_min = int(min_id/100)*60+ min_id % 100 + 1        
-        if (curr_min % self.freq != 0) or (min_id < self.start_min_id[idx]):
+        if (curr_min % self.freq != 0):
             if save_status:
                 self.save_state()
             return
