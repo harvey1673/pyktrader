@@ -31,7 +31,7 @@ class RBreakerTrader(Strategy):
         self.num_tick = 2
 
     def initialize(self):
-        #self.load_state()
+        self.load_state()
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
             ddf = self.agent.day_data[inst]

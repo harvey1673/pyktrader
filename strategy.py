@@ -34,6 +34,7 @@ class TradePos(object):
     
     def trail_loss(self, curr_price, margin):
         self.exit_target = max(self.exit_target * self.direction, curr_price * self.direction) * self.direction
+        #print self.insts, self.exit_target, curr_price, self.direction
         if (self.direction * (self.exit_target - curr_price) >= margin):
             return True
         else:
