@@ -195,8 +195,8 @@ class OptionStrategy(object):
         return
     
     def reval_all(self):
-        for inst in self.opt_dict.values():
-            self.update_greeks(inst)
+        for expiry in self.expiries:
+            self.risk_reval(expiry, is_recalib=True)
         self.update_pos_greeks()
         self.update_group_risk()
         self.update_margin()
