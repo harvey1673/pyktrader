@@ -32,16 +32,13 @@ class TradePos(object):
         self.is_closed = False
         self.profit = 0.0
     
-    def trail_check(self, curr_price, margin):
+    def trail_loss(self, curr_price, margin):
+        self.exit_target = max(self.exit_target * self.direction, curr_price * self.direction) * self.direction
+        #print self.insts, self.exit_target, curr_price, self.direction
         if (self.direction * (self.exit_target - curr_price) >= margin):
             return True
-        return False
-    
-    def trail_update(self, curr_price):
-        if (curr_price - self.exit_target) * self.direction > 0:
-            self.exit_target = curr_price
-            return True
-        return False        
+        else:
+            return False
     
     def check_stop(self, curr_price, margin):
         if (curr_price - self.entry_price) * sign(margin) * self.direction >= abs(margin):
@@ -192,7 +189,7 @@ class Strategy(object):
                     etrade.status = order.ETradeStatus.StratConfirm
                     save_status = True
         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
-        self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]        
+        self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]
         return save_status
         
     def resume(self):

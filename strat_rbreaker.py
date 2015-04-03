@@ -28,7 +28,7 @@ class RBreakerTrader(Strategy):
         self.freq = freq
         self.trail_loss = [trail_loss] * num_assets
         self.entry_limit = 2
-        self.num_tick = 1
+        self.num_tick = 2
 
     def initialize(self):
         self.load_state()
@@ -75,7 +75,12 @@ class RBreakerTrader(Strategy):
         return
     
     def run_tick(self, ctick):
-        pass
+        inst = ctick.instID
+        idx = self.get_index([inst])
+        save_status = self.update_positions(idx)
+        if save_status:
+            self.save_state()
+        return    
     
     def run_min(self, inst):
         min_id = self.agent.cur_min[inst]['min_id']
@@ -110,8 +115,7 @@ class RBreakerTrader(Strategy):
         elif num_pos == 1:
             curr_pos = self.positions[idx][0]
             if self.trail_loss[idx] > 0:
-                save_status = curr_pos.trail_update(curr_price)
-                if curr_pos.trail_check(curr_price, curr_pos.entry_price * self.trail_loss[idx]):
+                if curr_pos.trail_loss(curr_price, curr_pos.entry_price * self.trail_loss[idx]):
                     msg = 'R-Breaker to close position after hitting trail loss for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s, exit_target = %s' \
                                     % (inst, curr_pos.direction, self.trade_unit[idx], min_id, curr_price, curr_pos.exit_target)
                     self.close_tradepos(idx, curr_pos, curr_price - curr_pos.direction * self.num_tick * tick_base)

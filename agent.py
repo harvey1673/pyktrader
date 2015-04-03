@@ -1068,12 +1068,13 @@ class Agent(AbsAgent):
                 break
         if not tick_status:
             if (tick_id > 2116000) and (not self.eod_flag):
-                self.eod_flag = True
-                self.logger.info('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
+                self.logger.warning('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
                 self.day_finalize(self.instruments.keys())
-                self.run_eod()
+                if not self.eod_flag:
+                    self.eod_flag = True
+                    self.run_eod()
                 return False
-            elif (tick_id >= hrs[-1][1]*1000+4) and (not self.instruments[inst].day_finalized):
+            elif (tick_id >= hrs[-1][1]*1000-1) and (not self.instruments[inst].day_finalized):
                 self.day_finalize([inst])
         return tick_status
     
@@ -1135,11 +1136,6 @@ class Agent(AbsAgent):
             self.cur_day[inst]['openInterest'] = tick.openInterest
             self.cur_day[inst]['volume'] = tick.volume
             self.cur_day[inst]['date'] = tick.timestamp.date()
-
-            for strat in self.strategies:
-                if (inst in strat.instIDs):
-                    strat.run_tick(tick)
-                    
             if (tick_min == self.cur_min[inst]['min_id']):
                 self.tick_data[inst].append(tick)
                 self.cur_min[inst]['close'] = tick.price
@@ -1173,7 +1169,7 @@ class Agent(AbsAgent):
                 if ((tick_min>0) and (tick.price>0)): 
                     self.tick_data[inst].append(tick)
             
-            if tick_id >= self.instruments[inst].last_tick_id:
+            if tick_id >= self.instruments[inst].last_tick_id-1:
                 self.day_finalize([inst])
 
         except Exception as e:
@@ -1213,33 +1209,34 @@ class Agent(AbsAgent):
         
     def day_finalize(self, insts):        
         for inst in insts:
-            if not self.instruments[inst].day_finalized:
-                self.instruments[inst].day_finalized = True
-                self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (inst, self.scur_day))
-                if (len(self.tick_data[inst]) > 0) :
-                    last_tick = self.tick_data[inst][-1]
-                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (len(self.instruments[inst].underlying)==0):
-                        self.min_switch(inst)
-                    else:
-                        if self.save_flag:
-                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
-                            if len(self.late_tick[inst])>0:
-                                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
-                                self.late_tick[inst] = []      
-                if (self.cur_day[inst]['close']>0):
-                    mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
-                    df = self.day_data[inst]
-                    if (len(self.instruments[inst].underlying)==0):
-                        for fobj in self.day_data_func:
-                            fobj.rfunc(df)
+            if self.instruments[inst].day_finalized:
+                continue
+            self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (inst, self.scur_day))
+            if (len(self.tick_data[inst]) > 0) :
+                last_tick = self.tick_data[inst][-1]
+                self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+                self.cur_min[inst]['openInterest'] = last_tick.openInterest
+                if (len(self.instruments[inst].underlying)==0):
+                    self.min_switch(inst)
+                else:
                     if self.save_flag:
-                        mysqlaccess.insert_daily_data(inst, self.cur_day[inst], dbtable = self.daily_db_table)
+                        mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+                        if len(self.late_tick[inst])>0:
+                            mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
+                            self.late_tick[inst] = []      
+
+            if self.cur_day[inst]['close'] > 0:
+                mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
+                df = self.day_data[inst]
+                if (len(self.instruments[inst].underlying)==0):
+                    for fobj in self.day_data_func:
+                        fobj.rfunc(df)
+                if self.save_flag:
+                    mysqlaccess.insert_daily_data(inst, self.cur_day[inst], dbtable = self.daily_db_table)
+            self.instruments[inst].day_finalized = True
         return
     
     def run_eod(self):
-        self.eod_flag = True
         if self.trader == None:
             return 
         self.proc_lock = True
@@ -1288,6 +1285,7 @@ class Agent(AbsAgent):
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
         if not self.eod_flag:
+            self.eod_flag = True
             self.run_eod()
         self.scur_day = newday
         print "scur_day = %s, reset tick_id= %s to 0" % (self.scur_day, self.tick_id)
@@ -1379,10 +1377,18 @@ class Agent(AbsAgent):
         if (not self.update_instrument(ctick)):
             # print "stop at update inst"
             return 0
-     
+        
         if( not self.update_hist_data(ctick)):
             return 0
    
+        # lock the trade processing to avoid position conflict
+        inst = ctick.instID
+        for strat in self.strategies:
+            if (inst in strat.instIDs):
+                if not self.instruments[inst].is_busy:
+                    self.instruments[inst].is_busy = True
+                    strat.run_tick(ctick)
+                    self.instruments[inst].is_busy = False
         if not self.proc_lock:
             self.proc_lock = True
             self.process_trade_list()

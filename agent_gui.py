@@ -196,7 +196,6 @@ class OptStratGui(object):
         self.underliers = strat.underliers
         self.option_insts = strat.option_insts.keys()
         self.expiries = strat.expiries
-        self.spot_model = strat.spot_model
         self.cont_mth = []
         if len(self.underliers) == 1:
             self.cont_mth = [ d.year*100+d.month for d in self.expiries]
@@ -241,15 +240,6 @@ class OptStratGui(object):
     def get_T_table(self):
         params = self.app.get_agent_params(['Insts'])
         inst_labels = ['Name', 'Price','BidPrice', 'BidVol','AskPrice', 'AskVol']
-        under_labels = ['Name', 'Price','BidPrice','BidVol','AskPrice','AskVol','UpLimit','DownLimit']
-        for inst in self.underliers:
-            if inst not in self.curr_insts:
-                self.curr_insts[inst] = {}
-            for instlbl in under_labels:
-                value = params['Insts'][inst][instlbl]
-                self.curr_insts[inst][instlbl] = value
-                #value = type2str(value, value.__class__.__name__)
-                self.root.stringvars[inst][instlbl].set(keepdigit(value,4))        
         for inst in self.opt_dict.values():
             if inst not in self.curr_insts:
                 self.curr_insts[inst] = {}
@@ -372,15 +362,13 @@ class OptStratGui(object):
         vol_types =  ['string', 'string', 'float','float','float','float','float','float','float','float']
         inst_labels = ['Name', 'Price', 'BidPrice', 'BidVol', 'BidIV', 'AskPrice','AskVol','AskIV']
         inst_types  = ['string','float', 'float', 'int', 'float', 'float', 'int','float','float']
-        under_labels = ['Name', 'Price','BidPrice','BidVol','AskPrice','AskVol','UpLimit','DownLimit']
-        under_types = ['string', 'float','float','int','float','int','float','float']
         calc_labels = [ 'BidIV', 'AskIV']
         underliers = self.underliers
         if len(self.underliers) == 1:
             underliers = self.underliers * len(self.expiries)
         row_id = 0
         col_id = 0
-        for under_id, (expiry, strikes, cont_mth, under) in enumerate(zip(self.expiries, self.strikes, self.cont_mth, underliers)):
+        for expiry, strikes, cont_mth, under in zip(self.expiries, self.strikes, self.cont_mth, underliers):
             self.stringvars['Volgrid'][expiry] = {}
             col_id = 0
             for idx, vlbl in enumerate(vol_labels):
@@ -394,22 +382,7 @@ class OptStratGui(object):
             ttk.Button(self.frame, text='CalibVol', command= self.calib_volgrids).grid(row=row_id+1, column=12, columnspan=2)
             ttk.Button(self.frame, text='RiskGroup', command= self.group_risks).grid(row=row_id, column=14, columnspan=2)
             ttk.Button(self.frame, text='SetupTrade', command= self.trade_setup).grid(row=row_id+1, column=14, columnspan=2)
-            row_id += 2
-            col_id = 0
-            if self.spot_model: 
-                inst = self.underliers[0]
-            else:
-                inst = self.underliers[under_id]
-            for idx, ulbl in enumerate(under_labels):
-                tk.Label(self.frame, text=ulbl).grid(row=row_id, column=col_id + idx)
-                if (inst in self.root.stringvars) and (ulbl in self.root.stringvars[inst]):
-                    v = self.root.stringvars[inst][ulbl]
-                else:
-                    if inst not in self.root.stringvars:
-                        self.root.stringvars[inst] = {}
-                    v = get_type_var(under_types[idx])
-                    self.root.stringvars[inst][ulbl] = v
-                tk.Label(self.frame, textvariable = v).grid(row=row_id+1, column=col_id + idx)              
+            #ttk.Button(self.frame, text=
             row_id += 2
             col_id = 0
             for idx, instlbl in enumerate(inst_labels + ['strike']):
@@ -572,15 +545,7 @@ class Gui(tk.Tk):
             v = self.stringvars['Insts.'+field]
             v.set(params['Insts'][inst][field])
         pass
-    
-    def recalc_margin(self):
-        self.app.run_agent_func('calc_margin')
-        return
-
-    def run_eod(self):
-        self.app.run_agent_func('run_eod')
-        return
-            
+        
     def config_settings(self):
         entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap']
         label_fields = ['ScurDay', 'EodFlag', 'Initialized' ]
@@ -624,12 +589,8 @@ class Gui(tk.Tk):
         setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
         setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(all_fields))
         setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc', command= self.recalc_margin)
-        setup_loadbtn.grid(column=2, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
-        setup_loadbtn.grid(column=3, row=row_idx, sticky="ew")
         setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
-        setup_qrybtn.grid(column=4, row=row_idx, sticky="ew")
+        setup_qrybtn.grid(column=2, row=row_idx, sticky="ew")
         row_idx +=1
         field = 'QryInst'
         lab = ttk.Label(lbl_frame, text= field, anchor='w')
@@ -827,10 +788,6 @@ class MainApp(object):
             if strat.name == strat_name:
                 getattr(strat, func_name)()
                 break 
-        return 
-
-    def run_agent_func(self, func_name):
-        getattr(self.agent, func_name)()
         return 
         
     def exit_agent(self):
