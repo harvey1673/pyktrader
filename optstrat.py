@@ -181,6 +181,7 @@ class OptionStrategy(object):
         cont_mth = expiry.year * 100 + expiry.month
         indices = self.option_map[(self.option_map.cont_mth == cont_mth) & (self.option_map.otype != 0)].index
         dexp = datetime2xl(expiry)
+        idx = self.expiries.index(expiry)
         fwd = self.get_fwd(idx)
         if is_recalib:
             self.last_updated[expiry]['fwd'] = fwd
