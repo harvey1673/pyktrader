@@ -31,6 +31,14 @@ def fut2opt(fut_inst, expiry, otype, strike):
 def get_opt_margin(fut_price, strike, type):
     return 0.0
 
+class OptionArbMixin(object):
+    def __init__(self, expiries, strikes):
+        self.callspd = []
+        self.putspd = []
+        pass
+    
+    
+    
 class OptionStrategy(object):
     def __init__(self, name, underliers, expiries, strikes, agent = None):
         self.name = name
@@ -69,7 +77,7 @@ class OptionStrategy(object):
         self.spot_model = False
         self.pricer = pyktlib.BlackPricer
         self.last_updated = dict([(expiry, {'dtoday':0, 'fwd':0.0}) for expiry in expiries]) 
-
+        
     def reset(self):
         if self.agent != None:
             self.folder = self.agent.folder + self.name + '_'
@@ -307,7 +315,7 @@ class OptionStrategy(object):
                     self.volgrids[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, self.accrual)
                 elif row[0]== 'Pos':
                     instID = str(row[1])
-                    self.option_map.loc[instID, 'pos'] = int(row[2]) 
+                    self.option_map.loc[instID, 'pos'] = int(row[2])
         return
     
     def delta_hedger(self):
@@ -390,4 +398,11 @@ class OptArbStrat(CommodOptStrat):
               
     def run_tick(self, ctick):         
         inst = ctick.instID
+        pass
+
+class OptSubStrat(object):
+    def __init__(self):
+        pass
+    
+    def run_tick(self, ctick):
         pass
