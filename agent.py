@@ -528,7 +528,7 @@ class CTPTraderRspMixin(object):
                             order_sysid = ptrade.OrderSysID,
                             price = ptrade.Price,
                             volume= ptrade.Volume,
-                            trade_time = ptrade.TradeTime )
+                            trade_id = ptrade.TradeID )
         self.agent.rtn_trade(trade)
         
     def OnRspOrderAction(self, pInputOrderAction, pRspInfo, nRequestID, bIsLast):
@@ -1593,11 +1593,11 @@ class Agent(AbsAgent):
         '''
         myorder = self.ref2order[strade.order_ref]
         if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
-            myorder.on_trade(price=strade.price,volume=strade.volume,trade_time=strade.trade_time)
-            self.logger.info(u'A_RT31,开仓回报,price=%s,time=%s' % (strade.price,strade.trade_time));
+            myorder.on_trade(price=strade.price,volume=strade.volume,trade_id=strade.trade_id)
+            self.logger.info(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (strade.price,strade.trade_id));
         else:
-            myorder.on_trade(price=strade.price,volume=strade.volume,trade_time=strade.trade_time)
-            self.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (strade.price, strade.trade_time));
+            myorder.on_trade(price=strade.price,volume=strade.volume,trade_id=strade.trade_id)
+            self.logger.info(u'A_RT32,平仓回报,price=%s,trade_id=%s' % (strade.price, strade.trade_id));
         self.process_trade_list()
         #self.save_state()
         return

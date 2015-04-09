@@ -46,12 +46,10 @@ def m_opt_sim(tday, name='Soymeal_Opt'):
     trader_cfg = misc.DCE_OPT_TRADER
     user_cfg = misc.DCE_OPT_USER
     opt_strat = optstrat.CommodOptStrat(name, 
-                                    ['m1505', 'm1509', 'm1601'], 
-                                    [datetime.datetime(2015, 4, 8, 15, 0, 0), 
-                                     datetime.datetime(2015, 8, 7, 15, 0, 0), 
+                                    ['m1509', 'm1601'], 
+                                    [datetime.datetime(2015, 8, 7, 15, 0, 0), 
                                      datetime.datetime(2015, 12,7, 15, 0, 0)],
-                                    [[2700 + 50 * i for i in range(7)], 
-                                     [2600 + 50 * i for i in range(10)],
+                                    [[2600 + 50 * i for i in range(10)],
                                      [2500 + 50 * i for i in range(13)]])
     insts_dt = ['m1509']
     units_dt = [2]*len(insts_dt)
