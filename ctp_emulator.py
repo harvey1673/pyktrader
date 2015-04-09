@@ -52,7 +52,7 @@ class TraderMock(agent.CTPTraderQryMixin):
                             order_sysid = trade.OrderSysID,
                             price = trade.Price,
                             volume= trade.Volume,
-                            trade_time = trade.TradeTime )
+                            trade_id = trade.TradeID )
         self.agent.rtn_trade(ptrade)
 
     def ReqOrderAction(self, corder, request_id):
