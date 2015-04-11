@@ -166,7 +166,7 @@ class ETrade(object):
         volumes = [0] * len(self.instIDs)
         for idx, inst in enumerate(self.instIDs):
             for iorder in self.order_dict[inst]:
-                if iorder.status in [OrderStatus.Done, OrderStatus.Cancelled]:
+                if (iorder.status in [OrderStatus.Done, OrderStatus.Cancelled]) and (len(iorder.conditionals) == 0):
                     continue
                 if len(iorder.conditionals) == 1 and (OrderStatus.Cancelled in iorder.conditionals.values()):
                     sorder = iorder.conditionals.keys()[0]

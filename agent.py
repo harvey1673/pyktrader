@@ -1519,8 +1519,7 @@ class Agent(AbsAgent):
                                         iorder.on_cancel()
                                     else:
                                         self.cancel_order(iorder)
-                                    if exec_trade.status == order.ETradeStatus.PFilled:
-                                        
+                                    if exec_trade.status == order.ETradeStatus.PFilled:                                        
                                         cond = {iorder:order.OrderStatus.Cancelled}
                                         norder =   order.Order(iorder.position, 
                                                      0, 
