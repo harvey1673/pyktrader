@@ -29,6 +29,7 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
         config['win'] = s[1]
         config['k'] = s[0]
         config['m'] = s[2]
+        config['f'] = s[3]
         (res, closed_trades, ts) = dual_thrust_sim( ddf, mdf, config)
         output[ix] = res
         print 'saving results for scen = %s' % str(ix)
@@ -50,6 +51,7 @@ def dual_thrust_sim( ddf, mdf, config):
     marginrate = config['marginrate']
     offset = config['offset']
     k = config['k']
+    f = config['f']
     start_equity = config['capital']
     win = config['win']
     multiplier = config['m']
@@ -57,8 +59,10 @@ def dual_thrust_sim( ddf, mdf, config):
     unit = config['unit']
     SL = config['stoploss']
     min_rng = config['min_range']
+    ma_fast = config['MA_fast']
     if win == -1:
-        tr = (ddf.high - ddf.low).shift(1)
+        tr= pd.concat([ddf.high - ddf.low, ddf.close - ddf.close.shift(1)], 
+                       join='outer', axis=1).max(axis=1).shift(1)
     elif win == 0:
         tr = pd.concat([(pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.close, 2))*multiplier, 
                         (pd.rolling_max(ddf.close, 2) - pd.rolling_min(ddf.low, 2))*multiplier,
@@ -70,7 +74,7 @@ def dual_thrust_sim( ddf, mdf, config):
                        pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
                        join='outer', axis=1).max(axis=1).shift(1)
     ddf['TR'] = tr
-        
+    ddf['MA'] = pd.rolling_mean(ddf.close, ma_fast).shift(1)    
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -90,18 +94,26 @@ def dual_thrust_sim( ddf, mdf, config):
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos    
-        if np.isnan(dslice.TR):
+        if np.isnan(dslice.TR) or np.isnan(dslice.MA):
             continue
         d_open = dslice.open
         #if (prev_d < d):
         #    d_open = mslice.open
         #else:
         #    d_open = dslice.open
+        rng = max(min_rng * d_open, dslice.TR)
         if (d_open <= 0):
             continue
         #prev_d = d
-        buytrig  = d_open + max(min_rng, dslice.TR * k)
-        selltrig = d_open - max(min_rng, dslice.TR * k)
+        if dslice.MA > d_open + k * rng:
+            buytrig = d_open + f * k * rng
+            selltrig = d_open - k * rng
+        elif dslice.MA < d_open - k * rng:
+            buytrig  = d_open + k * rng
+            selltrig = d_open - f * k * rng
+        else:
+            buytrig = d_open + k * rng
+            selltrig = d_open- k * rng        
         
         if (min_id >= config['exit_min']):
             if (pos != 0) and (close_daily or (d == end_d)):
@@ -175,20 +187,22 @@ def run_sim(start_date, end_date, daily_close = False):
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DT_'
+    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DTsymMA5_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
     config = {'capital': 10000,
               'offset': 0,
+              'MA_fast': 5,
+              'MA_slow': 20,
               'trans_cost': 0.0,
               'close_daily': daily_close, 
               'unit': 1,
               'stoploss': 0.0,
-              'min_range': 0.0,
+              'min_range': 0.01,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.3, -1, 0), (0.5, -1, 0), (0.7, 0, 0.5), (0.5, 0, 0.6), (0.7, 0, 0.6), (0.3, 2, 0), (0.5, 2, 0)]
+    scenarios = [(0.3, -1, 0, 1), (0.5, -1, 0, 1), (0.7, 0, 0.5, 1), (0.5, 0, 0.6, 1), (0.7, 0, 0.6, 1), (0.3, 2, 0, 1), (0.5, 2, 0, 1)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
         config['nearby'] = 1
@@ -198,7 +212,7 @@ def run_sim(start_date, end_date, daily_close = False):
             config['nearby'] = 3
             config['rollrule'] = '-1b'
         elif asset in ['IF']:
-            config['rollrule'] = '-1b'
+            config['rollrule'] = '-2b'
         elif asset in ['au', 'ag']:
             config['rollrule'] = '-25b'       
         dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config)
