@@ -59,6 +59,7 @@ def r_breaker_sim( ddf, mdf, config):
     tcost = config['trans_cost']
     unit = config['unit']
     close_daily = config['close_daily']
+    ddf['range'] = (ddf.high - ddf.low).shift(1)
     ddf['ssetup'] = (ddf.high+a*(ddf.close - ddf.low)).shift(1)
     ddf['bsetup'] = (ddf.low-a*(ddf.high - ddf.close)).shift(1)
     ddf['senter'] = ((1+b)*(ddf.high+ddf.close)/2.0 - b * ddf.low).shift(1)
@@ -147,18 +148,18 @@ def r_breaker_sim( ddf, mdf, config):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
 
-def run_sim(end_date, daily_close):
+def run_sim(start_date, end_date, daily_close = True):
     commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,10,1)] * 12 + \
                 [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
     commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH', 'IF']
     start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
                 [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
-                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2010,7,1)]
+                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2010,6,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
     #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
-    sim_list = [ 'm', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'RM']
+    sim_list = [ 'IF']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -171,9 +172,10 @@ def run_sim(end_date, daily_close):
               'trans_cost': 0.0,
               'close_daily': daily_close, 
               'unit': 1,
+              'min_rng': 0.015, 
               'file_prefix': file_prefix}
     
-    scenarios = [(0.35, 0.07, 0.25), (0.5, 0.1, 0.35)]
+    scenarios = [(0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
     freqs = ['1min', '3min', '5min']
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( margin_dict[asset], margin_dict[asset])
@@ -188,19 +190,23 @@ def run_sim(end_date, daily_close):
             config['start_min'] = 1520
             config['exit_min'] = 2110
             config['rollrule'] = '-1b'
-        r_breaker( asset, sdate, end_date, scenarios, freqs, config)
+        r_breaker( asset, max(sdate, start_date), end_date, scenarios, freqs, config)
     return
 
 if __name__=="__main__":
     args = sys.argv[1:]
+    if len(args) < 3:
+        d_close = True
+    else:
+        d_close = (int(args[2])>0)
     if len(args) < 2:
-        d_close = False
+        end_d = datetime.date(2015,1,23)
     else:
-        d_close = (int(args[1])>0)
+        end_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
     if len(args) < 1:
-        end_d = datetime.date(2015,2,27)
+        start_d = datetime.date(2013,1,2)
     else:
-        end_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-
-    run_sim(end_d, d_close)
+        start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+    run_sim(start_d, end_d, d_close)
+    pass
             

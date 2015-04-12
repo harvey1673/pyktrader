@@ -56,6 +56,8 @@ def m_opt_sim(tday, name='Soymeal_Opt'):
     under_dt = [[inst] for inst in insts_dt]
     vols_dt = [[1]]*len(insts_dt)
     lookbacks_dt = [0]*len(insts_dt)
+    ratios = [[0.5, 0.5]]*len(insts_dt)
+    dt_strat = strat_dt.DTTrader('DT_test', under_dt, vols_dt, trade_unit = units_dt, ratios= ratios, lookbacks = lookbacks_dt, agent = None, daily_close = [False], email_notify = [])
     
     ins_setup = {'m1509': [[0.35, 0.07, 0.25], 2,  30]}
     insts_rb = ins_setup.keys()
@@ -65,15 +67,13 @@ def m_opt_sim(tday, name='Soymeal_Opt'):
     ratios = [ins_setup[inst][0] for inst in insts_rb]
     min_rng = [ins_setup[inst][2] for inst in insts_rb]
     stop_loss = 0.0
-    
-    dt_strat = strat_dt.DTTrader('DT_test', under_dt, vols_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = [False], email_notify = [])
     rb_strat = strat_rb.RBreakerTrader('RBreaker', under_rb, vol_rb, trade_unit = units_rb,
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 1, 
                                  agent = None, email_notify = [])
     strategies = [opt_strat, dt_strat, rb_strat]
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':3, \
+                 'daily_data_days':5, \
                  'min_data_days':1 }
     
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = True)

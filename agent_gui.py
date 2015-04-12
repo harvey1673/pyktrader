@@ -161,13 +161,14 @@ class DTStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.entry_fields = ['TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
-        self.status_fields = ['TdayOpen', 'CurRng'] 
+        self.status_fields = ['TdayOpen', 'CurRng', 'CurMa'] 
         self.field_types = {'TradeUnit':'int', 
                             'Lookbacks':'int', 
                             'Ratios': 'floatlist', 
                             'CloseTday': 'bool',
-                            'TdayOpen': 'float', 
-                            'CurRng':'float' }
+                            'TdayOpen': 'float',
+                            'CurRng':'float',
+                            'CurMa': 'float'}
                         
 class RBStratGui(StratGui):
     def __init__(self, strat, app, master):
