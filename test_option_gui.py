@@ -56,7 +56,7 @@ def m_opt_sim(tday, name='Soymeal_Opt'):
     under_dt = [[inst] for inst in insts_dt]
     vols_dt = [[1]]*len(insts_dt)
     lookbacks_dt = [0]*len(insts_dt)
-    ratios = [[0.5, 0.5]]*len(insts_dt)
+    ratios = [[0.4, 0.5]]*len(insts_dt)
     dt_strat = strat_dt.DTTrader('DT_test', under_dt, vols_dt, trade_unit = units_dt, ratios= ratios, lookbacks = lookbacks_dt, agent = None, daily_close = [False], email_notify = [])
     
     ins_setup = {'m1509': [[0.35, 0.07, 0.25], 2,  30]}

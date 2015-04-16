@@ -130,7 +130,7 @@ def load_order_list(curr_date, file_prefix, positions):
     
 class ETrade(object):
     #instances = weakref.WeakSet()
-    id_generator = itertools.count(int(datetime.datetime.strftime(datetime.datetime.now(),'%m%d%H%M%S')))
+    id_generator = itertools.count(int(datetime.datetime.strftime(datetime.datetime.now(),'%d%H%M%S')))
 
     #@classmethod
     #def get_instances(cls):

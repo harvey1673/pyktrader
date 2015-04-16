@@ -13,9 +13,11 @@ import os
 sign = lambda x: math.copysign(1, x)
 tradepos_header = ['insts', 'vols', 'pos', 'direction', 'entry_price', 'entry_time', 'entry_target', 'entry_tradeid',
                    'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed', 'price_unit']
+class PosType:
+    Normal, StopLoss, TrailStop = range(3)
                                   
 class TradePos(object):
-    def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1):
+    def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1, pos_type = PosType.Normal):
         self.insts = insts
         self.volumes = vols
         self.price_unit = price_unit
@@ -31,6 +33,7 @@ class TradePos(object):
         self.exit_tradeid = 0
         self.is_closed = False
         self.profit = 0.0
+        self.pos_type = pos_type
     
     def trail_check(self, curr_price, margin):
         if (self.direction * (self.exit_target - curr_price) >= margin):
@@ -212,6 +215,7 @@ class Strategy(object):
         self.logger.info('strat %s is finalizing the day - update trade unit, save state' % self.name)
         self.num_entries = [0] * len(self.underliers)
         self.num_exits = [0] * len(self.underliers)
+        self.save_state()
         self.initialize()
         return
         

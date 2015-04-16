@@ -94,9 +94,9 @@ class DTTrader(Strategy):
         tick_base = self.agent.instruments[inst].tick_base
         buy_trig  = self.tday_open[idx] + self.ratios[idx][0] * self.cur_rng[idx]
         sell_trig = self.tday_open[idx] - self.ratios[idx][0] * self.cur_rng[idx]
-        if self.cur_ma[idx] > buy_trig:
+        if self.cur_ma[idx] > self.tday_open[idx]:
             buy_trig += self.ratios[idx][1] * self.ratios[idx][0] * self.cur_rng[idx]
-        elif self.cur_ma[idx] < sell_trig:
+        elif self.cur_ma[idx] < self.tday_open[idx]:
             sell_trig -= self.ratios[idx][1] * self.ratios[idx][0] * self.cur_rng[idx]
         curr_price = (ctick.askPrice1+ctick.bidPrice1)/2.0
         if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0) or (curr_price <= 0.001):

@@ -318,6 +318,7 @@ def main():
     user.fetch_instruments_by_exchange('')
     time.sleep(20)
     for exch in user.instruments:
+        print 'exch = %s, num = %s' % ( exch, len(user.instruments[exch]))
         for inst in user.instruments[exch]:
             mysqlaccess.insert_cont_data(inst)
     return True
