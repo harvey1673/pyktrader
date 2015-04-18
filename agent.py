@@ -571,6 +571,7 @@ class Instrument(object):
         self.ask_vol1 = 0
         self.bid_price1 = 0.0
         self.bid_vol1 = 0
+        self.mid_price = 0.0
         self.up_limit = 0
         self.down_limit = 0
         self.last_traded = datetime.datetime.now()
@@ -1096,6 +1097,7 @@ class Agent(AbsAgent):
         self.instruments[inst].last_update = tick.timestamp
         self.instruments[inst].bid_price1 = tick.bidPrice1
         self.instruments[inst].ask_price1 = tick.askPrice1
+        self.instruments[inst].mid_price = (tick.askPrice1 + tick.bidPrice1)/2.0
         self.instruments[inst].bid_vol1   = tick.bidVol1
         self.instruments[inst].ask_vol1   = tick.askVol1
         self.instruments[inst].open_interest = tick.openInterest
@@ -1138,7 +1140,7 @@ class Agent(AbsAgent):
 
             for strat in self.strategies:
                 if (inst in strat.instIDs):
-                    strat.run_tick(tick)
+                    strat.tick_run(tick)
                     
             if (tick_min == self.cur_min[inst]['min_id']):
                 self.tick_data[inst].append(tick)

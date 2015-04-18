@@ -28,6 +28,7 @@ class DTTrader(Strategy):
         elif len(daily_close) == 1: 
             self.close_tday = daily_close * numAssets 
         self.num_tick = 2
+        self.min_rng = 0.01
 
     def initialize(self):
         self.load_state()
@@ -42,6 +43,7 @@ class DTTrader(Strategy):
                 self.cur_rng[idx] = max(self.cur_rng[idx] * 0.5, ddf.ix[-1,'high']-ddf.ix[-1,'close'],ddf.ix[-1,'close']-ddf.ix[-1,'low'])
             else:
                 self.cur_rng[idx] = max(ddf.ix[-1,'high']- ddf.ix[-1,'low'], abs(ddf.ix[-1,'close'] - ddf.ix[-2,'close']))             
+            self.cur_rng[idx] = max(self.cur_rng[idx], ddf.ix[-1, 'close']*self.min_rng)
             self.cur_ma[idx] = ddf.ix[-5:, 'close'].mean() 
             min_id = self.agent.instruments[inst].last_tick_id/1000
             min_id = int(min_id/100)*60 + min_id % 100 - self.daily_close_buffer
@@ -67,16 +69,10 @@ class DTTrader(Strategy):
     def run_min(self, inst):
         pass
         
-    def run_tick(self, ctick):
-        inst = ctick.instID
-        min_id = ctick.tick_id/1000.0
-        idx = self.get_index([inst]) 
+    def run_tick(self, idx, ctick):
+        inst = self.underliers[idx][0]
+        min_id = self.agent.tick_id/1000.0
         self.tday_open[idx] = self.agent.cur_day[inst]['open']
-        if idx < 0:
-            self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
-            return
-        if self.update_positions(idx):
-            self.save_state()
         num_pos = len(self.positions[idx])
         buysell = 0
         if num_pos > 1:
@@ -98,8 +94,8 @@ class DTTrader(Strategy):
             buy_trig += self.ratios[idx][1] * self.ratios[idx][0] * self.cur_rng[idx]
         elif self.cur_ma[idx] < self.tday_open[idx]:
             sell_trig -= self.ratios[idx][1] * self.ratios[idx][0] * self.cur_rng[idx]
-        curr_price = (ctick.askPrice1+ctick.bidPrice1)/2.0
-        if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0) or (curr_price <= 0.001):
+
+        if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0) or (self.curr_prices[idx] <= 0.001):
             self.logger.warning("warning: open price =0.0 or range = 0.0 or curr_price=0 for inst=%s for stat = %s" % (inst, self.name))
             return
         if (min_id >= self.last_min_id[idx]):
@@ -107,7 +103,7 @@ class DTTrader(Strategy):
                 if (len(self.submitted_pos[idx]) <= 0):
                     msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \
                                     % (inst, buysell, self.trade_unit[idx], min_id)
-                    self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
+                    self.close_tradepos(idx, self.positions[idx][0], self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                     self.status_notifier(msg)
                     self.save_state()
                 else:
@@ -117,19 +113,19 @@ class DTTrader(Strategy):
             return
         if len(self.submitted_pos[idx]) > 0:
             return
-        if ((curr_price >= buy_trig) and (buysell <=0)) or ((curr_price <= sell_trig) and (buysell >=0)):
+        if ((self.curr_prices[idx] >= buy_trig) and (buysell <=0)) or ((self.curr_prices[idx] <= sell_trig) and (buysell >=0)):
             if buysell!=0:
                 msg = 'DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
-                                    % (inst, self.tday_open[idx], buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
-                self.close_tradepos(idx, self.positions[idx][0], curr_price - buysell * self.num_tick * tick_base)
+                                    % (inst, self.tday_open[idx], buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
+                self.close_tradepos(idx, self.positions[idx][0], self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
-            if  (curr_price >= buy_trig):
+            if  (self.curr_prices[idx] >= buy_trig):
                 buysell = 1
             else:
                 buysell = -1
             msg = 'DT to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
-                                    % (inst, self.tday_open[idx], buy_trig, sell_trig, curr_price, buysell, self.trade_unit[idx])
-            self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
+                                    % (inst, self.tday_open[idx], buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
+            self.open_tradepos(idx, buysell, self.curr_prices[idx] + buysell * self.num_tick * tick_base)
             self.status_notifier(msg)
             self.save_state()
         return 

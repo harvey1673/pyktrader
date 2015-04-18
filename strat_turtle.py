@@ -18,7 +18,6 @@ class TurtleTrader(Strategy):
                 ]    
         self.curr_atr  = [0.0] * len(underliers)
         self.channels = windows
-        self.trail_loss = 2.0
         self.freq = freq
     
     def initialize(self):
@@ -66,43 +65,42 @@ class TurtleTrader(Strategy):
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
             return 
         self.update_positions(idx)
-        curr_price = (inst_obj.ask_price1 + inst_obj.bid_price1)/2.0
-        if curr_price < 0.01 or curr_price > 100000:
+        if self.curr_prices[idx] < 0.01 or self.curr_prices[idx] > 100000:
             self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bidPrice1,  inst_obj.askPrice1))
             return 
         if len(self.submitted_pos[idx]) > 0:
             return
         if len(self.positions[idx]) == 0: 
             buysell = 0
-            if (curr_price > hh[0]):
+            if (self.curr_prices[idx] > hh[0]):
                 buysell = 1
-            elif (curr_price < ll[0]):
+            elif (self.curr_prices[idx] < ll[0]):
                 buysell = -1                 
             if buysell !=0:
                 msg = 'Turtle to open a new position for inst = %s, curr_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s is sent for processing' \
-                        % (inst, curr_price, hh[0], ll[0], buysell, self.trade_unit[idx])
-                self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
+                        % (inst, self.curr_prices[idx], hh[0], ll[0], buysell, self.trade_unit[idx])
+                self.open_tradepos(idx, buysell, self.curr_prices[idx] + buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
                 self.save_state()
         else:
             buysell = self.positions[idx][0].direction
             units = len(self.positions[idx])
             for tradepos in reversed(self.positions[idx]):
-                if (curr_price < ll[1] and buysell == 1) or (curr_price > hh[1] and buysell == -1) \
-                        or ((tradepos.entry_price-curr_price)*buysell >= self.trail_loss*self.curr_atr[idx]):
-                    msg = 'Turtle to close a position for inst = %s, curr_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s , target=%s, ATR=%s' \
-                                % (inst, curr_price, hh[1], ll[1], buysell, self.trade_unit[idx], tradepos.entry_target, self.curr_atr[idx])
-                    self.close_tradepos(idx, tradepos, curr_price - buysell * self.num_tick * tick_base)
+                if (self.curr_prices[idx] < ll[1] and buysell == 1) or (self.curr_prices[idx] > hh[1] and buysell == -1) \
+                        or ((tradepos.entry_price-self.curr_prices[idx])*buysell >= self.trail_loss[idx]*self.curr_atr[idx]):
+                    msg = 'Turtle to close a position for inst = %s, curr_price = %s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s , target=%s, ATR=%s' \
+                                % (inst, self.curr_prices[idx], hh[1], ll[1], buysell, self.trade_unit[idx], tradepos.entry_target, self.curr_atr[idx])
+                    self.close_tradepos(idx, tradepos, self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                     self.status_notifier(msg)
                     self.save_state()
                     return
-            if  units < 4 and (curr_price - self.positions[idx][-1].entry_price)*buysell >= self.curr_atr[idx]/2.0:
+            if  units < 4 and (self.curr_prices[idx] - self.positions[idx][-1].entry_price)*buysell >= self.curr_atr[idx]/2.0:
                 last_entry = self.positions[idx][-1].entry_price
                 for pos in self.positions[idx]:
-                    pos.entry_target = curr_price                
+                    pos.entry_target = self.curr_prices[idx]                
                 msg = 'Turtle to add a new position after 0.5 ATR increase for inst = %s, curr_price=%s, last_entry=%s, direction=%s, vol=%s is sent for processing' \
-                        % (inst, curr_price, last_entry, buysell, self.trade_unit[idx])
-                self.open_tradepos(idx, buysell, curr_price + buysell * self.num_tick * tick_base)
+                        % (inst, self.curr_prices[idx], last_entry, buysell, self.trade_unit[idx])
+                self.open_tradepos(idx, buysell, self.curr_prices[idx] + buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
                 self.save_state()          
         return

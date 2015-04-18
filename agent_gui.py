@@ -167,6 +167,7 @@ class DTStratGui(StratGui):
                             'Ratios': 'floatlist', 
                             'CloseTday': 'bool',
                             'TdayOpen': 'float',
+                            'CurrPrices': 'float',
                             'CurRng':'float',
                             'CurMa': 'float'}
                         
@@ -180,6 +181,7 @@ class RBStratGui(StratGui):
                             'MinRng':'float', 
                             'Ratios': 'floatlist', 
                             'StartMinId': 'int',
+                            'CurrPrices': 'float',
                             'Sbreak': 'float', 
                             'Bbreak':'float',
                             'Bsetup':'float', 

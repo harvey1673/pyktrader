@@ -13,11 +13,11 @@ import os
 sign = lambda x: math.copysign(1, x)
 tradepos_header = ['insts', 'vols', 'pos', 'direction', 'entry_price', 'entry_time', 'entry_target', 'entry_tradeid',
                    'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed', 'price_unit']
-class PosType:
-    Normal, StopLoss, TrailStop = range(3)
+class TrailLossType:
+    Ratio, Level = range(2)
                                   
 class TradePos(object):
-    def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1, pos_type = PosType.Normal):
+    def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1):
         self.insts = insts
         self.volumes = vols
         self.price_unit = price_unit
@@ -33,7 +33,7 @@ class TradePos(object):
         self.exit_tradeid = 0
         self.is_closed = False
         self.profit = 0.0
-        self.pos_type = pos_type
+        self.trail_loss = 0
     
     def trail_check(self, curr_price, margin):
         if (self.direction * (self.exit_target - curr_price) >= margin):
@@ -63,7 +63,7 @@ class TradePos(object):
     def close(self, price, end_time):
         self.exit_time = end_time
         self.exit_price = price
-        self.profit = (self.exit_price - self.entry_price) * self.pos * self.price_unit
+        self.profit = (self.exit_price - self.entry_price) * self.direction * self.price_unit
         self.is_closed = True
     
     def cancel_close(self):
@@ -121,6 +121,7 @@ class Strategy(object):
         self.close_tday = [False] * num_assets
         self.last_min_id = [2055] * num_assets
         self.trail_loss = [0] * num_assets
+        self.curr_prices = [0.0] * num_assets
         self.order_type = OPT_LIMIT_ORDER
         self.locked = False
         
@@ -196,6 +197,16 @@ class Strategy(object):
                     save_status = True
         self.positions[idx] = [ tradepos for tradepos in self.positions[idx] if not tradepos.is_closed]            
         self.submitted_pos[idx] = [etrade for etrade in self.submitted_pos[idx] if etrade.status!=order.ETradeStatus.StratConfirm]        
+        for pos in self.positions[idx]:
+            if pos.trail_loss > 0:
+                updated = pos.trail_update(self.curr_prices[idx])
+                if pos.trail_check(self.curr_price[idx], pos.entry_price * pos.trail_loss):
+                    msg = 'Strat = %s to close position after hitting trail loss for underlier = %s, direction=%s, volume=%s, current tick_id = %s, current price = %s, exit_target = %s, trail_loss buffer = %s' \
+                                    % (self.name, self.underliers[idx], pos.direction, self.trade_unit[idx], self.agent.tick_id, self.curr_prices[idx], pos.exit_target, pos.entry_price * pos.trail_loss)
+                    self.close_tradepos(idx, pos, self.curr_prices[idx])
+                    self.status_notifier(msg)                    
+                    updated = True
+            save_status = save_status or updated
         return save_status
         
     def resume(self):
@@ -218,8 +229,26 @@ class Strategy(object):
         self.save_state()
         self.initialize()
         return
+    
+    def calc_curr_price(self, idx):        
+        prices = [ self.agent.instruments[inst].mid_price for inst in self.underliers[idx] ]
+        conv_f = [ self.agent.instruments[inst].multiple for inst in self.underliers[idx] ]    
+        self.curr_prices[idx] = sum([p*v*cf for p, v, cf in zip(prices, self.volumes[idx], conv_f)])/conv_f[-1]
+        return
         
-    def run_tick(self, ctick):
+    def tick_run(self, ctick):
+        inst = ctick.instID
+        idx = self.get_index([inst]) 
+        if idx < 0:
+            self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
+            return
+        self.calc_curr_price(idx)
+        if self.update_positions(idx):
+            self.save_state()
+        self.run_tick(idx, ctick)
+        return
+    
+    def run_tick(self, idx, ctick):
         pass
     
     def run_min(self, inst):

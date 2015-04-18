@@ -266,7 +266,7 @@ class OptionStrategy(object):
                     opt_map[key] = instID
         return opt_map
     
-    def run_tick(self, ctick):
+    def tick_run(self, ctick):
         pass
 
     def run_min(self, ctick):
@@ -396,7 +396,7 @@ class OptArbStrat(CommodOptStrat):
         self.bfly = dict([(exp, dict([(s, {'upbnd':0.0, 'lowbnd':0.0, 'pos':0.0}) for s in ss])) for exp, ss in zip(expiries, strikes)])
         
               
-    def run_tick(self, ctick):         
+    def tick_run(self, ctick):         
         inst = ctick.instID
         pass
 
@@ -404,5 +404,5 @@ class OptSubStrat(object):
     def __init__(self):
         pass
     
-    def run_tick(self, ctick):
+    def tick_run(self, ctick):
         pass
