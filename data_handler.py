@@ -1,4 +1,5 @@
 import datetime
+import numpy as np
 import pandas as pd
 
 def conv_ohlc_freq(df, freq):
@@ -32,7 +33,7 @@ def tr(df):
     
 def ATR(df, n = 20):
     tr = TR(df)
-    ts_atr = pd.ewma(tr, span=n,  min_periods = n-1)
+    ts_atr = pd.ewma(tr, span=n,  min_periods = n-1, adjust = False)
     ts_atr.name = 'ATR_'+str(n)
     return ts_atr
 
@@ -49,7 +50,7 @@ def ma(df, n):
 
 #Exponential Moving Average
 def EMA(df, n):
-    return pd.Series(pd.ewma(df['close'], span = n, min_periods = n - 1), name = 'EMA_' + str(n))
+    return pd.Series(pd.ewma(df['close'], span = n, min_periods = n - 1, adjust = False), name = 'EMA_' + str(n))
 
 def ema(df, n):
     alpha = 2.0/(n+1)
@@ -94,14 +95,14 @@ def STOK(df):
 #Stochastic oscillator %D
 def STO(df, n):
     SOk = STOK(df)
-    SOd = pd.Series(pd.ewma(SOk, span = n, min_periods = n - 1), name = 'SOd_' + str(n))
+    SOd = pd.Series(pd.ewma(SOk, span = n, min_periods = n - 1, adjust = False), name = 'SOd_' + str(n))
     return SOd
 
 #Trix
 def TRIX(df, n):
-    EX1 = pd.ewma(df['close'], span = n, min_periods = n - 1)
-    EX2 = pd.ewma(EX1, span = n, min_periods = n - 1)
-    EX3 = pd.ewma(EX2, span = n, min_periods = n - 1)
+    EX1 = pd.ewma(df['close'], span = n, min_periods = n - 1, adjust = False)
+    EX2 = pd.ewma(EX1, span = n, min_periods = n - 1, adjust = False)
+    EX3 = pd.ewma(EX2, span = n, min_periods = n - 1, adjust = False)
     return pd.Series(EX3/EX3.shift(1) - 1, name = 'Trix_' + str(n))
 
 #Average Directional Movement Index
@@ -113,8 +114,8 @@ def ADX(df, n, n_ADX):
     UpD[(UpMove<=DoMove)|(UpMove <= 0)] = 0
     DoD[(DoMove<=UpMove)|(DoMove <= 0)] = 0
     ATRs = ATR(df,span = n, min_periods = n)
-    PosDI = pd.Series(pd.ewma(UpD, span = n, min_periods = n - 1) / ATR)
-    NegDI = pd.Series(pd.ewma(DoD, span = n, min_periods = n - 1) / ATR)
+    PosDI = pd.Series(pd.ewma(UpD, span = n, min_periods = n - 1) / ATRs)
+    NegDI = pd.Series(pd.ewma(DoD, span = n, min_periods = n - 1) / ATRs)
     ADX = pd.Series(pd.ewma(abs(PosDI - NegDI) / (PosDI + NegDI), span = n_ADX, min_periods = n_ADX - 1), name = 'ADX_' + str(n) + '_' + str(n_ADX))
     return ADX 
 
@@ -202,13 +203,13 @@ def Chaikin(df):
 #Money Flow Index and Ratio
 def MFI(df, n):
     PP = (df['high'] + df['low'] + df['close']) / 3
-    PP > PP.shift(1)
+    PP = PP.shift(1)
     PosMF = pd.Series(PP)
     PosMF[PosMF <= PosMF.shift(1)] = 0
     PosMF = PosMF * df['volume']
     TotMF = PP * df['volume']
     MFR = pd.Series(PosMF / TotMF)
-    MFI = pd.Series(rolling_mean(MFR, n), name = 'MFI_' + str(n))
+    MFI = pd.Series(pd.rolling_mean(MFR, n), name = 'MFI_' + str(n))
     return MFI
 
 #On-balance Volume
@@ -283,9 +284,75 @@ def DONCH_C(df, n):
 
 def donch_c(df, n):
     df.ix[-1,'DONCH_C'+str(n)] = max(df.ix[-n:,'close'])
-	
+    
 #Standard Deviation
 def STDDEV(df, n):
     return pd.Series(pd.rolling_std(df['close'], n), name = 'STD_' + str(n))
     
-#def var_ratio(
+def HEIKEN_ASHI(df, period1):
+    SM_O = pd.rolling_mean(df['open'], period1)
+    SM_H = pd.rolling_mean(df['high'], period1)
+    SM_L = pd.rolling_mean(df['low'], period1)
+    SM_C = pd.rolling_mean(df['close'], period1)
+    HA_C = pd.Series((SM_O + SM_H + SM_L + SM_C)/4.0, name = 'HAclose')
+    HA_O = pd.Series(SM_O, name = 'HAopen')
+    HA_H = pd.Series(SM_H, name = 'HAhigh')
+    HA_L = pd.Series(SM_L, name = 'HAlow')
+    for idx, dateidx in enumerate(HA_C.index):
+        if idx >= (period1):
+            HA_O[idx] = (HA_O[idx-1] + HA_C[idx-1])/2.0
+        HA_H[idx] = max(SM_H[idx], HA_O[idx], HA_C[idx])
+        HA_L[idx] = min(SM_L[idx], HA_O[idx], HA_C[idx])
+    return pd.concat([HA_O, HA_H, HA_L, HA_C], join='outer', axis=1)
+    
+def heiken_ashi(df, period):
+    ma_o = sum(df.ix[-period:, 'open'])/float(period)  
+    ma_c = sum(df.ix[-period:, 'close'])/float(period)
+    ma_h = sum(df.ix[-period:, 'high'])/float(period)
+    ma_l = sum(df.ix[-period:, 'low'])/float(period)
+    df.ix[-1,'HAclose'] = (ma_o + ma_c + ma_h + ma_l)/4.0
+    df.ix[-1,'HAopen']  = (df.ix[-2,'HAopen'] + df.ix[-2, 'HAclose'])/2.0
+    df.ix[-1,'HAhigh']  = max(ma_h, df.ix[-1, 'HAopen'], df.ix[-1, 'HAclose'])
+    df.ix[-1,'HAlow']   = min(ma_l, df.ix[-1, 'HAopen'], df.ix[-1, 'HAclose'])
+
+def BBANDS_STOP(df, win, nstd):
+    MA = pd.Series(pd.rolling_mean(df['close'], win))
+    MSD = pd.Series(pd.rolling_std(df['close'], win))
+    Upper = pd.Series(MA + MSD * nstd, name = 'BBSTOP_upper')
+    Lower = pd.Series(MA - MSD * nstd, name = 'BBSTOP_lower')
+    for idx, dateidx in enumerate(Upper.index):
+        if idx >= win:
+            if (df.close[idx] > Upper[idx-1]) and (Lower[idx] < Lower[idx-1]):
+                Lower[idx] = Lower[idx-1]
+            elif (df.close[idx] < Lower[idx-1]) and (Upper[idx] > Upper[idx-1]):
+                Upper[idx] = Upper[idx-1]
+    return pd.concat([Upper,Lower], join='outer', axis=1)
+
+def bbands_stop(df, win, nstd):
+    ma = df.close[-win:].mean()
+    msd = df.close[-win:].std()
+    df.ix[-1, 'BBSTOP_upper'] = ma + nstd * msd
+    df.ix[-1, 'BBSTOP_lower'] = ma - nstd * msd
+    if df.ix[-1, 'close'] > df.ix[-2, 'BBSTOP_upper'] and  df.ix[-1, 'BBSTOP_lower'] < df.ix[-2, 'BBSTOP_lower']:
+        df.ix[-1, 'BBSTOP_lower'] = df.ix[-2, 'BBSTOP_lower']
+    if df.ix[-1, 'close'] < df.ix[-2, 'BBSTOP_lower'] and  df.ix[-1, 'BBSTOP_upper'] > df.ix[-2, 'BBSTOP_upper']:
+        df.ix[-1, 'BBSTOP_upper'] = df.ix[-2, 'BBSTOP_upper']
+    pass
+
+def FISHER(df, win, smooth_p = 0.7, smooth_i = 0.7):
+    roll_high = pd.rolling_max(df.high, win)
+    roll_low  = pd.rolling_min(df.low, win)
+    price_loc = (df.close - roll_low)/(roll_high - roll_low) * 2.0 - 1
+    sm_price = pd.Series(pd.ewma(price_loc, com = 1.0/smooth_p - 1, adjust = False), name = 'FISHER_P')
+    fisher_ind = 0.5 * np.log((1 + sm_price)/(1 - sm_price))
+    sm_fisher = pd.Series(pd.ewma(fisher_ind, com = 1.0/smooth_i - 1, adjust = False), name = 'FISHER_I')
+    return pd.concat([sm_price, sm_fisher], join='outer', axis=1)
+
+def fisher(df, win, smooth_p = 0.7, smooth_i = 0.7):
+    roll_high = max(df.high[-win:])
+    roll_low  = min(df.low[-win:])
+    price_loc = (df.ix[-1, 'close'] - roll_low)*2.0/(roll_high - roll_low) - 1
+    df.ix[-1, 'FISHER_P'] = df.ix[-2, 'FISHER_P'] * (1 - smooth_p) + smooth_p * price_loc
+    fisher_ind = 0.5 * np.log((1 + df.ix[-1, 'FISHER_P'])/(1 - df.ix[-1, 'FISHER_P']))
+    df.ix[-1, 'FISHER_I'] =  df.ix[-2, 'FISHER_I'] * (1 - smooth_i) + smooth_i * fisher_ind
+    
