@@ -66,9 +66,6 @@ class DTTrader(Strategy):
                 self.cur_rng[idx] = float(row[2])
         return
         
-    def run_min(self, inst):
-        pass
-        
     def run_tick(self, idx, ctick):
         inst = self.underliers[idx][0]
         min_id = self.agent.tick_id/1000.0

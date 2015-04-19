@@ -74,9 +74,6 @@ class RBreakerTrader(Strategy):
                 self.num_exits[idx] =int(row[3]) 
         return
     
-    def run_tick(self, ctick):
-        pass
-    
     def run_min(self, inst):
         min_id = self.agent.cur_min[inst]['min_id']
         if min_id <= 300 or min_id >= 2115:

@@ -269,7 +269,7 @@ class OptionStrategy(object):
     def tick_run(self, ctick):
         pass
 
-    def run_min(self, ctick):
+    def run_min(self, inst):
         pass
     
     def save_state(self):
@@ -395,7 +395,6 @@ class OptArbStrat(CommodOptStrat):
         self.putspd = dict([(exp, dict([(s, {'upbnd':0.0, 'lowbnd':0.0, 'pos':0.0}) for s in ss])) for exp, ss in zip(expiries, strikes)])
         self.bfly = dict([(exp, dict([(s, {'upbnd':0.0, 'lowbnd':0.0, 'pos':0.0}) for s in ss])) for exp, ss in zip(expiries, strikes)])
         
-              
     def tick_run(self, ctick):         
         inst = ctick.instID
         pass
