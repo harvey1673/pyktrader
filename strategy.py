@@ -206,7 +206,7 @@ class Strategy(object):
                     self.close_tradepos(idx, pos, self.curr_prices[idx])
                     self.status_notifier(msg)                    
                     updated = True
-            save_status = save_status or updated
+                save_status = save_status or updated
         return save_status
         
     def resume(self):
