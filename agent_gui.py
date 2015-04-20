@@ -161,7 +161,7 @@ class DTStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.entry_fields = ['TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
-        self.status_fields = ['TdayOpen', 'CurRng', 'CurMa'] 
+        self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'CurMa'] 
         self.field_types = {'TradeUnit':'int', 
                             'Lookbacks':'int', 
                             'Ratios': 'floatlist', 
@@ -176,7 +176,7 @@ class RBStratGui(StratGui):
         StratGui.__init__(self, strat, app, master)
         self.root = master
         self.entry_fields = ['TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId']
-        self.status_fields = ['Sbreak', 'Bsetup', 'Benter', 'Senter', 'Ssetup', 'Bbreak'] 
+        self.status_fields = ['CurrPrices', 'Sbreak', 'Bsetup', 'Benter', 'Senter', 'Ssetup', 'Bbreak'] 
         self.field_types = {'TradeUnit':'int', 
                             'MinRng':'float', 
                             'Ratios': 'floatlist', 

@@ -14,6 +14,7 @@ from base import *
 from misc import *
 import data_handler
 
+MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
 
@@ -218,6 +219,7 @@ class CTPTraderQryMixin(object):
     def send_order(self, iorder):
         if not self.is_logged:
             self.logger.warning('The trader is not logged, can not send the order!')
+            iorder.on_cancel()
             return False 
         if iorder.direction == ORDER_BUY:
             direction = self.ApiStruct.D_Buy
@@ -732,6 +734,7 @@ class Agent(AbsAgent):
         self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
+        self.live_trading = True
         self.tick_db_table = 'fut_tick'
         self.min_db_table  = 'fut_min'
         self.daily_db_table = 'fut_daily'
@@ -815,18 +818,18 @@ class Agent(AbsAgent):
         '''
         if not self.initialized:
             self.resume()
-        for inst in self.instruments:
-            self.instruments[inst].get_margin_rate()
-        for strat in self.strategies:
-            strat.initialize()
-        for inst in self.positions:
-            self.positions[inst].re_calc() 
+            for inst in self.instruments:
+                self.instruments[inst].get_margin_rate()
+            for strat in self.strategies:
+                strat.initialize()
+            for inst in self.positions:
+                self.positions[inst].re_calc()
+            self.calc_margin() 
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
         self.check_qry_commands()
-        self.calc_margin()
         #避免因为断开后自动重连造成的重复访问
 
     def register_data_func(self, freq, fobj):
@@ -1050,12 +1053,12 @@ class Agent(AbsAgent):
             self.day_switch(tick_date)
         product = self.instruments[inst].product
         exch = self.instruments[inst].exchange
+        hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
         if exch in ['SSE', 'SZE']:
             hrs = [(1530, 1730), (1900, 2100)]
         elif exch == 'CFFEX':
             hrs = [(1515, 1730), (1900, 2115)]
         else:
-            hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
             if product in night_session_markets:
                 night_idx = night_session_markets[product]
                 hrs = [night_trading_hrs[night_idx]] + hrs        
@@ -1073,7 +1076,6 @@ class Agent(AbsAgent):
                 self.logger.info('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
                 self.day_finalize(self.instruments.keys())
                 self.run_eod()
-                return False
             elif (tick_id >= hrs[-1][1]*1000+4) and (not self.instruments[inst].day_finalized):
                 self.day_finalize([inst])
         return tick_status
@@ -1278,6 +1280,7 @@ class Agent(AbsAgent):
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
             self.instruments[inst].volume = 0
             #print "inst=%s, long=%s, short=%s, prev_close=%s" % (inst, eod_pos[inst][0], eod_pos[inst][1], self.instruments[inst].prev_close)
+        self.initialized = False
         self.proc_lock = False
 
     def add_strategy(self, strat):
@@ -1375,6 +1378,11 @@ class Agent(AbsAgent):
         return r
     
     def RtnTick(self,ctick):#行情处理主循环
+        if self.live_trading:
+            curr_tick_id = get_tick_id(datetime.datetime.now())
+            if abs(curr_tick_id - ctick.tick_id)> MAX_REALTIME_DIFF:
+                self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, tick_id = %s, curr_id=%s' % (ctick.instID, ctick.tick_id, curr_tick_id))
+                return 0
         if (not self.validate_tick(ctick)):
             return 0
         

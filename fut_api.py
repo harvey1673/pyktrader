@@ -24,8 +24,6 @@ class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
         self.broker_id =broker_id
         self.investor_id = investor_id
         self.passwd = passwd
-        self.front_id = None
-        self.session_id = None
         self.agent = agent
         ##必须在每日重新连接时初始化它. 这一点用到了生产行情服务器收盘后关闭的特点(模拟的不关闭)
         self.last_day = 0
@@ -67,6 +65,8 @@ class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.Trader
         self.instruments = instruments
         self.broker_id = broker_id
         self.investor_id = investor_id
+        self.front_id = None
+        self.session_id = None        
         self.passwd = passwd
         self.agent = agent
         self.agent.set_spi(self)
