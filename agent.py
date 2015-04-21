@@ -1728,6 +1728,7 @@ class SaveAgent(Agent):
     def init_init(self):
         Agent.init_init(self)
         self.save_flag = True 
+        self.live_trading = False
 
 if __name__=="__main__":
     pass

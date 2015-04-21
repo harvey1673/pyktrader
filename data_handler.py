@@ -320,22 +320,33 @@ def BBANDS_STOP(df, win, nstd):
     MSD = pd.Series(pd.rolling_std(df['close'], win))
     Upper = pd.Series(MA + MSD * nstd, name = 'BBSTOP_upper')
     Lower = pd.Series(MA - MSD * nstd, name = 'BBSTOP_lower')
+    Trend = pd.Series(0, index = Lower.index, name = 'BBSTOP_trend')
     for idx, dateidx in enumerate(Upper.index):
         if idx >= win:
-            if (df.close[idx] > Upper[idx-1]) and (Lower[idx] < Lower[idx-1]):
+            Trend[idx] = Trend[idx-1]
+            if (df.close[idx] > Upper[idx-1]):
+                Trend[idx] = 1
+            if (df.close[idx] < Lower[idx-1]):
+                Trend[idx] = -1                
+            if (Trend[idx]==1) and (Lower[idx] < Lower[idx-1]):
                 Lower[idx] = Lower[idx-1]
-            elif (df.close[idx] < Lower[idx-1]) and (Upper[idx] > Upper[idx-1]):
+            elif (Trend[idx]==-1) and (Upper[idx] > Upper[idx-1]):
                 Upper[idx] = Upper[idx-1]
-    return pd.concat([Upper,Lower], join='outer', axis=1)
+    return pd.concat([Upper,Lower, Trend], join='outer', axis=1)
 
 def bbands_stop(df, win, nstd):
     ma = df.close[-win:].mean()
     msd = df.close[-win:].std()
     df.ix[-1, 'BBSTOP_upper'] = ma + nstd * msd
     df.ix[-1, 'BBSTOP_lower'] = ma - nstd * msd
-    if df.ix[-1, 'close'] > df.ix[-2, 'BBSTOP_upper'] and  df.ix[-1, 'BBSTOP_lower'] < df.ix[-2, 'BBSTOP_lower']:
+    df.ix[-1, 'BBSTOP_trend'] = df.ix[-2, 'BBSTOP_trend']
+    if df.ix[-1, 'close'] > df.ix[-2, 'BBSTOP_upper']:
+        df.ix[-1, 'BBSTOP_trend'] = 1
+    if df.ix[-1, 'close'] < df.ix[-2, 'BBSTOP_lower']: 
+        df.ix[-1, 'BBSTOP_trend'] = -1
+    if (df.ix[-1, 'BBSTOP_trend'] == 1) and (df.ix[-1, 'BBSTOP_lower'] < df.ix[-2, 'BBSTOP_lower']):
         df.ix[-1, 'BBSTOP_lower'] = df.ix[-2, 'BBSTOP_lower']
-    if df.ix[-1, 'close'] < df.ix[-2, 'BBSTOP_lower'] and  df.ix[-1, 'BBSTOP_upper'] > df.ix[-2, 'BBSTOP_upper']:
+    if (df.ix[-1, 'BBSTOP_trend'] == -1) and (df.ix[-1, 'BBSTOP_upper'] > df.ix[-2, 'BBSTOP_upper']):
         df.ix[-1, 'BBSTOP_upper'] = df.ix[-2, 'BBSTOP_upper']
     pass
 
