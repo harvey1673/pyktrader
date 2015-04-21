@@ -7,19 +7,26 @@ import strategy as strat
 import datetime
 import backtest
 
+
+margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
+                'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
+                'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
+                'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
+                'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
+                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1 }
+				
 def aberration( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-	df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
-	
+	df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)	
     output = {}
     for ix, freq in enumerate(freqs):
 		xdf = dh.conv_ohlc_freq(df, freq):
         for iy, win in enumerate(windows):
             idx = ix*10+iy
             config['win'] = win
-            (res, closed_trades, ts) = aberration_sim( xdf, mdf, , config)
+            (res, closed_trades, ts) = aberration_sim( xdf, config)
             output[idx] = res
             print 'saving results for scen = %s' % str(idx)
             all_trades = {}
@@ -35,7 +42,7 @@ def aberration( asset, start_date, end_date, freqs, windows, config):
     res.to_csv(fname)
     return 
 
-def aberration_sim( xdf, mdf, config):
+def aberration_sim( df, config):
     marginrate = config['marginrate']
     offset = config['offset']
 	win = config['win']
@@ -47,8 +54,8 @@ def aberration_sim( xdf, mdf, config):
 	df['upbnd'] = df['ma'] + std
 	df['lowbnd'] = df['ma'] - std
     ll = df.shape[0]
-    df['pos'] = pd.Series([0]*ll, index = mdf.index)
-    df['cost'] = pd.Series([0]*ll, index = mdf.index)
+    df['pos'] = pd.Series([0]*ll, index = df.index)
+    df['cost'] = pd.Series([0]*ll, index = df.index)
     curr_pos = []
     closed_trades = []
     start_d = df.index[0].date()
@@ -65,7 +72,7 @@ def aberration_sim( xdf, mdf, config):
 		df.ix[dd, 'pos'] = pos
         if np.isnan(mslice.ma):
             continue
-		if (min_id >=2054):
+		if (min_id >=config['exit_min']):
 			if (pos!=0) and (d == end_d):
 				curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
@@ -75,8 +82,8 @@ def aberration_sim( xdf, mdf, config):
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
 			continue
         else:
-            if ((mslice.close >= mslice.ma) and (pos<0 )) or (mslice.close <= mslice.ma) and (pos>0 ) :
-				curr_pos[0].close(mslice.close+offset, dd)
+            if ((mslice.close >= mslice.ma) and (pos<0)) or (mslice.close <= mslice.ma) and (pos>0 ) :
+				curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
 				tradeid += 1
 				curr_pos[0].exit_tradeid = tradeid
 				closed_trades.append(curr_pos[0])
@@ -99,26 +106,31 @@ def aberration_sim( xdf, mdf, config):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
     
-def run_sim(asset, start_date, end_date):
-    config = {'nearby':1, 
-              'rollrule':'-40b', 
-              'marginrate':(0.05, 0.05), 
-              'capital': 10000,
+def run_sim(start_date, end_date, daily_close = False):
+    commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
+    start_dates1 = [datetime.date(2010,10,1)] * 12 + \
+                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
+    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH', 'IF']
+    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
+                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
+                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2010,6,1)]
+    commod_list = commod_list1 + commod_list2
+    start_dates = start_dates1 + start_dates2
+    #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
+    sim_list = [ 'IF']
+    sdate_list = []
+    for c, d in zip(commod_list, start_dates):
+        if c in sim_list:
+            sdate_list.append(d)
+    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Abberration_'
+    if daily_close:
+        file_prefix = file_prefix + 'daily_'
+    config = {'capital': 10000,
               'offset': 0,
-              'trans_cost': 0.0,
-			  'scaler': (2.0, 2.0),
+              'trans_cost': 0.0, 
               'unit': 1,
-              'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Aberration_'}
-
-    #commod_list1= ['m','y','a','p','v','l','ru','rb','au','cu','al','zn','ag','i','j','jm'] #
-    #start_dates1 = [datetime.date(2010,9,1)] * 9 + [datetime.date(2010,10,1)] * 3 + \
-    #            [datetime.date(2012,7,1), datetime.date(2014,1,2), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    #commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH']
-    #start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-    #            [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + [datetime.date(2013, 10, 1), datetime.date(2014,2,1)]
-    #commod_list = commod_list1+commod_list2
-    #start_dates = start_dates1 + start_dates2
-    #for asset, sdate in zip(commod_list, start_dates):
+			  'scaler': (2.0, 2.0),
+              'file_prefix': file_prefix}		
 
     if asset in ['cu', 'al', 'zn']:
         config['nearby'] = 3
@@ -128,21 +140,35 @@ def run_sim(asset, start_date, end_date):
         
     freqs = ['5Min', '15Min', '30Min', '60Min', 'D']
     windows = [35]
+    for asset, sdate in zip(sim_list, sdate_list):
+        config['marginrate'] = ( margin_dict[asset], margin_dict[asset])
+        config['rollrule'] = '-50b' 
+        config['nearby'] = 1 
+        config['start_min'] = 1505
+        config['exit_min'] = 2055
+        if asset in ['cu', 'al', 'zn']:
+            config['nearby'] = 3
+            config['rollrule'] = '-1b'
+        elif asset in ['IF']:
+            config['start_min'] = 1520
+            config['exit_min'] = 2110
+            config['rollrule'] = '-1b'	
     aberration( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
     args = sys.argv[1:]
     if len(args) < 3:
-        end_d = datetime.date(2014,11,30)
+        d_close = True
     else:
-        end_d = datetime.datetime.strptime(args[2], '%Y%m%d').date()
+        d_close = (int(args[2])>0)
     if len(args) < 2:
-        start_d = datetime.date(2014,1,2)
+        end_d = datetime.date(2015,1,23)
     else:
-        start_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
+        end_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
     if len(args) < 1:
-        asset = 'm'
+        start_d = datetime.date(2013,1,2)
     else:
-        asset = args[0]
-    run_sim(asset, start_d, end_d)
+        start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+    run_sim(start_d, end_d, d_close)
+    pass
 
