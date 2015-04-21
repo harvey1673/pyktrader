@@ -21,6 +21,9 @@ day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest'
 def get_tick_id(dt):
     return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
 
+def get_tick_num(dt):
+    return ((dt.hour+6)%24)*36000+dt.minute*600+dt.second*10+dt.microsecond/100000
+
 def get_min_id(dt):
     return ((dt.hour+6)%24)*100+dt.minute
 
@@ -1379,9 +1382,10 @@ class Agent(AbsAgent):
     
     def RtnTick(self,ctick):#行情处理主循环
         if self.live_trading:
-            curr_tick_id = get_tick_id(datetime.datetime.now())
-            if abs(curr_tick_id - ctick.tick_id)> MAX_REALTIME_DIFF:
-                self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, tick_id = %s, curr_id=%s' % (ctick.instID, ctick.tick_id, curr_tick_id))
+            now_ticknum = get_tick_num(datetime.datetime.now())
+            cur_ticknum = get_tick_num(ctick.timestamp)
+            if abs(cur_ticknum - now_ticknum)> MAX_REALTIME_DIFF:
+                self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, ticknum= %s, now_ticknum=%s' % (ctick.instID, cur_ticknum, now_ticknum))
                 return 0
         if (not self.validate_tick(ctick)):
             return 0
