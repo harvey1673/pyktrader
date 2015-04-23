@@ -56,6 +56,8 @@ def dual_thrust_sim( ddf, mdf, config):
     if win == -1:
         tr= pd.concat([ddf.high - ddf.low, abs(ddf.close - ddf.close.shift(1))], 
                        join='outer', axis=1).max(axis=1).shift(1)
+    elif win == -2:
+        tr= pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.low, 2)                       
     elif win == 0:
         tr = pd.concat([(pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.close, 2))*multiplier, 
                         (pd.rolling_max(ddf.close, 2) - pd.rolling_min(ddf.low, 2))*multiplier,
@@ -191,7 +193,7 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.01,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.2, -1, 0, 1), (0.2, -1, 0, 1.5), (0.25, -1, 0, 0.6), (0.25, -1, 0, 1.0), (0.3, 0, 0, 1), (0.4, 0, 0, 0.5), (0.4, -1, 0, 1)]
+    scenarios = [ (0.25, -1, 0.5, 1.0), (0.25, -1, 0.5, 0.5), (0.3, -1, 0.5, 0.5), (0.4, -1, 0.5, 0.5), (0.3, 0, 0.5, 1.0), (0.35, 0, 0.5, 0.5), (0.4, 0, 0.5, 0.5)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1

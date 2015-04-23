@@ -169,7 +169,7 @@ def run_sim(start_date, end_date, daily_close = True):
               'min_rng': 0.015, 
               'file_prefix': file_prefix}
     
-    scenarios = [(0.25, 0.05, 0.15), (0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
+    scenarios = [(0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
     freqs = ['1min', '3min', '5min']
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
