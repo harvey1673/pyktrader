@@ -1562,7 +1562,10 @@ class Agent(AbsAgent):
         
     def check_order_list(self):
         Is_Set = self.trader.check_order_status()
-        for iorder in self.ref2order.values():                                                        
+        order_ids = self.ref2order.keys()
+        order_ids.sort()
+        for order_id in order_ids:
+            iorder = self.ref2order[order_id]                                                        
             if iorder.status == order.OrderStatus.Ready:
                 self.send_order(iorder)
                 Is_Set = True        
