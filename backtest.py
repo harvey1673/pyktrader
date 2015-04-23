@@ -1,6 +1,42 @@
 import datetime
 import pandas as pd
 import numpy as np
+import misc
+
+sim_margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
+                'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
+                'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
+                'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
+                'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
+                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1 }
+
+def get_asset_tradehrs(asset):
+	exch = 'SHFE'
+	for ex in misc.product_code:
+		if asset in misc.product_code[ex]:
+			exch = ex
+			break
+    hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
+    if exch in ['SSE', 'SZE']:
+        hrs = [(1530, 1730), (1900, 2100)]
+    elif exch == 'CFFEX':
+        hrs = [(1515, 1730), (1900, 2115)]
+    else:
+        if asset in misc.night_session_markets:
+            night_idx = misc.night_session_markets[asset]
+            hrs = [misc.night_trading_hrs[night_idx]] + hrs
+	return hrs
+	
+def cleanup_mindata(df, asset):
+	cond = None
+	tradehrs = get_asset_tradehrs(asset)
+	for idx, hrs in enumerate(tradehrs):
+		if idx == 0:
+			cond = (df.min_id>= tradehrs[idx][0]) & (df.min_id < tradehrs[idx][1])
+		else:
+			cond = cond | (df.min_id>= tradehrs[idx][0]) & (df.min_id < tradehrs[idx][1])
+	df = df.ix[cond]
+	return df
 
 def get_pnl_stats(df, start_capital, marginrate, freq):
 	df['pnl'] = df['pos'].shift(1)*(df['close'] - df['close'].shift(1)).fillna(0.0)
