@@ -8,13 +8,6 @@ import strategy as strat
 import datetime
 import backtest
 
-margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
-                'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
-                'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
-                'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
-                'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
-                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1 }
-
 def r_breaker( asset, start_date, end_date, scenarios, freqs, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -22,6 +15,7 @@ def r_breaker( asset, start_date, end_date, scenarios, freqs, config):
     file_prefix = config['file_prefix'] + '_' + asset + '_'
     ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
     mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    mdf = backtest.cleanup_mindata(mdf, asset)
     #ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
     for ix, freq in enumerate(freqs):
@@ -159,7 +153,7 @@ def run_sim(start_date, end_date, daily_close = True):
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
     #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
-    sim_list = [ 'IF']
+    sim_list = [ 'IF', 'm','RM', 'y','l','p','rb','ru','TA','SR','CF','ag','au','cu','i','al','j','a']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -175,10 +169,10 @@ def run_sim(start_date, end_date, daily_close = True):
               'min_rng': 0.015, 
               'file_prefix': file_prefix}
     
-    scenarios = [(0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
+    scenarios = [(0.25, 0.05, 0.15), (0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
     freqs = ['1min', '3min', '5min']
     for asset, sdate in zip(sim_list, sdate_list):
-        config['marginrate'] = ( margin_dict[asset], margin_dict[asset])
+        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['rollrule'] = '-50b' 
         config['nearby'] = 1 
         config['start_min'] = 1505

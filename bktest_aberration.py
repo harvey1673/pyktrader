@@ -7,22 +7,16 @@ import strategy as strat
 import datetime
 import backtest
 import sys
-
-margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
-                'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
-                'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
-                'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
-                'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
-                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1 }
-				
+                
 def aberration( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-	df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)	
+    df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    df = backtest.cleanup_mindata(df, asset)    
     output = {}
     for ix, freq in enumerate(freqs):
-		xdf = dh.conv_ohlc_freq(df, freq):
+        xdf = dh.conv_ohlc_freq(df, freq)
         for iy, win in enumerate(windows):
             idx = ix*10+iy
             config['win'] = win
@@ -45,15 +39,15 @@ def aberration( asset, start_date, end_date, freqs, windows, config):
 def aberration_sim( df, config):
     marginrate = config['marginrate']
     offset = config['offset']
-	win = config['win']
+    win = config['win']
     start_equity = config['capital']
     tcost = config['trans_cost']
-	unit = config['unit']
-	k = config['scaler']
+    unit = config['unit']
+    k = config['scaler']
     df['ma'] = dh.MA(df, win).shift(1)
-	std = dh.STDDEV(df, win).shift(1)
-	df['upbnd'] = df['ma'] + std * k[0]
-	df['lowbnd'] = df['ma'] - std * k[0]
+    std = dh.STDDEV(df, win).shift(1)
+    df['upbnd'] = df['ma'] + std * k[0]
+    df['lowbnd'] = df['ma'] - std * k[0]
     ll = df.shape[0]
     df['pos'] = pd.Series([0]*ll, index = df.index)
     df['cost'] = pd.Series([0]*ll, index = df.index)
@@ -70,40 +64,40 @@ def aberration_sim( df, config):
             pos = 0
         else:
             pos = curr_pos[0].pos
-		df.ix[dd, 'pos'] = pos
+        df.ix[dd, 'pos'] = pos
         if np.isnan(mslice.ma):
             continue
-		if (min_id >=config['exit_min']):
-			if (pos!=0) and (d == end_d):
-				curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
+        if (min_id >=config['exit_min']):
+            if (pos!=0) and (d == end_d):
+                curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
-                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
-			continue
+                df.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
+            continue
         else:
             if ((mslice.close >= mslice.ma) and (pos<0)) or (mslice.close <= mslice.ma) and (pos>0 ) :
-				curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
-				tradeid += 1
-				curr_pos[0].exit_tradeid = tradeid
-				closed_trades.append(curr_pos[0])
-				curr_pos = []
-				mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
-				pos = 0
-			if (mslice.close>=mslice.upbnd) or (mslice.close <= mslice.lowbnd):
-				if (pos ==0 ):
-					target_pos = (mslice.close>=mslice.upbnd) * unit -(mslice.close<=mslice.lowbnd) * unit
-					target = (mslice.close>=mslice.upbnd) * mslice.upbnd +(mslice.close<=mslice.lowbnd) * mslice.lowbnd
-					new_pos = strat.TradePos([mslice.contract], [1], target_pos, target, mslice.upbnd+mslice.lowbnd-target)
-					tradeid += 1
-					new_pos.entry_tradeid = tradeid
-					new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
-					curr_pos.append(new_pos)
-					mdf.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
-					mdf.ix[dd, 'pos'] = pos
-				else:
-					print "something wrong with position=%s, close =%s, MA=%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, mslice.ma, mslice.upbnd, mslice.lowbnd)
+                curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
+                tradeid += 1
+                curr_pos[0].exit_tradeid = tradeid
+                closed_trades.append(curr_pos[0])
+                curr_pos = []
+                df.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+                pos = 0
+            if (mslice.close>=mslice.upbnd) or (mslice.close <= mslice.lowbnd):
+                if (pos ==0 ):
+                    target_pos = (mslice.close>=mslice.upbnd) * unit -(mslice.close<=mslice.lowbnd) * unit
+                    target = (mslice.close>=mslice.upbnd) * mslice.upbnd +(mslice.close<=mslice.lowbnd) * mslice.lowbnd
+                    new_pos = strat.TradePos([mslice.contract], [1], target_pos, target, mslice.upbnd+mslice.lowbnd-target)
+                    tradeid += 1
+                    new_pos.entry_tradeid = tradeid
+                    new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
+                    curr_pos.append(new_pos)
+                    df.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
+                    df.ix[dd, 'pos'] = pos
+                else:
+                    print "something wrong with position=%s, close =%s, MA=%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, mslice.ma, mslice.upbnd, mslice.lowbnd)
             
     (res_pnl, ts) = backtest.get_pnl_stats( df, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
@@ -133,13 +127,13 @@ def run_sim(start_date, end_date, daily_close = False):
               'offset': 0,
               'trans_cost': 0.0, 
               'unit': 1,
-			  'scaler': (2.0, 2.0),
-              'file_prefix': file_prefix}		
+              'scaler': (2.0, 2.0),
+              'file_prefix': file_prefix}        
 
     freqs = ['5Min', '15Min', '30Min', '60Min', 'D']
     windows = [35]
     for asset, sdate in zip(sim_list, sdate_list):
-        config['marginrate'] = ( margin_dict[asset], margin_dict[asset])
+        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['rollrule'] = '-50b' 
         config['nearby'] = 1 
         config['start_min'] = 1505
@@ -150,7 +144,7 @@ def run_sim(start_date, end_date, daily_close = False):
         elif asset in ['IF']:
             config['start_min'] = 1520
             config['exit_min'] = 2110
-            config['rollrule'] = '-1b'	
+            config['rollrule'] = '-1b'    
     aberration( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
@@ -169,4 +163,3 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d, d_close)
     pass
-

@@ -8,14 +8,6 @@ import strategy as strat
 import datetime
 import backtest
 
-margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
-                'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
-                'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
-                'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
-                'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
-                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'OI': 0.05,
-                'v': 0.05,  'IF': 0.1,  'FG': 0.06, 'IF': 0.1 }
-
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -23,6 +15,7 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     file_prefix = config['file_prefix'] + '_' + asset + '_'
     ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
     mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)
+    mdf = backtest.cleanup_mindata(mdf, asset)
     #ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
     for ix, s in enumerate(scenarios):
@@ -61,7 +54,7 @@ def dual_thrust_sim( ddf, mdf, config):
     min_rng = config['min_range']
     ma_fast = config['MA_fast']
     if win == -1:
-        tr= pd.concat([ddf.high - ddf.low, ddf.close - ddf.close.shift(1)], 
+        tr= pd.concat([ddf.high - ddf.low, abs(ddf.close - ddf.close.shift(1))], 
                        join='outer', axis=1).max(axis=1).shift(1)
     elif win == 0:
         tr = pd.concat([(pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.close, 2))*multiplier, 
@@ -105,18 +98,14 @@ def dual_thrust_sim( ddf, mdf, config):
         if (d_open <= 0):
             continue
         #prev_d = d
-        if dslice.MA > d_open + k * rng:
-            buytrig = d_open + f * k * rng
-            selltrig = d_open - k * rng
-        elif dslice.MA < d_open - k * rng:
-            buytrig  = d_open + k * rng
-            selltrig = d_open - f * k * rng
-        else:
-            buytrig = d_open + k * rng
-            selltrig = d_open- k * rng        
-        
-        if (min_id >= config['exit_min']):
-            if (pos != 0) and (close_daily or (d == end_d)):
+        buytrig  = d_open + k * rng
+        selltrig = d_open - k * rng
+        if dslice.MA > d_open:
+            buytrig  += f * k * rng
+        elif dslice.MA < d_open:
+            selltrig -= f * k * rng      
+        if (min_id >= config['exit_min']) and (close_daily or (d == end_d)):
+            if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
@@ -202,12 +191,12 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.01,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.3, -1, 0, 1), (0.5, -1, 0, 1), (0.7, 0, 0.5, 1), (0.5, 0, 0.6, 1), (0.7, 0, 0.6, 1), (0.3, 2, 0, 1), (0.5, 2, 0, 1)]
+    scenarios = [(0.2, -1, 0, 1), (0.2, -1, 0, 1.5), (0.25, -1, 0, 0.6), (0.25, -1, 0, 1.0), (0.3, 0, 0, 1), (0.4, 0, 0, 0.5), (0.4, -1, 0, 1)]
     for asset, sdate in zip(sim_list, sdate_list):
-        config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
+        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
         config['rollrule'] = '-50b'
-        config['exit_min'] = 2055
+        config['exit_min'] = 2112
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'

@@ -8,14 +8,6 @@ import strategy as strat
 import datetime
 import backtest
 
-margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
-                'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
-                'm':  0.05, 'RM': 0.05, 'y' : 0.05, 'p': 0.05,
-                'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
-                'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
-                'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'OI': 0.05,
-                'v': 0.05,  'IF': 0.1,  'FG': 0.06, 'IF': 0.1 }
-
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -23,6 +15,7 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     file_prefix = config['file_prefix'] + '_' + asset + '_'
     ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
     mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)
+    mdf = backtest.cleanup_mindata(mdf, asset)
     #ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
     for ix, s in enumerate(scenarios):
@@ -190,7 +183,7 @@ def run_sim(start_date, end_date, daily_close = False):
     
     scenarios = [(0.3, -1, 0), (0.5, -1, 0), (0.7, 0, 0.5), (0.5, 0, 0.6), (0.7, 0, 0.6), (0.3, 2, 0), (0.5, 2, 0)]
     for asset, sdate in zip(sim_list, sdate_list):
-        config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
+        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
         config['rollrule'] = '-50b'
         config['exit_min'] = 2055

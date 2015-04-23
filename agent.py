@@ -1439,7 +1439,10 @@ class Agent(AbsAgent):
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_TDAY, direction, otype, cond )
+                    order_type = OF_CLOSE
+                    if (self.instruments[inst].exchange == "SHFE"):
+                        order_type = OF_CLOSE_TDAY                        
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond )
                     orders.append(iorder)
                   
                 if (self.instruments[inst].exchange == "SHFE") and (abs(remained)>0) and (pos.can_yclose.short+pos.can_yclose.long>0):
