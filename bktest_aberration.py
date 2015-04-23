@@ -6,7 +6,7 @@ import numpy as np
 import strategy as strat
 import datetime
 import backtest
-
+import sys
 
 margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
@@ -49,10 +49,11 @@ def aberration_sim( df, config):
     start_equity = config['capital']
     tcost = config['trans_cost']
 	unit = config['unit']
+	k = config['scaler']
     df['ma'] = dh.MA(df, win).shift(1)
 	std = dh.STDDEV(df, win).shift(1)
-	df['upbnd'] = df['ma'] + std
-	df['lowbnd'] = df['ma'] - std
+	df['upbnd'] = df['ma'] + std * k[0]
+	df['lowbnd'] = df['ma'] - std * k[0]
     ll = df.shape[0]
     df['pos'] = pd.Series([0]*ll, index = df.index)
     df['cost'] = pd.Series([0]*ll, index = df.index)
@@ -90,16 +91,19 @@ def aberration_sim( df, config):
 				curr_pos = []
 				mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
 				pos = 0
-			pos = (mslice.close>=mslice.upbnd) * unit -(mslice.close<=mslice.lowbnd) * unit
-			if abs(pos)>0:
-				target = min(mslice.close>=mslice.upbnd) * mslice.upbnd +(mslice.close<=mslice.lowbnd) * mslice.lowbnd
-                new_pos = strat.TradePos([mslice.contract], [1], pos, target, mslice.upbnd+mslice.lowbnd-target)
-                tradeid += 1
-                new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close + misc.sign(pos)*offset, dd)
-                curr_pos.append(new_pos)
-                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-        mdf.ix[dd, 'pos'] = pos
+			if (mslice.close>=mslice.upbnd) or (mslice.close <= mslice.lowbnd):
+				if (pos ==0 ):
+					target_pos = (mslice.close>=mslice.upbnd) * unit -(mslice.close<=mslice.lowbnd) * unit
+					target = (mslice.close>=mslice.upbnd) * mslice.upbnd +(mslice.close<=mslice.lowbnd) * mslice.lowbnd
+					new_pos = strat.TradePos([mslice.contract], [1], target_pos, target, mslice.upbnd+mslice.lowbnd-target)
+					tradeid += 1
+					new_pos.entry_tradeid = tradeid
+					new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
+					curr_pos.append(new_pos)
+					mdf.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
+					mdf.ix[dd, 'pos'] = pos
+				else:
+					print "something wrong with position=%s, close =%s, MA=%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, mslice.ma, mslice.upbnd, mslice.lowbnd)
             
     (res_pnl, ts) = backtest.get_pnl_stats( df, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
@@ -132,12 +136,6 @@ def run_sim(start_date, end_date, daily_close = False):
 			  'scaler': (2.0, 2.0),
               'file_prefix': file_prefix}		
 
-    if asset in ['cu', 'al', 'zn']:
-        config['nearby'] = 3
-        config['rollrule'] = '-1b'
-    elif asset in ['IF']:
-        config['rollrule'] = '-1b'
-        
     freqs = ['5Min', '15Min', '30Min', '60Min', 'D']
     windows = [35]
     for asset, sdate in zip(sim_list, sdate_list):
