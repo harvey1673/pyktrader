@@ -34,6 +34,7 @@ class TradePos(object):
         self.is_closed = False
         self.profit = 0.0
         self.trail_loss = 0
+        self.close_comment = ''
     
     def trail_check(self, curr_price, margin):
         if (self.direction * (self.exit_target - curr_price) >= margin):

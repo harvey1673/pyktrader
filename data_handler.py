@@ -366,4 +366,25 @@ def fisher(df, win, smooth_p = 0.7, smooth_i = 0.7):
     df.ix[-1, 'FISHER_P'] = df.ix[-2, 'FISHER_P'] * (1 - smooth_p) + smooth_p * price_loc
     fisher_ind = 0.5 * np.log((1 + df.ix[-1, 'FISHER_P'])/(1 - df.ix[-1, 'FISHER_P']))
     df.ix[-1, 'FISHER_I'] =  df.ix[-2, 'FISHER_I'] * (1 - smooth_i) + smooth_i * fisher_ind
+
+def PCT_CHANNEL(df, win = 20, pct = 50, field = 'close'):
+    out = pd.Series(index=df.index, name = 'CH%s_PCT%s' % (win, pct))
+    for idx, d in enumerate(df.index):
+        if idx >= win:
+            out[d] = np.percentile(df[field].iloc[max(idx-win,0):idx], pct)
+    return out
+
+def COND_PCT_CHAN(df, win = 20, pct = 50, field = 'close', direction=1):
+    out = pd.Series(index=df.index, name = 'C_CH%s_PCT%s' % (win, pct))
+    for idx, d in enumerate(df.index):
+        if idx >= win:
+            ts = df[field].iloc[max(idx-win,0):idx]
+            cutoff = np.percentile(ts, pct)
+            ind = (ts*direction>=cutoff*direction)
+            filtered = ts[ind]
+            ranks = filtered.rank(ascending=False)
+            tot_s = sum([filtered[dt] * ranks[dt] * (seq + 1) for seq, dt in enumerate(filtered.index)])
+            tot_w = sum([ranks[dt] * (seq + 1) for seq, dt in enumerate(filtered.index)])    
+            out[d] = tot_s/tot_w
+    return out
     

@@ -153,7 +153,7 @@ def run_sim(start_date, end_date, daily_close = True):
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
     #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
-    sim_list = [ 'IF', 'm','RM', 'y','l','p','rb','ru','TA','SR','CF','ag','au','cu','i','al','j','a']
+    sim_list = [ 'rb','ru','TA','SR','CF','ag','au','cu','i','al','j','zn', 'a', 'jd']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -169,7 +169,7 @@ def run_sim(start_date, end_date, daily_close = True):
               'min_rng': 0.015, 
               'file_prefix': file_prefix}
     
-    scenarios = [(0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
+    scenarios = [(0.25, 0.05, 0.15), (0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
     freqs = ['1min', '3min', '5min']
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])

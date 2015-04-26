@@ -8,39 +8,19 @@ import datetime
 import backtest
 import sys
 
-def pct_chan(df, win = 20, pct = 50, field = 'close'):
-	out = pd.Series(index=df.index, name = 'CH%s_PCT%s' % (win, pct))
-	for idx, d in enumerate(df.index):
-		if idx >= win:
-			out[d] = np.percentile(df[field].iloc[max(idx-win,0):idx], pct)
-	return out
-
-def cond_pct_chan(df, win = 20, pct = 50, field = 'close', direction=1):
-	out = pd.Series(index=df.index, name = 'C_CH%s_PCT%s' % (win, pct))
-	for idx, d in enumerate(df.index):
-		if idx >= win:
-			ts = df[field].iloc[max(idx-win,0):idx]
-			ids = pd.Series(range(len(ts)), index=ts.index)
-			cutoff = np.percentile(ts, pct)
-			ind = (ts*direction>=cutoff*direction)
-			filtered = ts[ind]
-			ranks = filtered.rank(ascending=False)
-			out[d] = np.percentile(df[field].iloc[max(idx-win,0):idx], pct)
-	return out
-
 def chanbreak( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-	df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
-	df = backtest.cleanup_mindata(df, asset)
+    df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    df = backtest.cleanup_mindata(df, asset)
     output = {}
     for ix, freq in enumerate(freqs):
-		str_freq = str(freq) + 'Min'
-		if freq == 1440:
-			str_freq = 'D'
-		xdf = dh.conv_ohlc_freq(df, str_freq)
-		config['freq'] = freq
+        str_freq = str(freq) + 'Min'
+        if freq == 1440:
+            str_freq = 'D'
+        xdf = dh.conv_ohlc_freq(df, str_freq)
+        config['freq'] = freq
         for iy, win in enumerate(windows):
             idx = ix*10+iy
             config['win'] = win
@@ -63,25 +43,25 @@ def chanbreak( asset, start_date, end_date, freqs, windows, config):
 def chanbreak_sim( df, config):
     start_equity = config['capital']
     tcost = config['trans_cost']
-	unit = config['unit']
-	k = config['scaler']
-	trail_stop = config['trail_stop']
+    unit = config['unit']
+    k = config['scaler']
+    trail_stop = config['trail_stop']
     marginrate = config['marginrate']
     offset = config['offset']
-	win = config['win']
-	freq = config['freq']
-	chan_func = config['channel_func']
-	upper_chan_func = chan_func[0]
-	lower_chan_func = chan_func[1]
-	entry_chan = win * 225/freq
-	if freq > 120: 
-		entry_chan = win	
-	exit_chan = int(entry_chan/k[1])
+    win = config['win']
+    freq = config['freq']
+    chan_func = config['channel_func']
+    upper_chan_func = chan_func[0]
+    lower_chan_func = chan_func[1]
+    entry_chan = win/freq
+    if freq == 1440: 
+        entry_chan = win    
+    exit_chan = int(entry_chan/k[1])
     df['H1'] = upper_chan_func(df, entry_chan).shift(1)
-	df['L1'] = lower_chan_func(df, entry_chan).shift(1)
-	df['H2'] = upper_chan_func(df, exit_chan).shift(1)
-	df['L2'] = lower_chan_func(df, exit_chan).shift(1)
-	df['ATR'] = dh.ATR(df, entry_chan)
+    df['L1'] = lower_chan_func(df, entry_chan).shift(1)
+    df['H2'] = upper_chan_func(df, exit_chan).shift(1)
+    df['L2'] = lower_chan_func(df, exit_chan).shift(1)
+    df['ATR'] = dh.ATR(df, entry_chan)
     ll = df.shape[0]
     df['pos'] = pd.Series([0]*ll, index = df.index)
     df['cost'] = pd.Series([0]*ll, index = df.index)
@@ -98,47 +78,48 @@ def chanbreak_sim( df, config):
             pos = 0
         else:
             pos = curr_pos[0].pos
-		df.ix[dd, 'pos'] = pos
+        df.ix[dd, 'pos'] = pos
         if np.isnan(mslice.ATR):
             continue
-		if (min_id >=config['exit_min']):
-			if (pos!=0) and (d == end_d):
-				curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
+        if (min_id >=config['exit_min']):
+            if (pos!=0) and (d == end_d):
+                curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
                 df.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
-			continue
+            continue
         else:
-			if (pos !=0):
-				curr_pos[0].trail_update(mslice.close)
-				if curr_pos[0].trail_check(mslice.close, mslice.ATR*k[0]):
-					curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
-					tradeid += 1
-					curr_pos[0].exit_tradeid = tradeid
-					closed_trades.append(curr_pos[0])
-					curr_pos = []					
+            if (pos !=0):
+                curr_pos[0].trail_update(mslice.close)
+                if curr_pos[0].trail_check(mslice.close, mslice.ATR*k[0]):
+                    curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
+                    tradeid += 1
+                    curr_pos[0].exit_tradeid = tradeid
+                    closed_trades.append(curr_pos[0])
+                    pos = 0
+                    curr_pos = []                    
             if ((mslice.close >= mslice.H2) and (pos<0)) or ((mslice.close <= mslice.L2) and (pos>0)):
-				curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
-				tradeid += 1
-				curr_pos[0].exit_tradeid = tradeid
-				closed_trades.append(curr_pos[0])
-				curr_pos = []
-				df.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
-				pos = 0
-			if (mslice.close>=mslice.H1) or (mslice.close <= mslice.L1):
-				if (pos ==0 ):
-					target_pos = (mslice.close>=mslice.H1) * unit -(mslice.close<=mslice.L1) * unit
-					new_pos = strat.TradePos([mslice.contract], [1], target_pos, mslice.close, mslice.close)
-					tradeid += 1
-					new_pos.entry_tradeid = tradeid
-					new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
-					curr_pos.append(new_pos)
-					df.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
-					df.ix[dd, 'pos'] = pos
-				else:
-					print "something wrong with position=%s, close =%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, mslice.H1, mslice.L1)
+                curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
+                tradeid += 1
+                curr_pos[0].exit_tradeid = tradeid
+                closed_trades.append(curr_pos[0])
+                curr_pos = []
+                df.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+                pos = 0
+            if ((mslice.close>=mslice.H1) and (pos<=0)) or ((mslice.close <= mslice.L1) and (pos>=0)):
+                if (pos ==0 ):
+                    target_pos = (mslice.close>=mslice.H1) * unit -(mslice.close<=mslice.L1) * unit
+                    new_pos = strat.TradePos([mslice.contract], [1], target_pos, mslice.close, mslice.close)
+                    tradeid += 1
+                    new_pos.entry_tradeid = tradeid
+                    new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
+                    curr_pos.append(new_pos)
+                    df.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
+                    df.ix[dd, 'pos'] = pos
+                else:
+                    print "something wrong with position=%s, close =%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, mslice.H1, mslice.L1)
             
     (res_pnl, ts) = backtest.get_pnl_stats( df, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
@@ -161,20 +142,19 @@ def run_sim(start_date, end_date, trail_stop = False):
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Abberration_'
-    if daily_close:
-        file_prefix = file_prefix + 'daily_'
+    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\ChanBreak_'
+    if trail_loss:
+        file_prefix = file_prefix + 'trail_'
     config = {'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0, 
               'unit': 1,
-			  'trail_stop': trail_stop,
-			  'scaler': (2.0, 2.0),
-			  'channel_func': [dh.DONCH_H, dh.DONCH_L]
-              'file_prefix': file_prefix}		
-
-    freqs = [3, 5, 15, 30, 60, 1440]
-    windows = [3, 5, 10]
+              'trail_stop': trail_stop,
+              'scaler': (2.0, 2.0),
+              'channel_func': [dh.DONCH_H, dh.DONCH_L],
+              'file_prefix': file_prefix}        
+    freqs = [1]
+    windows = [20, 60, 120, 270]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['rollrule'] = '-50b' 
@@ -186,16 +166,16 @@ def run_sim(start_date, end_date, trail_stop = False):
             config['rollrule'] = '-1b'
         elif asset in ['IF']:
             config['start_min'] = 1520
-            config['exit_min'] = 2110
-            config['rollrule'] = '-1b'	
+            config['exit_min'] = 2112
+            config['rollrule'] = '-1b'    
     chanbreak( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
     args = sys.argv[1:]
     if len(args) < 3:
-        d_close = True
+        trail_loss = False
     else:
-        d_close = (int(args[2])>0)
+        trail_loss = (int(args[2])>0)
     if len(args) < 2:
         end_d = datetime.date(2015,1,23)
     else:
@@ -204,5 +184,5 @@ if __name__=="__main__":
         start_d = datetime.date(2013,1,2)
     else:
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-    run_sim(start_d, end_d, d_close)
+    run_sim(start_d, end_d, trail_loss)
     pass
