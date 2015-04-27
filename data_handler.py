@@ -387,4 +387,21 @@ def COND_PCT_CHAN(df, win = 20, pct = 50, field = 'close', direction=1):
             tot_w = sum([ranks[dt] * (seq + 1) for seq, dt in enumerate(filtered.index)])    
             out[d] = tot_s/tot_w
     return out
-    
+   
+def VCI(df, n, rng = 8):
+	if n > 7:
+		varA = pd.rolling_max(pd.high, rng) - pd.rolling_min(pd.low, rng)
+		varB = varA.shift(rng)
+		varC = varA.shift(rng*2)
+		varD = varA.shift(rng*3)
+		varE = varA.shift(rng*4)
+		avg_tr = (varA+varB+varC+varD+varE)/25.0
+	else:
+		tr = pd.concat([df.high - df.low, abs(df.close - df.close.shift(1))], join='outer', axis=1).max(1)
+		avg_tr = pd.rolling_mean(tr, n) * 0.16
+	avg_pr = (pd.rolling_mean(df.high, n) + pd.rolling_mean(df.low, n))/2.0
+	VO = pd.Series((df.open - avg_pr)/avg_tr, name = 'VCIO')
+	VH = pd.Series((df.high - avg_pr)/avg_tr, name = 'VCIH')
+	VL = pd.Series((df.low - avg_pr)/avg_tr, name = 'VCIL')
+	VC = pd.Series((df.close - avg_pr)/avg_tr, name = 'VCIC')
+	return pd.concat([VO, VH, VL, VC], join='outer', axis=1)
