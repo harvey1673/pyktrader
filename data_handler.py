@@ -405,3 +405,17 @@ def VCI(df, n, rng = 8):
     VL = pd.Series((df.low - avg_pr)/avg_tr, name = 'VCIL')
     VC = pd.Series((df.close - avg_pr)/avg_tr, name = 'VCIC')
     return pd.concat([VO, VH, VL, VC], join='outer', axis=1)
+
+def TEMA(ts, n):
+	n = int(n)
+	ts_ema1 = pd.Series( pd.ewma(ts, span = n, adjust = False), name = 'EMA_' + str(n) )
+	ts_ema2 = pd.Series( pd.ewma(ts_ema1, span = n, adjust = False), name = 'EMA2_' + str(n) )
+	ts_ema3 = pd.Series( pd.ewma(ts_ema2, span = n, adjust = False), name = 'EMA3_' + str(n) )
+	ts_tema = pd.Series( 3 * ts_ema1 - 3 * ts_ema2 + ts_ema3, name = 'TEMA_' + str(n) )
+	return pd.concat([ts_tema,ts_ema1, ts_ema2, ts_ema3], join='outer', axis=1)
+	
+def SVAPO(df, period = 8, cutoff = 1, stdev_l = 1.3, stdev_period = 100):
+	HA = HEIKEN_ASHI(df, 1)
+	haCl = (HA.HAopen + HA.HAclose + HA.HAhigh + HA.HAlow)/4.0
+	haC = TEMA( haCl, 0.625 * period )
+	
