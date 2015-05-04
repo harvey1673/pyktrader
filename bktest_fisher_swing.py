@@ -64,7 +64,7 @@ def fisher_swing_sim( df, config):
         else:
             pos = curr_pos[0].pos
 		df.ix[dd, 'pos'] = pos
-        if np.isnan(mslice.ma):
+        if np.isnan(mslice.mslice.BBSTOP_lower) or np.isnan(mslice.FISHER_I) or np.isnan(mslice.HAclose):
             continue
 		end_trading = (min_id >=config['exit_min']) and (d == end_d)
 		stop_loss = (pos > 0) and ((mslice.close < mslice.BBSTOP_lower) or (mslice.FISHER_I<0))
@@ -81,6 +81,10 @@ def fisher_swing_sim( df, config):
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)	
 				pos = 0
 		if (not end_trading) and (pos == 0):
+			if start_long and start_short:
+				print "warning: get both long and short signal, something is wrong!"
+				print mslice
+				continue
 			pos = (start_long == True) * unit - (start_short == True) * unit
 			if abs(pos)>0:
 				#target = (start_long == True) * mslice.close +(start_short == True) * mslice.close
