@@ -1,5 +1,6 @@
 import misc
 import agent
+import sys
 import data_handler as dh
 import pandas as pd
 import numpy as np
@@ -11,10 +12,10 @@ def fisher_swing( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-	df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)	
+    df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)    
     output = {}
     for ix, freq in enumerate(freqs):
-		xdf = dh.conv_ohlc_freq(df, freq):
+        xdf = dh.conv_ohlc_freq(df, freq)
         for iy, win in enumerate(windows):
             idx = ix*10+iy
             config['win'] = win
@@ -37,25 +38,24 @@ def fisher_swing( asset, start_date, end_date, freqs, windows, config):
 def fisher_swing_sim( df, config):
     marginrate = config['marginrate']
     offset = config['offset']
-	win = config['win']
+    win = config['win']
     start_equity = config['capital']
     tcost = config['trans_cost']
-	unit = config['unit']
+    unit = config['unit']
     fisher = dh.FISHER(df, win[0]).shift(1)
-	df['FISHER_I'] = fisher['FISHER_I']
-	df = df.join(dh.BBANDS_STOP(df, win[1]))
-	ha_df = dh.HEIKEN_ASHI(df, win[2])
-	df['HAopen'] = ha_df['open']
-	df['HAclose'] = ha_df['close']
+    df['FISHER_I'] = fisher['FISHER_I']
+    df = df.join(dh.BBANDS_STOP(df, win[1], 1.0))
+    ha_df = dh.HEIKEN_ASHI(df, win[2])
+    df['HAopen'] = ha_df['HAopen']
+    df['HAclose'] = ha_df['HAclose']
     ll = df.shape[0]
     df['pos'] = pd.Series([0]*ll, index = df.index)
     df['cost'] = pd.Series([0]*ll, index = df.index)
     curr_pos = []
     closed_trades = []
-    start_d = df.index[0].date()
     end_d = df.index[-1].date()
     tradeid = 0
-    for idx, dd in enumerate(df.index):
+    for dd in df.index:
         mslice = df.ix[dd]
         min_id = agent.get_min_id(dd)
         d = dd.date()
@@ -63,38 +63,38 @@ def fisher_swing_sim( df, config):
             pos = 0
         else:
             pos = curr_pos[0].pos
-		df.ix[dd, 'pos'] = pos
-        if np.isnan(mslice.mslice.BBSTOP_lower) or np.isnan(mslice.FISHER_I) or np.isnan(mslice.HAclose):
+        df.ix[dd, 'pos'] = pos
+        if np.isnan(mslice.BBSTOP_lower) or np.isnan(mslice.FISHER_I) or np.isnan(mslice.HAclose):
             continue
-		end_trading = (min_id >=config['exit_min']) and (d == end_d)
-		stop_loss = (pos > 0) and ((mslice.close < mslice.BBSTOP_lower) or (mslice.FISHER_I<0))
-		stop_loss = stoploss or ((pos < 0) and ((mslice.close > mslice.BBSTOP_upper) or (mslice.FISHER_I>0)))
-		start_long = (mslice.FISHER_I>0) and (mslice.HAclose > mslice.HAopen ) and (mslice.BBSTOP_trend > 0)
-		start_short = (mslice.FISHER_I<0) and (mslice.HAclose < mslice.HAopen ) and (mslice.BBSTOP_trend < 0)
-		if pos != 0:
-			if stop_loss or end_trading:
-				curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
+        end_trading = (min_id >=config['exit_min']) and (d == end_d)
+        stop_loss = (pos > 0) and ((mslice.close < mslice.BBSTOP_lower) or (mslice.FISHER_I<0))
+        stop_loss = stop_loss or ((pos < 0) and ((mslice.close > mslice.BBSTOP_upper) or (mslice.FISHER_I>0)))
+        start_long = (mslice.FISHER_I>0) and (mslice.HAclose > mslice.HAopen ) and (mslice.BBSTOP_trend > 0)
+        start_short = (mslice.FISHER_I<0) and (mslice.HAclose < mslice.HAopen ) and (mslice.BBSTOP_trend < 0)
+        if pos != 0:
+            if stop_loss or end_trading:
+                curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
-                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)	
-				pos = 0
-		if (not end_trading) and (pos == 0):
-			if start_long and start_short:
-				print "warning: get both long and short signal, something is wrong!"
-				print mslice
-				continue
-			pos = (start_long == True) * unit - (start_short == True) * unit
-			if abs(pos)>0:
-				#target = (start_long == True) * mslice.close +(start_short == True) * mslice.close
+                df.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
+                pos = 0
+        if (not end_trading) and (pos == 0):
+            if start_long and start_short:
+                print "warning: get both long and short signal, something is wrong!"
+                print mslice
+                continue
+            pos = (start_long == True) * unit - (start_short == True) * unit
+            if abs(pos)>0:
+                #target = (start_long == True) * mslice.close +(start_short == True) * mslice.close
                 new_pos = strat.TradePos([mslice.contract], [1], pos, mslice.close, mslice.close)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
                 new_pos.open(mslice.close + misc.sign(pos)*offset, dd)
                 curr_pos.append(new_pos)
-                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-        mdf.ix[dd, 'pos'] = pos
+                df.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
+        df.ix[dd, 'pos'] = pos
             
     (res_pnl, ts) = backtest.get_pnl_stats( df, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
@@ -112,28 +112,22 @@ def run_sim(start_date, end_date):
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
     #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
-    sim_list = [ 'IF']
+    sim_list = [ 'm','y','l','cu', 'rb', 'i']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Abberration_'
+    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\FisherSwing_'
     #if daily_close:
     #    file_prefix = file_prefix + 'daily_'
     config = {'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0, 
               'unit': 1,
-			  'scaler': (2.0, 2.0),
-              'file_prefix': file_prefix}		
+              'scaler': (2.0, 2.0),
+              'file_prefix': file_prefix}        
 
-    if asset in ['cu', 'al', 'zn']:
-        config['nearby'] = 3
-        config['rollrule'] = '-1b'
-    elif asset in ['IF']:
-        config['rollrule'] = '-1b'
-        
-    freqs = ['5Min', '15Min', '30Min', '60Min']
+    freqs = ['5Min', '15Min', '30Min', '60Min','120Min']
     windows = [[30, 20, 6], [20, 15, 6]]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
@@ -147,8 +141,8 @@ def run_sim(start_date, end_date):
         elif asset in ['IF']:
             config['start_min'] = 1520
             config['exit_min'] = 2110
-            config['rollrule'] = '-1b'	
-    fisher_swing( asset, start_date, end_date, freqs, windows, config)
+            config['rollrule'] = '-1b'    
+        fisher_swing( asset, max(start_date, sdate), end_date, freqs, windows, config)
 
 if __name__=="__main__":
     args = sys.argv[1:]
@@ -166,4 +160,3 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d)
     pass
-
