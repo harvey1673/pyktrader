@@ -189,7 +189,20 @@ class RBStratGui(StratGui):
                             'Senter':'float', 
                             'Ssetup':'float',
                             'TrailLoss':'float' }        
-    
+
+class TLStratGui(StratGui):
+    def __init__(self, strat, app, master):
+        StratGui.__init__(self, strat, app, master)
+        self.root = master
+        self.entry_fields = ['TradeUnit']
+        self.status_fields = ['CurrPrices', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
+        self.field_types = {'TradeUnit':'int', 
+                            'CurrAtr':  'float',
+                            'EntryHigh':'float',
+                            'EntryLow': 'float',
+                            'ExitHigh': 'float',
+                            'ExitLow':  'float'} 
+            
 class OptStratGui(object):
     def __init__(self, strat, app, master):
         self.pricer = strat.pricer
@@ -506,6 +519,8 @@ class Gui(tk.Tk):
             if strat.__class__.__name__ == 'DTTrader':
                 self.strat_gui[strat.name] = DTStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
+                self.strat_gui[strat.name] = RBStratGui(strat, app, self)
+            elif strat.__class__.__name__ == 'TurtleTrader':
                 self.strat_gui[strat.name] = RBStratGui(strat, app, self)
             elif 'Opt' in strat.__class__.__name__:
                 self.strat_gui[strat.name] = OptStratGui(strat, app, self)

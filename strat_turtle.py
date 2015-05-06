@@ -16,16 +16,28 @@ class TurtleTrader(Strategy):
                 #(freq, BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=windows[2]), rfunc=fcustom(data_handler.donch_l, n=windows[2]))),\
                 #(freq, BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=windows[2]), rfunc=fcustom(data_handler.donch_h, n=windows[2]))),\
                 ]    
-        self.curr_atr  = [0.0] * len(underliers)
+        self.curr_atr   = [0.0] * len(underliers)
+        self.entry_high = [0.0] * len(underliers)
+        self.entry_low  = [0.0] * len(underliers)
+        self.exit_high  = [0.0] * len(underliers)
+        self.exit_low   = [0.0] * len(underliers)
         self.channels = windows
         self.freq = freq
     
     def initialize(self):
         self.load_state()
         atr_str = 'ATR_' + str(self.channels[1])
+        bb_str = 'DONCH_H' + str(self.channels[1])
+        sb_str = 'DONCH_L' + str(self.channels[1])
+        bs_str = 'DONCH_H' + str(self.channels[0])
+        ss_str = 'DONCH_L' + str(self.channels[0])        
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
             df = self.agent.day_data[inst]
+            self.entry_high[idx] = df.ix[-1, bb_str]
+            self.entry_low[idx]  = df.ix[-1, sb_str]
+            self.exit_high[idx] = df.ix[-1, bs_str]
+            self.exit_low[idx]  = df.ix[-1, ss_str]           
             if len(self.positions[idx]) == 0:
                 self.curr_atr[idx] = df.ix[-1, atr_str]
         pass       
@@ -50,16 +62,8 @@ class TurtleTrader(Strategy):
         curr_min = int(min_id/100)*60+ min_id % 100
         if (curr_min % self.freq != 0):
             return        
-        bb_str = 'DONCH_H' + str(self.channels[1])
-        sb_str = 'DONCH_L' + str(self.channels[1])
-        bs_str = 'DONCH_H' + str(self.channels[0])
-        ss_str = 'DONCH_L' + str(self.channels[0])
-        df = self.agent.day_data[inst]
         inst_obj = self.agent.instruments[inst]
         tick_base = inst_obj.tick_base
-        
-        hh = [df.ix[-1, bb_str],df.ix[-1,bs_str]]
-        ll  = [df.ix[-1,sb_str],df.ix[-1,ss_str]]
         idx = self.get_index([inst])
         if idx < 0:
             self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
@@ -72,13 +76,13 @@ class TurtleTrader(Strategy):
             return
         if len(self.positions[idx]) == 0: 
             buysell = 0
-            if (self.curr_prices[idx] > hh[0]):
+            if (self.curr_prices[idx] > self.entry_high[idx]):
                 buysell = 1
-            elif (self.curr_prices[idx] < ll[0]):
+            elif (self.curr_prices[idx] < self.entry_low[idx]):
                 buysell = -1                 
             if buysell !=0:
                 msg = 'Turtle to open a new position for inst = %s, curr_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s is sent for processing' \
-                        % (inst, self.curr_prices[idx], hh[0], ll[0], buysell, self.trade_unit[idx])
+                        % (inst, self.curr_prices[idx], self.entry_high[idx], self.entry_low[idx], buysell, self.trade_unit[idx])
                 self.open_tradepos(idx, buysell, self.curr_prices[idx] + buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
                 self.save_state()
@@ -86,10 +90,10 @@ class TurtleTrader(Strategy):
             buysell = self.positions[idx][0].direction
             units = len(self.positions[idx])
             for tradepos in reversed(self.positions[idx]):
-                if (self.curr_prices[idx] < ll[1] and buysell == 1) or (self.curr_prices[idx] > hh[1] and buysell == -1) \
+                if (self.curr_prices[idx] < self.exit_low[idx] and buysell == 1) or (self.curr_prices[idx] > self.exit_high[idx] and buysell == -1) \
                         or ((tradepos.entry_price-self.curr_prices[idx])*buysell >= self.trail_loss[idx]*self.curr_atr[idx]):
                     msg = 'Turtle to close a position for inst = %s, curr_price = %s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s , target=%s, ATR=%s' \
-                                % (inst, self.curr_prices[idx], hh[1], ll[1], buysell, self.trade_unit[idx], tradepos.entry_target, self.curr_atr[idx])
+                            % (inst, self.curr_prices[idx], self.exit_high[idx], self.exit_low[idx], buysell, self.trade_unit[idx], tradepos.entry_target, self.curr_atr[idx])
                     self.close_tradepos(idx, tradepos, self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                     self.status_notifier(msg)
                     self.save_state()

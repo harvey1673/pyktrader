@@ -24,11 +24,11 @@ class RBreakerTrader(Strategy):
         self.sbreak = [0.0]*num_assets
         self.bbreak = [0.0]*num_assets
         self.start_min_id = [303] * num_assets
-        self.daily_close_buffer = 5
         self.freq = freq
+        self.daily_close_buffer = max(freq + 2, 5)
         self.trail_loss = [trail_loss] * num_assets
         self.entry_limit = 2
-        self.num_tick = 1
+        self.num_tick = 0
 
     def initialize(self):
         self.load_state()

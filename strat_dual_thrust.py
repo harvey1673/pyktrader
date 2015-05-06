@@ -27,7 +27,7 @@ class DTTrader(Strategy):
             self.close_tday = daily_close
         elif len(daily_close) == 1: 
             self.close_tday = daily_close * numAssets 
-        self.num_tick = 2
+        self.num_tick = 1
         self.min_rng = 0.01
 
     def initialize(self):
