@@ -6,7 +6,7 @@ import data_handler
  
 class TurtleTrader(Strategy):
     def __init__(self, name, underliers,  volumes, trade_unit = [], agent = None, email_notify = None, datafreq = 'd', freq = 1, windows = [10, 20]):
-        Strategy.__init__(self, name, underliers, trade_unit, agent, email_notify)
+        Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.data_func = [ 
                 (datafreq, BaseObject(name = 'ATR', sfunc=fcustom(data_handler.ATR, n=windows[1]), rfunc=fcustom(data_handler.atr, n=windows[1]))), \
                 (datafreq, BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=windows[0]), rfunc=fcustom(data_handler.donch_l, n=windows[0]))),\

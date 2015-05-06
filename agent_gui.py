@@ -197,6 +197,7 @@ class TLStratGui(StratGui):
         self.entry_fields = ['TradeUnit']
         self.status_fields = ['CurrPrices', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
         self.field_types = {'TradeUnit':'int', 
+                            'CurrPrices': 'float',
                             'CurrAtr':  'float',
                             'EntryHigh':'float',
                             'EntryLow': 'float',
@@ -521,7 +522,7 @@ class Gui(tk.Tk):
             elif strat.__class__.__name__ == 'RBreakerTrader':
                 self.strat_gui[strat.name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
-                self.strat_gui[strat.name] = RBStratGui(strat, app, self)
+                self.strat_gui[strat.name] = TLStratGui(strat, app, self)
             elif 'Opt' in strat.__class__.__name__:
                 self.strat_gui[strat.name] = OptStratGui(strat, app, self)
         menu = tk.Menu(self)

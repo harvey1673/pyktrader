@@ -68,15 +68,15 @@ def prod_test(tday, name='prod_test'):
                 'i1509' :1,
                 'IF1506':1}
     insts = ins_setup.keys()
-    units_dt = [ins_setup[inst] for inst in insts]
-    under_dt = [[inst] for inst in insts]
-    vol_dt = [[1] for inst in insts]
-    #tl_strat = strat_tl.TurtleTrader('ProdDT', under_dt, vol_dt, trade_unit = units_dt,
-    #                             agent = None, email_notify = ['harvey_wwu@hotmail.com'])    
-    strategies = [rb_strat, dt_strat]
+    units_tl = [ins_setup[inst] for inst in insts]
+    under_tl = [[inst] for inst in insts]
+    vol_tl = [[1] for inst in insts]
+    tl_strat = strat_tl.TurtleTrader('ProdTL', under_tl, vol_tl, trade_unit = units_tl,
+                                 agent = None, email_notify = ['harvey_wwu@hotmail.com'])    
+    strategies = [rb_strat, dt_strat, tl_strat]
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':5, \
+                 'daily_data_days':21, \
                  'min_data_days':1 }
 
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
