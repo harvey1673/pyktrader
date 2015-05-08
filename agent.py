@@ -113,21 +113,20 @@ class CTPMdMixin(object):
     
     def OnRspUserLogin(self, userlogin, info, rid, is_last):
         self.logger.info(u'MD:user login,info:%s,rid:%s,is_last:%s' % (info,rid,is_last))
-        trade_day_str = self.GetTradingDay()
-        if len(trade_day_str) == 0:
-            trading_day = datetime.date.today()
-        else:
-            try:
-                trading_day = datetime.datetime.strptime(self.GetTradingDay(),'%Y%m%d').date()
-            except ValueError:
-                trading_day = datetime.date.today()
-        if trading_day > self.agent.scur_day:    #换日,重新设置volume
-            self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
-            #self.agent.scur_day = scur_day
-            self.agent.day_switch(trading_day) 
         if is_last and not self.checkErrorRspInfo(info):
+            trade_day_str = self.GetTradingDay()
+            trading_day = datetime.date.today()
+            if len(trade_day_str) > 0:
+                try:
+                    trading_day = datetime.datetime.strptime(trade_day_str,'%Y%m%d').date()
+                except ValueError:
+                    pass
             self.logger.info(u"MD:get today's trading day:%s" % trade_day_str)
             self.subscribe_market_data(self.instruments)
+            if trading_day > self.agent.scur_day:    #换日,重新设置volume
+                self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
+                #self.agent.scur_day = scur_day
+                self.agent.day_switch(trading_day)             
 
     def OnRtnDepthMarketData(self, dp):
         try:
@@ -716,7 +715,7 @@ class AbsAgent(object):
 class Agent(AbsAgent):
  
     def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), 
-                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5):
+                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5, live_trading = False):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -737,7 +736,8 @@ class Agent(AbsAgent):
         self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
-        self.live_trading = True
+        self.live_trading = live_trading
+        self.day_switch_locked = False
         self.tick_db_table = 'fut_tick'
         self.min_db_table  = 'fut_min'
         self.daily_db_table = 'fut_daily'
@@ -1292,6 +1292,10 @@ class Agent(AbsAgent):
         strat.reset()
          
     def day_switch(self, newday):  #重新初始化opener
+        if self.day_switch_locked:
+            return
+        else:
+            self.day_switch_locked = True
         self.logger.info('switching the trading day from %s to %s' % (self.scur_day, newday))
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
@@ -1308,6 +1312,7 @@ class Agent(AbsAgent):
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(newday.toordinal())
             self.instruments[inst].day_finalized = False
         self.eod_flag = False
+        self.day_switch_locked = False
                 
     def init_init(self):    #init中的init,用于子类的处理
         pass

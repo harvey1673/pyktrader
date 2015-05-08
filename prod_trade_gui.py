@@ -84,9 +84,9 @@ def prod_trade(tday, name='prod_trade'):
 #    rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
 #                                 ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 5, 
 #                                 agent = None, email_notify = [])
-    ins_setup = {'m1509':(0,0.4, 0.5, 4, False),
-                'RM509': (0,0.4, 0.5, 4, False),
-#                'rb1510':(0,0.5, 10, False),
+    ins_setup = {'m1509':(0,0.7, 0.0, 2, False),
+                'RM509': (0,0.7, 0.0, 2, False),
+                #'rb1510':(0,0.4, 0.5, 2, False),
                 'p1509': (0,0.4, 0.5, 1, False),
                 'y1509': (0,0.4, 0.5, 1, False), 
                 'l1509': (0,0.4, 0.5, 1, False),

@@ -195,8 +195,9 @@ class TLStratGui(StratGui):
         StratGui.__init__(self, strat, app, master)
         self.root = master
         self.entry_fields = ['TradeUnit']
-        self.status_fields = ['CurrPrices', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
+        self.status_fields = ['CurrPrices', 'TrailLoss', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
         self.field_types = {'TradeUnit':'int', 
+                            'TrailLoss': 'float',
                             'CurrPrices': 'float',
                             'CurrAtr':  'float',
                             'EntryHigh':'float',

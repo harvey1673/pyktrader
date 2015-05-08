@@ -21,6 +21,7 @@ class TurtleTrader(Strategy):
         self.entry_low  = [0.0] * len(underliers)
         self.exit_high  = [0.0] * len(underliers)
         self.exit_low   = [0.0] * len(underliers)
+        self.trail_loss   = [2.0] * len(underliers)
         self.channels = windows
         self.freq = freq
     
