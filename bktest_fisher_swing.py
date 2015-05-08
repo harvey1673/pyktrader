@@ -112,7 +112,7 @@ def run_sim(start_date, end_date):
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
     #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
-    sim_list = [ 'm','y','l','cu', 'rb', 'i']
+    sim_list = [ 'IF','ru', 'rb', 'a', 'j', 'p','pp','zn', 'al', 'SR', 'ME', 'CF', 'RM']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -127,7 +127,7 @@ def run_sim(start_date, end_date):
               'scaler': (2.0, 2.0),
               'file_prefix': file_prefix}        
 
-    freqs = ['5Min', '15Min', '30Min', '60Min','120Min']
+    freqs = ['5Min', '15Min', '30Min', '60Min','120Min', 'D']
     windows = [[30, 20, 6], [20, 15, 6]]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
