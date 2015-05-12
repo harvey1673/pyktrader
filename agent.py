@@ -327,10 +327,12 @@ class CTPTraderRspMixin(object):
         self.logger.info(u'TD:trader login')
         self.logger.debug(u"TD:loggin %s" % str(pRspInfo))
         if not self.isRspSuccess(pRspInfo):
-            self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
+            self.logger.warning(u'TD:trader login failed' )
+            #self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
             print u'综合交易平台登陆失败，请检查网络或用户名/口令'
             self.is_logged = False
-            #self.login()
+            time.sleep(3)
+            self.login()
             return
         self.is_logged = True
         self.logger.info(u'TD:trader login success')

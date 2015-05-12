@@ -175,9 +175,10 @@ class RBStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId']
+        self.entry_fields = ['TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId', 'Freq']
         self.status_fields = ['CurrPrices', 'Sbreak', 'Bsetup', 'Benter', 'Senter', 'Ssetup', 'Bbreak'] 
-        self.field_types = {'TradeUnit':'int', 
+        self.field_types = {'TradeUnit':'int',
+                            'Freq':'int', 
                             'MinRng':'float', 
                             'Ratios': 'floatlist', 
                             'StartMinId': 'int',
@@ -499,10 +500,11 @@ class Gui(tk.Tk):
         self.status_ents = {}
         self.strat_frame = {}
         self.strat_gui = {}
-        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap']
+        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap', 'LiveTrading']
         self.status_fields = ['Positions', 'Orders', 'Trades', 'Insts', 'ScurDay', 'EodFlag', 'Initialized', 'ProcLock', \
                               'CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
         self.field_types = {'ProcLock': 'bool',
+                            'LiveTrading': 'bool',
                             'ScurDay' : 'date',
                             'EodFlag' : 'bool',
                             'MarketOrderTickMultiple': 'int', 

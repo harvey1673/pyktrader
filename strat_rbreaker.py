@@ -24,8 +24,11 @@ class RBreakerTrader(Strategy):
         self.sbreak = [0.0]*num_assets
         self.bbreak = [0.0]*num_assets
         self.start_min_id = [303] * num_assets
-        self.freq = freq
-        self.daily_close_buffer = max(freq + 2, 5)
+        if len(freq) > 1:
+            self.freq = freq
+        elif len(ratios) == 1: 
+            self.freq = freq * num_assets        
+        self.daily_close_buffer = 5
         self.trail_loss = [trail_loss] * num_assets
         self.entry_limit = 2
         self.num_tick = 0
@@ -46,10 +49,10 @@ class RBreakerTrader(Strategy):
             self.bbreak[idx] = self.ssetup[idx] + c * (self.ssetup[idx] - self.bsetup[idx])
             self.sbreak[idx] = self.bsetup[idx] - c * (self.ssetup[idx] - self.bsetup[idx]) 
             min_id = self.agent.instruments[inst].last_tick_id/1000
-            min_id = int(min_id/100)*60 + min_id % 100 - self.daily_close_buffer
-            self.last_min_id[idx] = int(min_id/60)*100 + min_id % 60   
+            min_id = int(min_id/100)*60 + min_id % 100 - max(self.freq[idx], self.daily_close_buffer) - 1
+            self.last_min_id[idx] = int(min_id/60)*100 + min_id % 60
             min_id = self.agent.instruments[inst].start_tick_id/1000
-            min_id = int(min_id/100)*60 + min_id % 100 + self.daily_close_buffer
+            min_id = int(min_id/100)*60 + min_id % 100 + max(self.freq[idx], self.daily_close_buffer) - 1
             self.start_min_id[idx] = int(min_id/60)*100 + min_id % 60   
         self.save_state()
         return         
@@ -86,7 +89,7 @@ class RBreakerTrader(Strategy):
         num_pos = len(self.positions[idx])
         curr_pos = None
         curr_min = int(min_id/100)*60+ min_id % 100 + 1        
-        if (curr_min % self.freq != 0):
+        if (curr_min % self.freq[idx] != 0):
             if save_status:
                 self.save_state()
             return
