@@ -2,6 +2,7 @@ import datetime
 import pandas as pd
 import numpy as np
 import misc
+import platform
 
 sim_margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'zn': 0.06, 'rb': 0.06, 'ru': 0.12, 'a': 0.05,
@@ -10,8 +11,17 @@ sim_margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
                 'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1,
                 'jd': 0.06, 'ni': 0.07, 'sn': 0.07, 'IC': 0.1, 
-                'IH': 0.01 }
+                'IH': 0.01, 'FG': 0.05 }
 
+def get_bktest_folder():
+    folder = ''
+    system = platform.system()
+    if system == 'Linux':
+        folder = '/home/harvey/dev/pyctp/results/'
+    elif system == 'Windows':
+        folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\'
+    return folder
+    
 def get_asset_tradehrs(asset):
     exch = 'SHFE'
     for ex in misc.product_code:

@@ -148,13 +148,15 @@ def turtle_sim( ddf, mdf, config ):
     return (res, closed_trades, ts)
     
 def run_sim(start_date, end_date):
+    test_folder = backtest.get_bktest_folder()
+    file_prefix = test_folder + 'Turtle_'
     config = {'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0, 
               'max_loss': 2,
               'max_pos': 4,
               'unit': 1,
-              'file_prefix': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Turtle_'}
+              'file_prefix': file_prefix}
 
     commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,10,1)] * 12 + \

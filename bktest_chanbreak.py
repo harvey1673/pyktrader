@@ -142,7 +142,9 @@ def run_sim(start_date, end_date, trail_stop = False):
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\ChanBreak_'
+    
+    test_folder = backtest.get_bktest_folder()
+    file_prefix = test_folder + 'ChanBreak_'
     if trail_loss:
         file_prefix = file_prefix + 'trail_'
     config = {'capital': 10000,

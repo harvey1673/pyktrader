@@ -120,7 +120,8 @@ def run_sim(start_date, end_date, daily_close = False):
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\Abberration_'
+    test_folder = backtest.get_bktest_folder()
+    file_prefix = test_folder + 'Abberration_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     config = {'capital': 10000,

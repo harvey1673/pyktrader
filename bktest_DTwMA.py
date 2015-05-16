@@ -178,7 +178,8 @@ def run_sim(start_date, end_date, daily_close = False):
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    file_prefix = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\DTsymMA5_'
+    test_folder = backtest.get_bktest_folder()
+    file_prefix = test_folder + 'DTsymMA5_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -193,7 +194,7 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.01,
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.25, -1, 0.5, 1.0), (0.25, -1, 0.5, 0.5), (0.3, -1, 0.5, 0.5), (0.4, -1, 0.5, 0.5), (0.3, 0, 0.5, 1.0), (0.35, 0, 0.5, 0.5), (0.4, 0, 0.5, 0.5)]
+    scenarios = [ (0.3, -1, 0.5, 1.0), (0.4, -1, 0.5, 0.5), (0.7, 0, 0.5, 0.5), (0.5, 0, 0.5, 0.5), (0.5, 1, 0.5, 0.5)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
