@@ -331,7 +331,7 @@ class CTPTraderRspMixin(object):
             #self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
             print u'综合交易平台登陆失败，请检查网络或用户名/口令'
             self.is_logged = False
-            time.sleep(3)
+            time.sleep(30)
             self.login()
             return
         self.is_logged = True
@@ -581,7 +581,7 @@ class Instrument(object):
         self.up_limit = 0
         self.down_limit = 0
         self.last_traded = datetime.datetime.now()
-        self.max_holding = (20, 20)
+        self.max_holding = (40, 40)
         self.is_busy = False
         self.strike = 0.0 # only used by option
         self.otype = ''   # only used by option

@@ -91,8 +91,10 @@ class TurtleTrader(Strategy):
             buysell = self.positions[idx][0].direction
             units = len(self.positions[idx])
             for tradepos in reversed(self.positions[idx]):
+                if (tradepos.entry_target != tradepos.entry_price) and (tradepos.entry_target == tradepos.exit_target):
+                    tradepos.entry_target = tradepos.entry_price
                 if (self.curr_prices[idx] < self.exit_low[idx] and buysell == 1) or (self.curr_prices[idx] > self.exit_high[idx] and buysell == -1) \
-                        or ((tradepos.entry_price-self.curr_prices[idx])*buysell >= self.trail_loss[idx]*self.curr_atr[idx]):
+                        or ((tradepos.entry_target-self.curr_prices[idx])*buysell >= self.trail_loss[idx]*self.curr_atr[idx]):
                     msg = 'Turtle to close a position for inst = %s, curr_price = %s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s , target=%s, ATR=%s' \
                             % (inst, self.curr_prices[idx], self.exit_high[idx], self.exit_low[idx], buysell, self.trade_unit[idx], tradepos.entry_target, self.curr_atr[idx])
                     self.close_tradepos(idx, tradepos, self.curr_prices[idx] - buysell * self.num_tick * tick_base)

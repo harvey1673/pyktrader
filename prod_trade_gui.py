@@ -4,6 +4,7 @@ import logging
 import sys
 import strat_dual_thrust as strat_dt
 import strat_rbreaker as strat_rb
+import strat_turtle as strat_tl
 from agent_gui import *
    
 def prod_test(tday, name='prod_test'):
@@ -84,21 +85,20 @@ def prod_trade(tday, name='prod_trade'):
 #    rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
 #                                 ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 5, 
 #                                 agent = None, email_notify = [])
-    ins_setup = {'m1509':(0,0.7, 0.0, 2, False),
-                'RM509': (0,0.7, 0.0, 2, False),
-                #'rb1510':(0,0.4, 0.5, 2, False),
-                'p1509': (0,0.4, 0.5, 1, False),
-                'y1509': (0,0.4, 0.5, 1, False), 
-                'l1509': (0,0.4, 0.5, 1, False),
-                'pp1509':(0,0.4, 0.5, 1, False),
-                #'TA509' :(0,0.4, 0.5, 1, False),
+    ins_setup = {'m1509':(0,0.7, 0.0, 4, False),
+                'RM509': (-1,0.5, 0.0, 2, False),
+                'rb1510':(0,0.7, 0.0, 2, False),
+                'p1509': (0,0.7, 0.0, 1, False),
+                'y1509': (0,0.7, 0.0, 1, False), 
+                'l1509': (0,0.7, 0.0, 1, False),
+                'pp1509':(0,0.7, 0.0, 1, False),
+                'TA509' :(0,0.5, 0.0, 1, False),
 #                'ru1509':(0, 0.5, 1, False),
 #                'SR509' :(0, 0.7, 8, False),
 #                'TA509' :(0, 0.7, 4, False),
 #                'ag1506':(0, 0.5, 6, False),
 #                'au1506':(0, 0.5, 1, False),
 #                'i1509' :(2, 0.3, 1, False),
-#                'IF1506': (0,0.4,0.5, 1,False)
                 }
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
@@ -111,10 +111,27 @@ def prod_trade(tday, name='prod_trade'):
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, 
                                  email_notify = [])
-    strategies = [dt_strat]
+    ins_setup = {'m1509':1,
+                'RM509': 1,
+                'rb1510':1,
+                #'y1509': 1, 
+                #'l1509': 1,
+                #'pp1509':1,
+                #'ru1509':1,
+                'TA509' :1,
+                #'MA509' :1,
+                #'au1506':1,
+                'i1509' :1}
+    insts = ins_setup.keys()
+    units_tl = [ins_setup[inst] for inst in insts]
+    under_tl = [[inst] for inst in insts]
+    vol_tl = [[1] for inst in insts]
+    tl_strat = strat_tl.TurtleTrader('ProdTL', under_tl, vol_tl, trade_unit = units_tl,
+                                 agent = None, email_notify = []) 
+    strategies = [dt_strat, tl_strat]
     strat_cfg = {'strategies': strategies, \
                  'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':5, \
+                 'daily_data_days':21, \
                  'min_data_days':1 }
 
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
