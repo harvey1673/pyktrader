@@ -278,9 +278,12 @@ class CTPTraderQryMixin(object):
         self.logger.info(u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
                 % (iorder.order_ref, iorder.sys_id, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
         if len(iorder.sys_id) >0:
+            exch = inst.exchange
+            if inst.exchange == 'ZCE':
+                exch = 'CZCE'
             req = self.ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
-                ExchangeID = inst.exchange,
+                ExchangeID = exch,
                 OrderSysID = iorder.sys_id,
                 ActionFlag = self.ApiStruct.AF_Delete,
                 #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
