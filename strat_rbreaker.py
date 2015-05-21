@@ -114,6 +114,7 @@ class RBreakerTrader(Strategy):
                 msg = 'R-Breaker to close position before EOD or hitting price limit for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s' \
                                     % (inst, buysell, self.trade_unit[idx], min_id, self.curr_prices[idx])
                 self.close_tradepos(idx, curr_pos, self.curr_prices[idx] - buysell * self.num_tick * tick_base)
+                self.num_entries[idx] = self.entry_limit
                 self.save_state()
                 self.status_notifier(msg)
             elif (len(self.submitted_pos[idx]) > 0):
