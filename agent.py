@@ -279,8 +279,6 @@ class CTPTraderQryMixin(object):
                 % (iorder.order_ref, iorder.sys_id, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
         if len(iorder.sys_id) >0:
             exch = inst.exchange
-            if inst.exchange == 'ZCE':
-                exch = 'CZCE'
             req = self.ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
                 ExchangeID = exch,
@@ -635,7 +633,7 @@ class Instrument(object):
         prod_info = mysqlaccess.load_product_info(self.product)
         self.exchange = prod_info['exch']
         if len(self.underlying) == 0:
-            if self.exchange == 'ZCE':
+            if self.exchange == 'CZCE':
                 self.cont_mth = int(self.name[-3:]) + 201000
             else:
                 self.cont_mth = int(self.name[-4:]) + 200000
@@ -1045,7 +1043,7 @@ class Agent(AbsAgent):
     
     def validate_tick(self, tick):
         inst = tick.instID
-        if (self.instruments[inst].exchange == 'ZCE') and \
+        if (self.instruments[inst].exchange == 'CZCE') and \
                 (tick.tick_id <= 530000+4) and (tick.tick_id >= 300000-4) and \
                 (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
             tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
