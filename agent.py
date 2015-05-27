@@ -275,12 +275,14 @@ class CTPTraderQryMixin(object):
     
     def cancel_order(self, iorder):
         inst = iorder.instrument
-        self.logger.info(u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
-                % (iorder.order_ref, iorder.sys_id, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
+        self.logger.info(u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
+                % (iorder.order_ref, iorder.sys_id, inst.exchange, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
         if len(iorder.sys_id) >0:
             exch = inst.exchange
             req = self.ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
+                BrokerID = self.broker_id,
+                InvestorID = self.investor_id,
                 ExchangeID = exch,
                 OrderSysID = iorder.sys_id,
                 ActionFlag = self.ApiStruct.AF_Delete,
@@ -761,7 +763,7 @@ class Agent(AbsAgent):
         self.available = 0  #可用资金
         self.locked_margin = 0
         self.used_margin = 0
-        self.margin_cap = 1000000
+        self.margin_cap = 1500000
         self.pnl_total = 0.0
         self.curr_capital = 1000000.0
         self.prev_capital = 1000000.0
