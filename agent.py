@@ -1646,7 +1646,7 @@ class Agent(AbsAgent):
         order_ref = sorder.order_ref
         myorder = self.agent.ref2order[order_ref]
         myorder.on_cancel()
-        self.process_trade_list()
+        #self.process_trade_list()
         #self.save_state()
         return
             
@@ -1680,7 +1680,7 @@ class Agent(AbsAgent):
         if int(error_id) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
             self.logger.info(u'撤销开仓单')
             myorder.on_cancel()
-            self.process_trade_list()
+            #self.process_trade_list()
     
     ###辅助   
     def rsp_qry_position(self, instID, isToday, isLong, pos):
