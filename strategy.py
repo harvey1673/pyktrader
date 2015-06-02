@@ -302,7 +302,7 @@ class Strategy(object):
     
     def status_notifier(self, msg):
         self.logger.info(msg)
-        if self.email_notify != None: 
+        if len(self.email_notify) > 0: 
             send_mail(EMAIL_HOTMAIL, self.email_notify, '%s trade signal' % (self.name), msg)
         return
     

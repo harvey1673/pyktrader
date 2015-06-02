@@ -90,6 +90,7 @@ class TurtleTrader(Strategy):
         else:
             buysell = self.positions[idx][0].direction
             units = len(self.positions[idx])
+            exit_pos = False
             for tradepos in reversed(self.positions[idx]):
                 if (tradepos.entry_target != tradepos.entry_price) and (tradepos.entry_target == tradepos.exit_target):
                     tradepos.entry_target = tradepos.entry_price
@@ -99,8 +100,10 @@ class TurtleTrader(Strategy):
                             % (inst, self.curr_prices[idx], self.exit_high[idx], self.exit_low[idx], buysell, self.trade_unit[idx], tradepos.entry_target, self.curr_atr[idx])
                     self.close_tradepos(idx, tradepos, self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                     self.status_notifier(msg)
-                    self.save_state()
-                    return
+                    exit_pos = True
+            if exit_pos:
+                self.save_state()
+                return
             if  units < 4 and (self.curr_prices[idx] - self.positions[idx][-1].entry_price)*buysell >= self.curr_atr[idx]/2.0:
                 last_entry = self.positions[idx][-1].entry_price
                 for pos in self.positions[idx]:

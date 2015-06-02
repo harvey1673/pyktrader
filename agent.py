@@ -1644,7 +1644,7 @@ class Agent(AbsAgent):
             暂时只处理撤单的回报. 
         '''
         order_ref = sorder.order_ref
-        myorder = self.agent.ref2order[order_ref]
+        myorder = self.ref2order[order_ref]
         myorder.on_cancel()
         #self.process_trade_list()
         #self.save_state()

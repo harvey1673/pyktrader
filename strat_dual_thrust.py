@@ -4,7 +4,7 @@ from misc import *
 from strategy import *
  
 class DTTrader(Strategy):
-    def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None):
+    def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None, ma_win = 10):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.lookbacks = lookbacks
         numAssets = len(underliers)
@@ -27,6 +27,7 @@ class DTTrader(Strategy):
             self.close_tday = daily_close
         elif len(daily_close) == 1: 
             self.close_tday = daily_close * numAssets 
+        self.ma_win = ma_win
         self.num_tick = 1
         self.min_rng = 0.01
 
@@ -44,7 +45,7 @@ class DTTrader(Strategy):
             else:
                 self.cur_rng[idx] = max(ddf.ix[-1,'high']- ddf.ix[-1,'low'], abs(ddf.ix[-1,'close'] - ddf.ix[-2,'close']))             
             self.cur_rng[idx] = max(self.cur_rng[idx], ddf.ix[-1, 'close']*self.min_rng)
-            self.cur_ma[idx] = ddf.ix[-5:, 'close'].mean() 
+            self.cur_ma[idx] = ddf.ix[-self.ma_win:, 'close'].mean() 
             min_id = self.agent.instruments[inst].last_tick_id/1000
             min_id = int(min_id/100)*60 + min_id % 100 - self.daily_close_buffer
             self.last_min_id[idx] = int(min_id/60)*100 + min_id % 60
