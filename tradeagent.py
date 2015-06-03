@@ -9,16 +9,21 @@ import order as order
 import math
 import os
 import csv
+import instrument
 import pandas as pd
 from base import *
 from misc import *
 import data_handler
 
+MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
 
 def get_tick_id(dt):
     return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
+
+def get_tick_num(dt):
+    return ((dt.hour+6)%24)*36000+dt.minute*600+dt.second*10+dt.microsecond/100000
 
 def get_min_id(dt):
     return ((dt.hour+6)%24)*100+dt.minute
@@ -109,21 +114,20 @@ class CTPMdMixin(object):
     
     def OnRspUserLogin(self, userlogin, info, rid, is_last):
         self.logger.info(u'MD:user login,info:%s,rid:%s,is_last:%s' % (info,rid,is_last))
-        trade_day_str = self.GetTradingDay()
-        if len(trade_day_str) == 0:
-            trading_day = datetime.date.today()
-        else:
-            try:
-                trading_day = datetime.datetime.strptime(self.GetTradingDay(),'%Y%m%d').date()
-            except ValueError:
-                trading_day = datetime.date.today()
-        if trading_day > self.agent.scur_day:    #换日,重新设置volume
-            self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
-            #self.agent.scur_day = scur_day
-            self.agent.day_switch(trading_day) 
         if is_last and not self.checkErrorRspInfo(info):
+            trade_day_str = self.GetTradingDay()
+            trading_day = datetime.date.today()
+            if len(trade_day_str) > 0:
+                try:
+                    trading_day = datetime.datetime.strptime(trade_day_str,'%Y%m%d').date()
+                except ValueError:
+                    pass
             self.logger.info(u"MD:get today's trading day:%s" % trade_day_str)
             self.subscribe_market_data(self.instruments)
+            if trading_day > self.agent.scur_day:    #换日,重新设置volume
+                self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
+                #self.agent.scur_day = scur_day
+                self.agent.day_switch(trading_day)             
 
     def OnRtnDepthMarketData(self, dp):
         try:
@@ -171,7 +175,7 @@ class CTPTraderQryMixin(object):
         return r
 
     def query_trading_account(self):            
-        req = self.ApiStruct.QryTradingAccount(BrokerID=self.trader.broker_id, InvestorID=self.trader.investor_id)
+        req = self.ApiStruct.QryTradingAccount(BrokerID=self.broker_id, InvestorID=self.investor_id)
         r=self.ReqQryTradingAccount(req,self.agent.inc_request_id())
         #self.logger.info(u'A:查询资金账户, 函数发出返回值:%s' % r)
         return r
@@ -216,6 +220,10 @@ class CTPTraderQryMixin(object):
         
     ###交易操作
     def send_order(self, iorder):
+        if not self.is_logged:
+            self.logger.warning('The trader is not logged, can not send the order!')
+            iorder.on_cancel()
+            return False 
         if iorder.direction == ORDER_BUY:
             direction = self.ApiStruct.D_Buy
         else:
@@ -234,15 +242,15 @@ class CTPTraderQryMixin(object):
             action_type = self.ApiStruct.OF_CloseToday
         elif iorder.action_type == OF_CLOSE_YDAY:
             action_type = self.ApiStruct.OF_CloseYesterday
-			
+            
         limit_price = iorder.limit_price
-		if self.name == 'LTS-TD':
-			limit_price = str(limit_price)
+        if self.name == 'LTS-TD':
+            limit_price = str(limit_price)
         req = self.ApiStruct.InputOrder(
                 InstrumentID = iorder.instrument.name,
                 Direction = direction,
                 OrderRef = str(iorder.order_ref),
-                LimitPrice = iorder.limit_price,   #有个疑问，double类型如何保证舍入舍出，在服务器端取整?
+                LimitPrice = limit_price,   #LTS uses char, CTP uses double
                 VolumeTotalOriginal = iorder.volume,
                 OrderPriceType = price_type,
                 BrokerID = self.broker_id,
@@ -268,12 +276,15 @@ class CTPTraderQryMixin(object):
     
     def cancel_order(self, iorder):
         inst = iorder.instrument
-        self.logger.info(u'A_CC:取消命令: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
-                % (iorder.order_ref, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
+        self.logger.info(u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
+                % (iorder.order_ref, iorder.sys_id, inst.exchange, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
         if len(iorder.sys_id) >0:
+            exch = inst.exchange
             req = self.ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
-                ExchangeID = inst.exchange,
+                BrokerID = self.broker_id,
+                InvestorID = self.investor_id,
+                ExchangeID = exch,
                 OrderSysID = iorder.sys_id,
                 ActionFlag = self.ApiStruct.AF_Delete,
                 #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
@@ -320,9 +331,12 @@ class CTPTraderRspMixin(object):
         self.logger.info(u'TD:trader login')
         self.logger.debug(u"TD:loggin %s" % str(pRspInfo))
         if not self.isRspSuccess(pRspInfo):
-            self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
+            self.logger.warning(u'TD:trader login failed' )
+            #self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
             print u'综合交易平台登陆失败，请检查网络或用户名/口令'
             self.is_logged = False
+            time.sleep(30)
+            self.login()
             return
         self.is_logged = True
         self.logger.info(u'TD:trader login success')
@@ -355,8 +369,8 @@ class CTPTraderRspMixin(object):
         '''
             保证金率回报。返回的必然是绝对值
         '''
-		if self.name == 'LTS-TD':
-			return (0,0)
+        if self.name == 'LTS-TD':
+            return (0,0)
         if bIsLast and self.isRspSuccess(pRspInfo):
             marginrate = (pInstMarginRate.LongMarginRatioByMoney,pInstMarginRate.ShortMarginRatioByMoney)
             self.agent.rsp_qry_instrument_marginrate(pInstMarginRate.InstrumentID, marginrate)
@@ -373,10 +387,10 @@ class CTPTraderRspMixin(object):
         if pInstrument.InstrumentID not in self.agent.instruments:
             #self.logger.warning(u'A_RQI:收到未监控的合约查询:%s' % (pInstrument.InstrumentID))
             return
-		if self.name == 'LTS-TD':
-			margin_rate = (0,0)
-		else:
-			margin_rate = (pInstrument.LongMarginRatio, pInstrument.ShortMarginRatio)
+        if self.name == 'LTS-TD':
+            margin_rate = (0,0)
+        else:
+            margin_rate = (pInstrument.LongMarginRatio, pInstrument.ShortMarginRatio)
         p_inst = BaseObject(instID = pInstrument.InstrumentID, 
                             multiple = pInstrument.VolumeMultiple, 
                             tick_base = pInstrument.PriceTick, 
@@ -438,7 +452,7 @@ class CTPTraderRspMixin(object):
 
     def OnRspQryOrder(self, porder, pRspInfo, nRequestID, bIsLast):
         '''请求查询报单响应'''
-        print porder
+        #print porder
         if (porder!= None) and (porder.InstrumentID in self.agent.instruments):
             self.ctp_orders[porder.OrderRef] = porder
         if bIsLast and self.isRspSuccess(pRspInfo):
@@ -448,7 +462,7 @@ class CTPTraderRspMixin(object):
         
     def OnRspQryTrade(self, ptrade, pRspInfo, nRequestID, bIsLast):
         '''请求查询成交响应'''
-        print ptrade
+        #print ptrade
         if (ptrade != None) and (ptrade.InstrumentID in self.agent.instruments):
             self.ctp_trades[ptrade.OrderRef] = ptrade
             
@@ -462,7 +476,7 @@ class CTPTraderRspMixin(object):
             报单未通过参数校验,被CTP拒绝
             正常情况后不应该出现
         '''
-        print pRspInfo,nRequestID
+        #print pRspInfo,nRequestID
         self.logger.warning(u'TD:CTP报单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
         #self.logger.warning(u'报单校验错误,ErrorID=%s,ErrorMsg=%s,pRspInfo=%s,bIsLast=%s' % (pRspInfo.ErrorID,pRspInfo.ErrorMsg,str(pRspInfo),bIsLast))
         #self.agent.rsp_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
@@ -474,7 +488,7 @@ class CTPTraderRspMixin(object):
             正常情况后不应该出现
             这个回报因为没有request_id,所以没办法对应
         '''
-        print u'ERROR Order Insert'
+        #print u'ERROR Order Insert'
         self.logger.warning(u'TD:交易所报单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
         self.agent.err_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
     
@@ -483,7 +497,7 @@ class CTPTraderRspMixin(object):
             CTP、交易所接受报单(CTP接受的已经被过滤)
             Agent中不区分，所得信息只用于撤单,暂时只处理撤单的回报.
         '''
-        print repr(porder)
+        #print repr(porder)
         self.logger.info(u'成交/撤单回报,Order=%s' % str(porder))
         if porder.OrderStatus == 'a':
             #CTP接受，但未发到交易所
@@ -500,7 +514,7 @@ class CTPTraderRspMixin(object):
         if porder.OrderStatus in [ self.ApiStruct.OST_Canceled, self.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
             self.logger.info(u'撤单, 撤销开/平仓单')            
             sorder = BaseObject(instID = porder.InstrumentID,
-                                order_ref = int(porder.order_ref),
+                                order_ref = int(porder.OrderRef),
                                 order_sysid = porder.OrderSysID,
                                 order_status = porder.OrderStatus)
             self.agent.rtn_order(sorder)
@@ -514,7 +528,7 @@ class CTPTraderRspMixin(object):
             #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''
         self.logger.info(u'TD:成交回报,Trade=%s' % repr(ptrade))
-        print ptrade
+        #print ptrade
         self.logger.info(u'A_RT1:成交回报,%s:OrderRef=%s,OrderSysID=%s,price=%s' % (ptrade.InstrumentID,ptrade.OrderRef,ptrade.OrderSysID,ptrade.Price))
         if int(ptrade.OrderRef) not in self.agent.ref2order or ptrade.InstrumentID not in self.agent.instruments:
             self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))
@@ -524,7 +538,7 @@ class CTPTraderRspMixin(object):
                             order_sysid = ptrade.OrderSysID,
                             price = ptrade.Price,
                             volume= ptrade.Volume,
-                            trade_time = ptrade.TradeTime )
+                            trade_id = ptrade.TradeID )
         self.agent.rtn_trade(trade)
         
     def OnRspOrderAction(self, pInputOrderAction, pRspInfo, nRequestID, bIsLast):
@@ -542,92 +556,6 @@ class CTPTraderRspMixin(object):
         '''
         self.logger.warning(u'TD:交易所撤单录入错误回报, 可能已经成交,rspInfo=%s'%(str(pRspInfo),))
         self.agent.err_order_action(pOrderAction.OrderRef,pOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
-                
-class Instrument(object):
-    def __init__(self,name):
-        self.name = name
-        self.exchange = 'CFFEX'
-        self.product = 'IF'
-        self.broker_fee = 0.0
-        #保证金率
-        self.marginrate = (0,0) #(多,空)
-        #合约乘数
-        self.multiple = 0
-        #最小跳动
-        self.tick_base = 0  #单位为0.1
-        self.start_tick_id = 0
-        self.last_tick_id = 0
-        # market snapshot
-        self.price = 0.0
-        self.prev_close = 0.0
-        self.volume = 0
-        self.open_interest = 0
-        self.last_update = datetime.datetime(1900, 1, 1, 0,0,0,0)
-        self.ask_price1 = 0.0
-        self.ask_vol1 = 0
-        self.bid_price1 = 0.0
-        self.bid_vol1 = 0
-        self.up_limit = 0
-        self.down_limit = 0
-        self.last_traded = datetime.datetime.now()
-        self.max_holding = (10, 10)
-        self.is_busy = False
-        self.strike = 0.0 # only used by option
-        self.otype = ''   # only used by option
-        self.underlying = ''   # only used by option
-        self.cont_mth = 205012 # only used by option and future
-        self.expiry = datetime.date(2050,12,31)
-        self.day_finalized = False
-    
-    def get_inst_info(self):
-        if self.name.isdigit():
-            self.product = 'Stock'
-            self.start_tick_id = 30000
-            self.last_tick_id = 2130000
-            self.multiple = 1
-            self.tick_base = 0.01
-            self.broker_fee = 0
-            if len(self.name) == 8:
-                self.product = 'StockOpt'
-                prod_info = mysqlaccess.load_stockopt_info(self.name)
-                self.exchange = prod_info['exch']
-                self.multiple = prod_info['lot_size']
-                self.tick_base = prod_info['tick_size']
-                self.strike = prod_info['strike']
-                self.otype = prod_info['otype']  
-                self.underlying = prod_info['underlying']
-                self.cont_mth = prod_info['cont_mth']
-            elif self.name in CHN_Stock_Exch['SZE']:
-                self.exchange = 'SZE'
-            else:
-                self.exchange = 'SSE'
-            return
-        self.product = inst2product(self.name)
-        prod_info = mysqlaccess.load_product_info(self.product)
-        self.exchange = prod_info['exch']
-        self.start_tick_id =  prod_info['start_min'] * 1000
-        if self.product in night_session_markets:
-            self.start_tick_id = 300000
-        self.last_tick_id =  prod_info['end_min'] * 1000     
-        self.multiple = prod_info['lot_size']
-        self.tick_base = prod_info['tick_size']
-        self.broker_fee = prod_info['broker_fee']
-        return
-    
-    def get_margin_rate(self):
-        if self.name.isdigit():
-            if len(self.name) == 6:
-                self.marginrate = (1,0)
-            else:
-                self.marginrate = (1,0)
-            return
-        self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
-        return
-
-    def calc_margin_amount(self,price,direction):   
-        my_marginrate = self.marginrate[0] if direction == ORDER_BUY else self.marginrate[1]
-        #print 'self.name=%s,price=%s,multiple=%s,my_marginrate=%s' % (self.name,price,self.multiple,my_marginrate)
-        return price * self.multiple * my_marginrate * 1.05
      
 class AbsAgent(object):
     ''' 抽取与交易无关的功能，便于单独测试
@@ -669,7 +597,7 @@ class AbsAgent(object):
 class Agent(AbsAgent):
  
     def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), 
-                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5):
+                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5, live_trading = False):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -683,13 +611,18 @@ class Agent(AbsAgent):
         self.name = name
         self.folder = folder + self.name + '\\'
         self.cuser = cuser
-        self.instruments = self.create_instruments(instruments)
+        self.instruments = instrument.create_instruments(instruments)
         self.request_id = 1
         self.initialized = False
         self.scur_day = tday
         self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
+        self.live_trading = live_trading
+        self.day_switch_locked = False
+        self.tick_db_table = 'fut_tick'
+        self.min_db_table  = 'fut_min'
+        self.daily_db_table = 'fut_daily'
         self.eod_flag = False
         # market data
         self.daily_data_days = daily_data_days
@@ -707,7 +640,7 @@ class Agent(AbsAgent):
         self.available = 0  #可用资金
         self.locked_margin = 0
         self.used_margin = 0
-        self.margin_cap = 1000000
+        self.margin_cap = 1500000
         self.pnl_total = 0.0
         self.curr_capital = 1000000.0
         self.prev_capital = 1000000.0
@@ -749,17 +682,6 @@ class Agent(AbsAgent):
 
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
-
-    def create_instruments(self, names):
-        '''根据名称序列和策略序列创建instrument
-           其中策略序列的结构为:
-           [总最大持仓量,策略1,策略2...] 
-        '''
-        objs = dict([(name,Instrument(name)) for name in names])
-        for name in names:
-            objs[name].get_inst_info()
-            objs[name].get_margin_rate()
-        return objs
         
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
@@ -768,20 +690,21 @@ class Agent(AbsAgent):
         '''
             初始化，如保证金率，账户资金等
         '''
-        ##必须先把持仓初始化成配置值或者0
-        for inst in self.instruments:
-            self.instruments[inst].get_margin_rate()
-        for strat in self.strategies:
-            strat.initialize()
-        for inst in self.positions:
-            self.positions[inst].re_calc() 
+        if not self.initialized:
+            self.resume()
+            for inst in self.instruments:
+                self.instruments[inst].get_margin_rate()
+            for strat in self.strategies:
+                strat.initialize()
+            for inst in self.positions:
+                self.positions[inst].re_calc()
+            self.calc_margin() 
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
         self.check_qry_commands()
-        self.calc_margin()
-        self.initialized = True #避免因为断开后自动重连造成的重复访问
+        #避免因为断开后自动重连造成的重复访问
 
     def register_data_func(self, freq, fobj):
         if 'd' in freq:
@@ -806,55 +729,58 @@ class Agent(AbsAgent):
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
             for inst in self.instruments:  
-				if len(self.instruments[inst].underlying) == 0: 
-					self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
-					df = self.day_data[inst]
-					if len(df) > 0:
-						self.instruments[inst].price = df['close'][-1]
-						self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
-						self.instruments[inst].prev_close = df['close'][-1]
-					for fobj in self.day_data_func:
-						ts = fobj.sfunc(df)
-						df[ts.name]= pd.Series(ts, index=df.index)  
+                if (len(self.instruments[inst].underlying) > 0):
+                    continue
+                self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
+                df = self.day_data[inst]
+                if len(df) > 0:
+                    self.instruments[inst].price = df['close'][-1]
+                    self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
+                    self.instruments[inst].prev_close = df['close'][-1]
+                    for fobj in self.day_data_func:
+                        ts = fobj.sfunc(df)
+                        df[ts.name]= pd.Series(ts, index=df.index)  
 
         if self.min_data_days > 0 or mid_day:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
             d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             d_end = self.scur_day
-            for inst in self.instruments:
-				if (len(self.instruments[inst].underlying) == 0): 
-					min_start = int(self.instruments[inst].start_tick_id/1000)
-					min_end = int(self.instruments[inst].last_tick_id/1000)+1
-					mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
-					self.min_data[inst][1] = mindata
-					if len(mindata)>0:
-						min_date = mindata.index[-1].date()
-						if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
-							self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
-							self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
-							self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
-							self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
-							self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
-							self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
-							self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
-							self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
-							self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
-							self.instruments[inst].price = float(mindata.ix[-1,'close'])
-							self.instruments[inst].last_update = datetime.datetime.now()
-							self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))
-						
-					for m in self.min_data_func:
-						if m != 1:
-							self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
-						df = self.min_data[inst][m]
-						for fobj in self.min_data_func[m]:
-							ts = fobj.sfunc(df)
-							df[ts.name]= pd.Series(ts, index=df.index)
+            for inst in self.instruments: 
+                if (len(self.instruments[inst].underlying) > 0):
+                    continue
+                min_start = int(self.instruments[inst].start_tick_id/1000)
+                min_end = int(self.instruments[inst].last_tick_id/1000)+1
+                mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
+                self.min_data[inst][1] = mindata
+                if len(mindata)>0:
+                    min_date = mindata.index[-1].date()
+                    if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
+                        self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
+                        self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
+                        self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
+                        self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
+                        self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
+                        self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
+                        self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
+                        self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
+                        self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
+                        self.instruments[inst].price = float(mindata.ix[-1,'close'])
+                        self.instruments[inst].last_update = datetime.datetime.now()
+                        self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))                        
+                    for m in self.min_data_func:
+                        if m != 1:
+                            self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
+                        df = self.min_data[inst][m]
+                        for fobj in self.min_data_func[m]:
+                            ts = fobj.sfunc(df)
+                            df[ts.name]= pd.Series(ts, index=df.index)
         return
         
     def resume(self):
         #self.fetch_order()   
         #self.fetch_trade()     
+        if self.initialized:
+            return 
         self.proc_lock = True
         #time.sleep(1)
         #self.get_eod_positions()
@@ -874,6 +800,7 @@ class Agent(AbsAgent):
             orderdict = etrade.order_dict
             for inst in orderdict:
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
+            etrade.update()
         
         for strat in self.strategies:
             strat.initialize()
@@ -884,7 +811,9 @@ class Agent(AbsAgent):
         for inst in self.positions:
             self.positions[inst].re_calc()        
         self.calc_margin()
+        self.initialized = True
         self.proc_lock = False
+        
         
     def check_qry_commands(self):
         #必然是在rsp中要发出另一个查询
@@ -950,11 +879,14 @@ class Agent(AbsAgent):
         for instID in self.instruments:
             inst = self.instruments[instID]
             pos = self.positions[instID]
-            #print inst.name, inst.marginrate, inst.calc_margin_amount(inst.price,ORDER_BUY), inst.calc_margin_amount(inst.price,ORDER_SELL)
-            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
-            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL) 
-            used_margin += pos.curr_pos.long * inst.calc_margin_amount(inst.price,ORDER_BUY)
-            used_margin += pos.curr_pos.short * inst.calc_margin_amount(inst.price,ORDER_SELL)
+            under_price = 0.0
+            if len(inst.underlying) > 0:
+                under_price = self.instruments[inst.underlying].price
+            #print inst.name, inst.marginrate, inst.calc_margin_amount(ORDER_BUY), inst.calc_margin_amount(ORDER_SELL)
+            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
+            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price) 
+            used_margin += pos.curr_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
+            used_margin += pos.curr_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price)
             yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close) * inst.multiple
             tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
             tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple
@@ -979,7 +911,7 @@ class Agent(AbsAgent):
     
     def validate_tick(self, tick):
         inst = tick.instID
-        if (self.instruments[inst].exchange == 'ZCE') and \
+        if (self.instruments[inst].exchange == 'CZCE') and \
                 (tick.tick_id <= 530000+4) and (tick.tick_id >= 300000-4) and \
                 (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
             tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
@@ -995,12 +927,12 @@ class Agent(AbsAgent):
             self.day_switch(tick_date)
         product = self.instruments[inst].product
         exch = self.instruments[inst].exchange
+        hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
         if exch in ['SSE', 'SZE']:
             hrs = [(1530, 1730), (1900, 2100)]
         elif exch == 'CFFEX':
             hrs = [(1515, 1730), (1900, 2115)]
         else:
-            hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
             if product in night_session_markets:
                 night_idx = night_session_markets[product]
                 hrs = [night_trading_hrs[night_idx]] + hrs        
@@ -1013,17 +945,12 @@ class Agent(AbsAgent):
                 tick_status = True
                 break
         if not tick_status:
-            if (tick_id > 2116000):
-                self.logger.warning('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
-                for ins in self.instruments:
-                    if not self.instruments[ins].day_finalized:
-                        self.logger.warning('Late tick after trading hour triggers to finalize the inst=%s' % ins)
-                        self.day_finalize([ins])
-                if not self.eod_flag:
-                    self.run_eod()
-                    self.eod_flag = True
-                return False
-            elif (tick_id >= hrs[-1][1]*1000-1) and (not self.instruments[inst].day_finalized):
+            if (tick_id > 2116000) and (not self.eod_flag):
+                self.eod_flag = True
+                self.logger.info('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
+                self.day_finalize(self.instruments.keys())
+                self.run_eod()
+            elif (tick_id >= hrs[-1][1]*1000+4) and (not self.instruments[inst].day_finalized):
                 self.day_finalize([inst])
         return tick_status
     
@@ -1046,6 +973,7 @@ class Agent(AbsAgent):
         self.instruments[inst].last_update = tick.timestamp
         self.instruments[inst].bid_price1 = tick.bidPrice1
         self.instruments[inst].ask_price1 = tick.askPrice1
+        self.instruments[inst].mid_price = (tick.askPrice1 + tick.bidPrice1)/2.0
         self.instruments[inst].bid_vol1   = tick.bidVol1
         self.instruments[inst].ask_vol1   = tick.askVol1
         self.instruments[inst].open_interest = tick.openInterest
@@ -1085,6 +1013,11 @@ class Agent(AbsAgent):
             self.cur_day[inst]['openInterest'] = tick.openInterest
             self.cur_day[inst]['volume'] = tick.volume
             self.cur_day[inst]['date'] = tick.timestamp.date()
+
+            for strat in self.strategies:
+                if (inst in strat.instIDs):
+                    strat.tick_run(tick)
+                    
             if (tick_min == self.cur_min[inst]['min_id']):
                 self.tick_data[inst].append(tick)
                 self.cur_min[inst]['close'] = tick.price
@@ -1097,7 +1030,14 @@ class Agent(AbsAgent):
                     last_tick = self.tick_data[inst][-1]
                     self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                     self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    self.min_switch(inst)                
+                    if (len(self.instruments[inst].underlying)==0):
+                        self.min_switch(inst)
+                    else:
+                        if self.save_flag:
+                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+                            if len(self.late_tick[inst])>0:
+                                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
+                                self.late_tick[inst] = []                     
                     self.cur_min[inst]['volume'] = last_tick.volume                    
                 
                 self.tick_data[inst] = []
@@ -1111,7 +1051,7 @@ class Agent(AbsAgent):
                 if ((tick_min>0) and (tick.price>0)): 
                     self.tick_data[inst].append(tick)
             
-            if tick_id >= self.instruments[inst].last_tick_id-1:
+            if tick_id >= self.instruments[inst].last_tick_id:
                 self.day_finalize([inst])
 
         except Exception as e:
@@ -1122,7 +1062,7 @@ class Agent(AbsAgent):
     
     def min_switch(self, inst):
         min_id = self.cur_min[inst]['min_id']
-        mins = int(min_id/100)*60+ min_id % 100
+        mins = int(min_id/100)*60 + min_id % 100 + 1
         df = self.min_data[inst][1]
         mysqlaccess.insert_min_data_to_df(df, self.cur_min[inst])
         for m in self.min_data_func:
@@ -1138,43 +1078,46 @@ class Agent(AbsAgent):
             if mins % m == 0:
                 for fobj in self.min_data_func[m]:
                     fobj.rfunc(df_m)
-            if m > 1 and mins % m == 0:
-                print df_m.ix[-1]
         if self.save_flag:
-            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst])
-            mysqlaccess.insert_min_data(inst, self.cur_min[inst])
+            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+            mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)
             if len(self.late_tick[inst])>0:
-                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst])
+                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
                 self.late_tick[inst] = []                
         for strat in self.strategies:
             if inst in strat.instIDs:
-                if not self.proc_lock:
-                    self.proc_lock = True
-                    strat.run_min(inst)
-                    self.proc_lock = False
+                strat.run_min(inst)
         return
         
-    def day_finalize(self, insts):
-		instruments = [inst for inst in insts if len(self.instruments[inst].underlying)==0]
-        self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (instruments, self.scur_day))
-        for inst in instruments:
-            if (len(self.tick_data[inst]) > 0) :
-                last_tick = self.tick_data[inst][-1]
-                self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                self.min_switch(inst)
-
-            if self.cur_day[inst]['close'] > 0:
-                mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
-                df = self.day_data[inst]
-                for fobj in self.day_data_func:
-                    fobj.rfunc(df)
-                if self.save_flag:
-                    mysqlaccess.insert_daily_data(inst, self.cur_day[inst])
-            self.instruments[inst].day_finalized = True
+    def day_finalize(self, insts):        
+        for inst in insts:
+            if not self.instruments[inst].day_finalized:
+                self.instruments[inst].day_finalized = True
+                self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (inst, self.scur_day))
+                if (len(self.tick_data[inst]) > 0) :
+                    last_tick = self.tick_data[inst][-1]
+                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
+                    if (len(self.instruments[inst].underlying)==0):
+                        self.min_switch(inst)
+                    else:
+                        if self.save_flag:
+                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+                            if len(self.late_tick[inst])>0:
+                                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
+                                self.late_tick[inst] = []      
+                if (self.cur_day[inst]['close']>0):
+                    mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
+                    df = self.day_data[inst]
+                    if (len(self.instruments[inst].underlying)==0):
+                        for fobj in self.day_data_func:
+                            fobj.rfunc(df)
+                    if self.save_flag:
+                        mysqlaccess.insert_daily_data(inst, self.cur_day[inst], dbtable = self.daily_db_table)
         return
     
     def run_eod(self):
+        self.eod_flag = True
         if self.trader == None:
             return 
         self.proc_lock = True
@@ -1193,6 +1136,7 @@ class Agent(AbsAgent):
             order.save_trade_list(self.scur_day, pfilled_list, file_prefix)    
         for strat in self.strategies:
             strat.day_finalize()
+            strat.initialize()
         self.calc_margin()
         self.save_eod_positions()
         eod_pos = {}
@@ -1210,6 +1154,7 @@ class Agent(AbsAgent):
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
             self.instruments[inst].volume = 0
             #print "inst=%s, long=%s, short=%s, prev_close=%s" % (inst, eod_pos[inst][0], eod_pos[inst][1], self.instruments[inst].prev_close)
+        self.initialized = False
         self.proc_lock = False
 
     def add_strategy(self, strat):
@@ -1218,11 +1163,14 @@ class Agent(AbsAgent):
         strat.reset()
          
     def day_switch(self, newday):  #重新初始化opener
+        if self.day_switch_locked:
+            return
+        else:
+            self.day_switch_locked = True
         self.logger.info('switching the trading day from %s to %s' % (self.scur_day, newday))
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
         if not self.eod_flag:
-            self.eod_flag = True
             self.run_eod()
         self.scur_day = newday
         print "scur_day = %s, reset tick_id= %s to 0" % (self.scur_day, self.tick_id)
@@ -1235,6 +1183,7 @@ class Agent(AbsAgent):
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(newday.toordinal())
             self.instruments[inst].day_finalized = False
         self.eod_flag = False
+        self.day_switch_locked = False
                 
     def init_init(self):    #init中的init,用于子类的处理
         pass
@@ -1306,27 +1255,26 @@ class Agent(AbsAgent):
         r = self.trader.query_trade( start_time, end_time )
         self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
         return r
-        #if r < 0:
-        #    self.qry_commands.append(self.fetch_trade)
     
     def RtnTick(self,ctick):#行情处理主循环
+        if self.live_trading:
+            now_ticknum = get_tick_num(datetime.datetime.now())
+            cur_ticknum = get_tick_num(ctick.timestamp)
+            if abs(cur_ticknum - now_ticknum)> MAX_REALTIME_DIFF:
+                self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, ticknum= %s, now_ticknum=%s' % (ctick.instID, cur_ticknum, now_ticknum))
+                return 0
         if (not self.validate_tick(ctick)):
             return 0
         
         if (not self.update_instrument(ctick)):
             # print "stop at update inst"
             return 0
-		if len(self.instruments[ctick.instID].underlying) ==0:
-			if( not self.update_hist_data(ctick)):
-				# print "stop at update hist data"
-				return 0
+     
+        if( not self.update_hist_data(ctick)):
+            return 0
    
-        # lock the trade processing to avoid position conflict
         if not self.proc_lock:
             self.proc_lock = True
-            for strat in self.strategies:
-                if (ctick.instID in strat.instIDs):
-                    strat.run_tick(ctick)  
             self.process_trade_list()
             self.proc_lock = False
         return 1
@@ -1367,7 +1315,10 @@ class Agent(AbsAgent):
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_TDAY, direction, otype, cond )
+                    order_type = OF_CLOSE
+                    if (self.instruments[inst].exchange == "SHFE"):
+                        order_type = OF_CLOSE_TDAY                        
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond )
                     orders.append(iorder)
                   
                 if (self.instruments[inst].exchange == "SHFE") and (abs(remained)>0) and (pos.can_yclose.short+pos.can_yclose.long>0):
@@ -1393,7 +1344,10 @@ class Agent(AbsAgent):
                         direction = ORDER_BUY
                     else:
                         direction = ORDER_SELL
-                    required_margin += vol * self.instruments[inst].calc_margin_amount(order_prices[idx],direction)
+                    under_price = 0.0
+                    if len(self.instruments[inst].underlying) > 0:
+                        under_price = self.instruments[self.instruments[inst].underlying].price
+                    required_margin += vol * self.instruments[inst].calc_margin_amount(direction, under_price)
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
@@ -1402,7 +1356,7 @@ class Agent(AbsAgent):
                 all_orders[inst] = orders
                 
             if required_margin + self.locked_margin > self.margin_cap:
-                self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
+                self.logger.warning("ETrade %s is cancelled due to margin cap: %s" % (exec_trade.id, inst))
                 exec_trade.status = order.ETradeStatus.Cancelled                
                 return False
 
@@ -1416,16 +1370,16 @@ class Agent(AbsAgent):
             self.save_state()
             return True
         else:
-            print "do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price)
+            self.logger.info("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
             return False    
         
     def process_trade_list(self):
         Is_Set = False
-        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes) for etrade in self.etrades if etrade.status == order.ETradeStatus.StratConfirm ] 
+        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes, etrade.filled_price, etrade.filled_vol, etrade.valid_time) for etrade in self.etrades if etrade.status == order.ETradeStatus.StratConfirm ] 
         if len(confirmed)>0:
             Is_Set = True
             print confirmed
-            self.logger.info('%s trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
+            self.logger.info('(%s) trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
         self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.StratConfirm ]
         for exec_trade in self.etrades:
             if exec_trade.status == order.ETradeStatus.Pending:
@@ -1458,8 +1412,7 @@ class Agent(AbsAgent):
                                         iorder.on_cancel()
                                     else:
                                         self.cancel_order(iorder)
-                                    if exec_trade.status == order.ETradeStatus.PFilled:
-                                        
+                                    if exec_trade.status == order.ETradeStatus.PFilled:                                        
                                         cond = {iorder:order.OrderStatus.Cancelled}
                                         norder =   order.Order(iorder.position, 
                                                      0, 
@@ -1485,7 +1438,10 @@ class Agent(AbsAgent):
         
     def check_order_list(self):
         Is_Set = self.trader.check_order_status()
-        for iorder in self.ref2order.values():                                                        
+        order_ids = self.ref2order.keys()
+        order_ids.sort()
+        for order_id in order_ids:
+            iorder = self.ref2order[order_id]                                                        
             if iorder.status == order.OrderStatus.Ready:
                 self.send_order(iorder)
                 Is_Set = True        
@@ -1504,9 +1460,9 @@ class Agent(AbsAgent):
                 iorder.price_type = OPT_LIMIT_ORDER
                 # 以后可以改成涨停,跌停价
                 if iorder.direction == ORDER_BUY:
-                    iorder.limit_price = inst.ask_price1 + inst.tick_base * self.market_order_tick_multiple
+                    iorder.limit_price = min(inst.up_limit, inst.ask_price1 + inst.tick_base * self.market_order_tick_multiple)
                 else:
-                    iorder.limit_price = inst.bid_price1 - inst.tick_base * self.market_order_tick_multiple
+                    iorder.limit_price = max(inst.down_limit, inst.bid_price1 - inst.tick_base * self.market_order_tick_multiple)
             else:
                 iorder.limit_price = 0.0
         iorder.status = order.OrderStatus.Sent        
@@ -1532,12 +1488,13 @@ class Agent(AbsAgent):
         '''
         myorder = self.ref2order[strade.order_ref]
         if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
-            myorder.on_trade(price=strade.price,volume=strade.volume,trade_time=strade.trade_time)
-            self.logger.info(u'A_RT31,开仓回报,price=%s,time=%s' % (strade.price,strade.trade_time));
+            myorder.on_trade(price=strade.price,volume=strade.volume,trade_id=strade.trade_id)
+            self.logger.info(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (strade.price,strade.trade_id));
         else:
-            myorder.on_trade(price=strade.price,volume=strade.volume,trade_time=strade.trade_time)
-            self.logger.info(u'A_RT32,平仓回报,price=%s,time=%s' % (strade.price, strade.trade_time));
-        self.save_state()
+            myorder.on_trade(price=strade.price,volume=strade.volume,trade_id=strade.trade_id)
+            self.logger.info(u'A_RT32,平仓回报,price=%s,trade_id=%s' % (strade.price, strade.trade_id));
+        self.process_trade_list()
+        #self.save_state()
         return
         
         ##查询可用资金
@@ -1553,10 +1510,10 @@ class Agent(AbsAgent):
             暂时只处理撤单的回报. 
         '''
         order_ref = sorder.order_ref
-        myorder = self.agent.ref2order[order_ref]
+        myorder = self.ref2order[order_ref]
         myorder.on_cancel()
-        self.save_state()
         #self.process_trade_list()
+        #self.save_state()
         return
             
     def err_order_insert(self,order_ref,instrument_id,error_id,error_msg):
@@ -1581,12 +1538,15 @@ class Agent(AbsAgent):
             必须处理，如果已成交，撤单后必然到达这个位置
         '''
         self.logger.info(u'撤单时已成交，error_id=%s,error_msg=%s, order_ref=%s' %(error_id,error_msg, order_ref))
+        if len(order_ref) == 0:
+            self.fetch_order()
+            return
         myorder = self.ref2order[int(order_ref)]
-        print order_ref, error_id, error_msg
+        #print order_ref, error_id, error_msg
         if int(error_id) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
             self.logger.info(u'撤销开仓单')
             myorder.on_cancel()
-            self.process_trade_list()
+            #self.process_trade_list()
     
     ###辅助   
     def rsp_qry_position(self, instID, isToday, isLong, pos):
@@ -1650,6 +1610,7 @@ class SaveAgent(Agent):
     def init_init(self):
         Agent.init_init(self)
         self.save_flag = True 
+        self.live_trading = False
 
 if __name__=="__main__":
     pass
