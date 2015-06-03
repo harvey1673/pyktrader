@@ -14,6 +14,7 @@ import pandas as pd
 from base import *
 from misc import *
 import data_handler
+import pyktlib
 
 MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
@@ -611,7 +612,9 @@ class Agent(AbsAgent):
         self.name = name
         self.folder = folder + self.name + '\\'
         self.cuser = cuser
-        self.instruments = instrument.create_instruments(instruments)
+        self.instruments = {}
+        self.volgrids = {}
+        self.create_instruments(instruments, tday)
         self.request_id = 1
         self.initialized = False
         self.scur_day = tday
@@ -729,7 +732,7 @@ class Agent(AbsAgent):
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
             for inst in self.instruments:  
-                if (len(self.instruments[inst].underlying) > 0):
+                if (self.instruments[inst].ptype == instrument.ProductType.Option):
                     continue
                 self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
                 df = self.day_data[inst]
@@ -746,7 +749,7 @@ class Agent(AbsAgent):
             d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             d_end = self.scur_day
             for inst in self.instruments: 
-                if (len(self.instruments[inst].underlying) > 0):
+                if (self.instruments[inst].ptype == instrument.ProductType.Option):
                     continue
                 min_start = int(self.instruments[inst].start_tick_id/1000)
                 min_end = int(self.instruments[inst].last_tick_id/1000)+1
@@ -775,7 +778,28 @@ class Agent(AbsAgent):
                             ts = fobj.sfunc(df)
                             df[ts.name]= pd.Series(ts, index=df.index)
         return
-        
+
+    def load_volgrids(self):
+        self.logger.info('loading volgrids')
+        for prod in self.volgrids.keys():
+            logfile = self.folder + 'volgrids_' + prod + '.csv'
+            if not os.path.isfile(logfile):
+                pass              
+            with open(logfile, 'rb') as f:
+                reader = csv.reader(f)
+                for row in enumerate(reader):
+                    expiry = datetime.datetime.strptime(row[0], '%Y%m%d %H:%M:%S')
+                    fwd = float(row[1])
+                    atm = float(row[2])
+                    v90 = float(row[3])
+                    v75 = float(row[4])
+                    v25 = float(row[5])
+                    v10 = float(row[6])
+                    dtoday = datetime2xl(datetime.datetime.now())
+                    dexp   = datetime2xl(expiry)
+                    self.volgrids[prod][expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, accruel)
+        return   
+            
     def resume(self):
         #self.fetch_order()   
         #self.fetch_trade()     
@@ -785,6 +809,7 @@ class Agent(AbsAgent):
         #time.sleep(1)
         #self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
+        self.load_volgrids()
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
@@ -880,7 +905,7 @@ class Agent(AbsAgent):
             inst = self.instruments[instID]
             pos = self.positions[instID]
             under_price = 0.0
-            if len(inst.underlying) > 0:
+            if (inst.ptype == instrument.ProductType.Option):
                 under_price = self.instruments[inst.underlying].price
             #print inst.name, inst.marginrate, inst.calc_margin_amount(ORDER_BUY), inst.calc_margin_amount(ORDER_SELL)
             locked_margin += pos.locked_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
@@ -1030,7 +1055,7 @@ class Agent(AbsAgent):
                     last_tick = self.tick_data[inst][-1]
                     self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                     self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (len(self.instruments[inst].underlying)==0):
+                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
                         self.min_switch(inst)
                     else:
                         if self.save_flag:
@@ -1098,7 +1123,7 @@ class Agent(AbsAgent):
                     last_tick = self.tick_data[inst][-1]
                     self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                     self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (len(self.instruments[inst].underlying)==0):
+                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
                         self.min_switch(inst)
                     else:
                         if self.save_flag:
@@ -1109,7 +1134,7 @@ class Agent(AbsAgent):
                 if (self.cur_day[inst]['close']>0):
                     mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                     df = self.day_data[inst]
-                    if (len(self.instruments[inst].underlying)==0):
+                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
                         for fobj in self.day_data_func:
                             fobj.rfunc(df)
                     if self.save_flag:
@@ -1345,7 +1370,7 @@ class Agent(AbsAgent):
                     else:
                         direction = ORDER_SELL
                     under_price = 0.0
-                    if len(self.instruments[inst].underlying) > 0:
+                    if (self.instruments[inst].ptype == instrument.ProductType.Option):
                         under_price = self.instruments[self.instruments[inst].underlying].price
                     required_margin += vol * self.instruments[inst].calc_margin_amount(direction, under_price)
                     cond = {}
@@ -1605,6 +1630,32 @@ class Agent(AbsAgent):
         '''
         self.check_qry_commands()
         
+    def create_instruments(self, names, tday):
+        '''根据名称序列和策略序列创建instrument
+           其中策略序列的结构为:
+           [总最大持仓量,策略1,策略2...] 
+        '''
+        insts = {}
+        volgrids = {}
+        for name in names:
+            if name.isdigit():
+                if len(name) == 8:
+                    insts[name] = instrument.StockOptionInst(name)
+                    volgrids[name] = {'accr': 'SSE'}
+                else:
+                    insts[name] = instrument.Stock(name)
+            else:
+                if len(name) > 10:
+                    insts[name] = instrument.FutOptionInst(name)
+                    accr = 'COM'
+                    if insts[name].exchange == 'CFFEX':
+                        accr = insts[name].exchange
+                    volgrids[name] = {'accr': accr}
+                else:
+                    insts[name] = instrument.Future(name)
+            insts[name].update_param(tday)
+        self.instruments = insts
+        self.volgrids = volgrids
 
 class SaveAgent(Agent):
     def init_init(self):
