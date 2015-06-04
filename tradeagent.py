@@ -20,6 +20,16 @@ MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
 
+class VolGrid(object):
+	def __init__(self, name, accrual = 'COM', tday = datetime.date.today()):
+		self.name = name
+		self.accrual = accrual
+		self.dtoday = date2xl(tday)
+		self.df = {}
+		self.fwd = {}
+		self.volnode = {}
+		self.volparam = {}
+		
 def get_tick_id(dt):
     return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
 
@@ -797,9 +807,28 @@ class Agent(AbsAgent):
                     v10 = float(row[6])
                     dtoday = datetime2xl(datetime.datetime.now())
                     dexp   = datetime2xl(expiry)
-                    self.volgrids[prod][expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, accruel)
+					self.volgrids[prod].fwd[expiry] = fwd
+					self.volgrids[prod].dtoday = dtoday
+					self.volgrids[prod].volparam[expiry] = [atm, v90, v75, v25, v10]
+                    self.volgrids[prod].volnode[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, self.volgrids[prod].accrual)
         return   
-            
+
+    def save_volgrids(self):
+        self.logger.info('saving volgrids')
+        for prod in self.volgrids.keys():
+            logfile = self.folder + 'volgrids_' + prod + '.csv'
+			with open(filename,'wb') as log_file:
+				file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+				for expiry in self.volgrids[prod].volparam:
+					if len(self.volgrids[prod].volparam[expiry]) == 5:
+						volparam = self.volgrids[prod].volparam[expiry]
+						row = [ expiry.strftime('%Y%m%d %H:%M:%S'), self.volgrids[prod].fwd[expiry] ] + volparam 
+						file_writer.writerow(row)
+        return
+	
+	def setup_opt_pricers(self):
+		pass
+		
     def resume(self):
         #self.fetch_order()   
         #self.fetch_trade()     
@@ -810,6 +839,7 @@ class Agent(AbsAgent):
         #self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         self.load_volgrids()
+		self.setup_opt_pricers()
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
@@ -1641,16 +1671,16 @@ class Agent(AbsAgent):
             if name.isdigit():
                 if len(name) == 8:
                     insts[name] = instrument.StockOptionInst(name)
-                    volgrids[name] = {'accr': 'SSE'}
+                    volgrids[name] = VolGrid(name, accrual=insts[name].exchange)
                 else:
                     insts[name] = instrument.Stock(name)
             else:
                 if len(name) > 10:
+					accr = 'COM'
                     insts[name] = instrument.FutOptionInst(name)
-                    accr = 'COM'
                     if insts[name].exchange == 'CFFEX':
-                        accr = insts[name].exchange
-                    volgrids[name] = {'accr': accr}
+						accr = 'CFFEX'
+					volgrids[name] = VolGrid(name, accrual = accr)
                 else:
                     insts[name] = instrument.Future(name)
             insts[name].update_param(tday)
