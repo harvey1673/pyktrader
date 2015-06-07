@@ -21,25 +21,6 @@ MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
 
-def discount(irate, dtoday, dexp):
-    return np.exp(-irate * max(dexp - dtoday,0)/365.0)
-
-class VolGrid(object):
-    def __init__(self, name, accrual = 'COM', tday = datetime.date.today(), is_spot = False):
-        self.name = name
-        self.accrual = accrual
-        self.dtoday = date2xl(tday)
-        self.df = {}
-        self.fwd = {}
-        self.volnode = {}
-        self.volparam = {}
-        self.df = {}
-        self.instID = {}
-        self.dexp = {}
-        self.main_cont = ''
-        self.spot_model = is_spot
-        
-                
 def get_tick_id(dt):
     return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
 
@@ -617,8 +598,7 @@ class AbsAgent(object):
 
 class Agent(AbsAgent):
  
-    def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), 
-                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5, live_trading = False, irate = 0.04):
+    def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), config = {}):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -626,6 +606,18 @@ class Agent(AbsAgent):
         AbsAgent.__init__(self)
         ##计时, 用来激发队列
         ##
+        folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\'
+        if 'folder' in config:
+            folder = config['folder']
+        daily_data_days = 60
+        if 'daily_data_days' in config:
+            daily_data_days = config['daily_data_days']   
+        min_data_days = 5
+        if 'min_data_days' in config:
+            min_data_days = config['min_data_days']        
+        live_trading = False
+        if 'live_trading' in config:
+            live_trading = config['live_trading']  
         self.logger = logging.getLogger('ctp.agent')
         self.mdapis = []
         self.trader = trader
@@ -633,8 +625,6 @@ class Agent(AbsAgent):
         self.folder = folder + self.name + '\\'
         self.cuser = cuser
         self.instruments = {}
-        self.volgrids = {}
-        self.irate = irate
         self.create_instruments(instruments, tday)
         self.request_id = 1
         self.initialized = False
@@ -715,14 +705,14 @@ class Agent(AbsAgent):
             初始化，如保证金率，账户资金等
         '''
         if not self.initialized:
-            self.resume()
             for inst in self.instruments:
-                self.instruments[inst].get_margin_rate()
-            for strat in self.strategies:
-                strat.initialize()
-            for inst in self.positions:
-                self.positions[inst].re_calc()
-            self.calc_margin() 
+                self.instruments[inst].update_param()
+            self.resume()
+            #for strat in self.strategies:
+            #    strat.initialize()
+            #for inst in self.positions:
+            #    self.positions[inst].re_calc()
+            #self.calc_margin() 
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
@@ -800,76 +790,6 @@ class Agent(AbsAgent):
                             df[ts.name]= pd.Series(ts, index=df.index)
         return
 
-    def load_volgrids(self):
-        self.logger.info('loading volgrids')
-        for prod in self.volgrids.keys():
-            logfile = self.folder + 'volgrids_' + prod + '.csv'
-            if not os.path.isfile(logfile):
-                pass              
-            with open(logfile, 'rb') as f:
-                reader = csv.reader(f)
-                for row in enumerate(reader):
-                    inst = row[0]
-                    expiry = datetime.date.strptime(row[1], '%Y%m%d')
-                    fwd = float(row[2]) 
-                    atm = float(row[3])
-                    v90 = float(row[4])
-                    v75 = float(row[5])
-                    v25 = float(row[6])
-                    v10 = float(row[7])
-                    dtoday = datetime2xl(datetime.datetime.now())
-                    dexp   = date2xl(expiry) + 15.0/24.0
-                    self.volgrids[prod].instID[expiry] = inst
-                    self.volgrids[prod].df[expiry] = discount(self.irate, dtoday, dexp)
-                    self.volgrids[prod].fwd[expiry] = fwd
-                    self.volgrids[prod].dexp[expiry] = dexp
-                    self.volgrids[prod].dtoday = dtoday
-                    self.volgrids[prod].volparam[expiry] = [atm, v90, v75, v25, v10]
-                    self.volgrids[prod].volnode[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, self.volgrids[prod].accrual)
-        return   
-
-    def save_volgrids(self):
-        self.logger.info('saving volgrids')
-        for prod in self.volgrids.keys():
-            logfile = self.folder + 'volgrids_' + prod + '.csv'
-            with open(logfile,'wb') as log_file:
-                file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                for expiry in self.volgrids[prod].volparam:
-                    if len(self.volgrids[prod].volparam[expiry]) == 5:
-                        volparam = self.volgrids[prod].volparam[expiry]
-                        row = [ self.volgrids[prod].instID[expiry], 
-                                expiry.strftime('%Y%m%d'), 
-                                self.volgrids[prod].fwd[expiry] ] + volparam 
-                        file_writer.writerow(row)
-        return
-    
-    def set_opt_pricers(self):
-        for inst in self.instruments:
-            if inst.ptype == instrument.ProductType.Option:
-                expiry = inst.expiry
-                if expiry not in self.volgrids[prod].volnode:
-                    
-        pass
-
-    def set_volgrids(self, product, expiry, fwd, vol_param):
-        if (expiry in self.volgrids[product].volparam):
-            dtoday = date2xl(self.scur_day) + max(self.tick_id - 600000, 0)/2400000.0
-            self.volgrids[product].dtoday = dtoday
-            self.volgrids[product].fwd[expiry] = fwd
-            self.volgrids[product].volparam[expiry] = vol_param
-            vg = self.volgrids[product].volnode[expiry]
-            vg.setFwd(fwd)
-            vg.setToday(dtoday)
-            vg.setAtm(vol_param[0])
-            vg.setD90Vol(vol_param[1])
-            vg.setD75Vol(vol_param[2])
-            vg.setD25Vol(vol_param[3])
-            vg.setD10Vol(vol_param[4])
-            self.volgrids[expiry].initialize()
-        else:
-            self.logger.info('expiry %s is not in the volgrid expiry for %s' % (expiry, product))     
-        return 
-            
     def resume(self):
         #self.fetch_order()   
         #self.fetch_trade()     
@@ -879,8 +799,6 @@ class Agent(AbsAgent):
         #time.sleep(1)
         #self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
-        self.load_volgrids()
-        self.setup_opt_pricers()
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
@@ -1708,30 +1626,20 @@ class Agent(AbsAgent):
            [总最大持仓量,策略1,策略2...] 
         '''
         insts = {}
-        volgrids = {}
         for name in names:
             if name.isdigit():
                 if len(name) == 8:
                     insts[name] = instrument.StockOptionInst(name)
-                    prod = insts[name].product
-                    if prod not in volgrids:
-                        volgrids[prod] = instrument.VolGrid(name, accrual=insts[name].exchange, is_spot = True)
                 else:
                     insts[name] = instrument.Stock(name)
             else:
                 if len(name) > 10:
-                    accr = 'COM'
                     insts[name] = instrument.FutOptionInst(name)
-                    if insts[name].exchange == 'CFFEX':
-                        accr = 'CFFEX'
-                    prod = insts[name].product
-                    if prod not in volgrids:
-                        volgrids[prod] = instrument.VolGrid(name, accrual = accr, is_spot = False)
                 else:
                     insts[name] = instrument.Future(name)
             insts[name].update_param(tday)
         self.instruments = insts
-        self.volgrids = volgrids
+        return
 
 class SaveAgent(Agent):
     def init_init(self):

@@ -1,81 +1,177 @@
 #-*- coding:utf-8 -*-
-'''
-optstrat.py
-Created on Feb 03, 2015
-@author: Harvey
-'''
-import time
+import instrument
+import pyktlib
+import os
+import csv
+import numpy as np
+import datetime
 import agent
-import fut_api
-import lts_api
-import ctp_emulator as emulator
-import logging
-import optstrat
-import strategy
-import strat_dual_thrust as strat_dt
-import order
 from misc import *
-from base import *
 
-def test_main(tday, name='option_test'):
-    '''
-    import agent
-    trader,myagent = agent.trade_test_main()
-    #开仓
+def discount(irate, dtoday, dexp):
+    return np.exp(-irate * max(dexp - dtoday,0)/365.0)
+                
+class OptAgentMixin(object):
+    def __init__(self, irate = 0.04):
+        self.volgrids = {}
+        self.irate = irate
     
-    ##释放连接
-    trader.RegisterSpi(None)
-    '''
-    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    trader_cfg = TEST_TRADER
-    user_cfg = TEST_USER
-    agent_name = name
-    opt_strat = optstrat.IndexFutOptStrat(name, 
-                                    ['IF1504', 'IF1506'], 
-                                    [datetime.datetime(2015, 4, 17, 15, 0, 0), datetime.datetime(2015,6,19,15,0,0)],
-                                    [[3700, 3750, 3800, 3850, 3900, 3950, 4000, 4050]]*2)
+    def load_volgrids(self):
+        self.logger.info('loading volgrids')
+        dtoday = datetime2xl(datetime.datetime.now())
+        for prod in self.volgrids.keys():
+            logfile = self.folder + 'volgrids_' + prod + '.csv'
+            self.volgrids[prod].dtoday = dtoday
+            if os.path.isfile(logfile):       
+                with open(logfile, 'rb') as f:
+                    reader = csv.reader(f)
+                    for row in enumerate(reader):
+                        inst = row[0]
+                        expiry = datetime.date.strptime(row[1], '%Y%m%d')
+                        fwd = float(row[2]) 
+                        atm = float(row[3])
+                        v90 = float(row[4])
+                        v75 = float(row[5])
+                        v25 = float(row[6])
+                        v10 = float(row[7])
+                        dexp   = date2xl(expiry) + 15.0/24.0
+                        self.volgrids[prod].underlier[expiry] = inst
+                        self.volgrids[prod].df[expiry] = discount(self.irate, dtoday, dexp)
+                        self.volgrids[prod].fwd[expiry] = fwd
+                        self.volgrids[prod].dexp[expiry] = dexp
+                        self.volgrids[prod].volparam[expiry] = [atm, v90, v75, v25, v10]
+                        self.volgrids[prod].volnode[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, self.volgrids[prod].accrual)
+            else:
+                for expiry in self.volgrids[prod].option_insts:
+                    dexp = date2xl(expiry) + 15.0/24.0
+                    under_instID = self.volgrids[prod].underlier[expiry]
+                    fwd = self.instruments[under_instID].price()
+                    if self.volgrids[prod].spot_model:
+                        fwd = fwd / self.volgrids[prod].df[expiry]
+                    self.volgrids[prod].fwd[expiry] = fwd
+                    self.volgrids[prod].dexp[expiry] = dexp
+                    self.volgrids[prod].df[expiry] = discount(self.irate, dtoday, dexp)
+                    atm = self.volgrids[prod].volparam[expiry][0]
+                    v90 = self.volgrids[prod].volparam[expiry][1]
+                    v75 = self.volgrids[prod].volparam[expiry][2]
+                    v25 = self.volgrids[prod].volparam[expiry][3]
+                    v10 = self.volgrids[prod].volparam[expiry][4]
+                    self.volgrids[prod].volnode[expiry] = pyktlib.Delta5VolNode(dtoday, dexp, fwd, atm, v90, v75, v25, v10, self.volgrids[prod].accrual)
+        return   
 
-    insts_dt = ['IF1504']
-    units_dt = [1]*len(insts_dt)
-    under_dt = [[inst] for inst in insts_dt]
-    vols_dt = [[1]]*len(insts_dt)
-    lookbacks_dt = [0]*len(insts_dt)
+    def save_volgrids(self):
+        self.logger.info('saving volgrids')
+        for prod in self.volgrids.keys():
+            logfile = self.folder + 'volgrids_' + prod + '.csv'
+            with open(logfile,'wb') as log_file:
+                file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                for expiry in self.volgrids[prod].volparam:
+                    if len(self.volgrids[prod].volparam[expiry]) == 5:
+                        volparam = self.volgrids[prod].volparam[expiry]
+                        row = [ self.volgrids[prod].underlier[expiry], 
+                                expiry.strftime('%Y%m%d'), 
+                                self.volgrids[prod].fwd[expiry] ] + volparam 
+                        file_writer.writerow(row)
+        return
     
-    insts_daily = ['IF1504']
-    under_daily = [[inst] for inst in insts_daily]
-    vols_daily = [[1]]*len(insts_daily)
-    units_daily = [1]*len(insts_daily)
-    lookbacks_daily = [0]*len(insts_daily)
+    def set_opt_pricers(self):
+        opt_insts = [inst for inst in self.instruments if inst.ptype == instrument.ProductType.Option]
+        for inst in opt_insts:
+            expiry = inst.expiry
+            prod = inst.product
+            if expiry in self.volgrids[prod].volnode:
+                inst.set_pricer(self.volgrids[prod], self.irate)
+            else:
+                print "missing %s volgrid for %s" % (prod, expiry)
+        return
 
-    dt_strat = strat_dt.DTTrader('DT_test', under_dt, vols_dt, trade_unit = units_dt, lookbacks = lookbacks_dt, agent = None, daily_close = False, email_notify = [])
-    dt_daily = strat_dt.DTTrader('DT_Daily', under_daily, vols_daily, trade_unit = units_daily, lookbacks = lookbacks_daily, agent = None, daily_close = True, email_notify = ['harvey_wwu@hotmail.com'])
+    def set_volgrids(self, product, expiry, fwd, vol_param):
+        if (expiry in self.volgrids[product].volparam):
+            dtoday = date2xl(self.scur_day) + max(self.tick_id - 600000, 0)/2400000.0
+            self.volgrids[product].dtoday = dtoday
+            self.volgrids[product].fwd[expiry] = fwd
+            self.volgrids[product].volparam[expiry] = vol_param
+            vg = self.volgrids[product].volnode[expiry]
+            vg.setFwd(fwd)
+            vg.setToday(dtoday)
+            vg.setAtm(vol_param[0])
+            vg.setD90Vol(vol_param[1])
+            vg.setD75Vol(vol_param[2])
+            vg.setD25Vol(vol_param[3])
+            vg.setD10Vol(vol_param[4])
+            vg.initialize()
+        else:
+            self.logger.info('expiry %s is not in the volgrid expiry for %s' % (expiry, product))     
+        return
     
-    strategies = [dt_strat, dt_daily, opt_strat]
-    all_insts = opt_strat.instIDs
-    strat_cfg = {'strategies': strategies, \
-                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':3, \
-                 'min_data_days':1 }
-    #myagent, my_trader = emulator.create_agent_with_mocktrader(agent_name, all_insts, strat_cfg, tday)
-    myagent = fut_api.create_agent(agent_name, user_cfg, trader_cfg, all_insts, strat_cfg, tday)
-    #fut_api.make_user(myagent,user_cfg)
-    myagent.resume()
-#     myagent.tick_id = 2100000
-#     myagent.instruments['IF1503'].day_finalized = False
-#     ctick = agent.TickData(instID='IF1503', timestamp=datetime.datetime(2015,3,10,15,0,0), 
-#                            openInterest=10000, 
-#                            volume=10, price=3520, 
-#                            high=3570, low=3500, 
-#                            bidPrice1=3519.6, bidVol1=3, 
-#                            askPrice1=3520.4, askVol1=2,
-#                            up_limit = 3700, down_limit = 3300)
-#     myagent.RtnTick(ctick)
-    try:
-        while 1: time.sleep(1)
-    except KeyboardInterrupt:
-        myagent.mdapis = [] 
-        myagent.trader = None    
-
-
-if __name__=="__main__":
-    test_main(datetime.date(2015,3,23), 'option_test')
+    def reval_volgrid(self, product, expiry, is_recalib=True):
+        dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
+        under = self.volgrids[product].underlier[expiry]
+        fwd = self.instruments[under].price()
+        if self.volgrids[product].spot_model:
+            fwd = fwd/self.volgrids[product].df[expiry]
+        vg = self.volgrids[product].volnode[expiry]
+        if is_recalib:
+            self.volgrids[product].dtoday = dtoday
+            self.volgrids[product].fwd[expiry] = fwd            
+            vg.setFwd(fwd)
+            vg.setToday(dtoday)            
+            vg.initialize()        
+        for instID in self.volgrids[product].option_insts[expiry]:
+            inst = self.instruments[instID]
+            inst.pricer.setFwd(fwd)
+            inst.pricer.setFwd(dtoday)
+            inst.update_greeks()
+        return
+    
+    def reval_volgrids(self, is_recalib = True):
+        for prod in self.volgrids.keys():
+            for expiry in self.volgrids[prod].option_insts:
+                self.reval_volgrid(prod, expiry, is_recalib)
+        return
+    
+    def create_volgrids(self):
+        '''根据名称序列和策略序列创建instrument
+           其中策略序列的结构为:
+           [总最大持仓量,策略1,策略2...] 
+        '''
+        volgrids = {}
+        opt_insts = [inst for inst in self.instruments.values() if inst.ptype == instrument.ProductType.Option]
+        for inst in opt_insts:
+            is_spot = False
+            accr = 'COM'
+            prod = inst.product
+            expiry = inst.expiry
+            if 'Stock' in inst.__class__.__name__:
+                is_spot = True
+                accr = 'SSE'
+            else:
+                if inst.exchange == 'CFFEX':
+                    accr = 'CFFEX'
+            if prod not in volgrids:
+                volgrids[prod] = instrument.VolGrid(prod, accrual= accr, is_spot = is_spot)
+                if expiry not in volgrids[prod].option_insts:
+                    volgrids[prod].option_insts[expiry] = []
+                    volgrids[prod].underlier[expiry] = inst.underlying
+                    volgrids[prod].volparam[expiry] = [0.2, 0.0, 0.0, 0.0, 0.0]
+                volgrids[prod].option_insts[expiry].append(inst.name)
+        self.volgrids = volgrids
+        return
+      
+class OptionAgent(agent.Agent, OptAgentMixin):
+    def __init__(self, name, trader, cuser,instruments, strategies = [], tday=datetime.date.today(), config = {}):
+        agent.Agent.__init__(self, name, trader, cuser,instruments, strategies, tday, config)
+        irate = 0.04
+        if 'irate' in config:
+            irate = config['irate']
+        OptAgentMixin.__init__(self, irate)
+        self.create_volgrids()
+        self.load_volgrids()
+        self.setup_opt_pricers()
+    
+    def resume(self):
+        #self.load_volgrids()
+        self.reval_volgrids(is_recalib = True)
+        agent.Agent.resume(self)
+        return
+        
