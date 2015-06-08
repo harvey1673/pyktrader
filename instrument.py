@@ -1,11 +1,28 @@
 #-*- coding:utf-8 -*-
 import datetime
+import pyktlib
 import mysqlaccess
 from misc import * 
 
 class ProductType:
     Future, Stock, Option = range(3)
 
+class VolGrid(object):
+    def __init__(self, name, accrual = 'COM', tday = datetime.date.today(), is_spot = False):
+        self.name = name
+        self.accrual = accrual
+        self.dtoday = date2xl(tday)
+        self.df = {}
+        self.fwd = {}
+        self.volnode = {}
+        self.volparam = {}
+        self.df = {}
+        self.underlier = {}
+        self.dexp = {}
+        self.main_cont = ''
+        self.option_insts = {}
+        self.spot_model = is_spot
+        
 class Instrument(object):
     def __init__(self,name):
         self.name = name
@@ -13,12 +30,12 @@ class Instrument(object):
         self.ptype = ProductType.Future
         self.product = 'IF'
         self.broker_fee = 0.0
-        #保证金率
-        self.marginrate = (0,0) #(多,空)
-        #合约乘数
+        #娣囨繆鐦夐柌鎴犲芳
+        self.marginrate = (0,0) #(婢讹拷缁岋拷
+        #閸氬牏瀹虫稊妯绘殶
         self.multiple = 0
-        #最小跳动
-        self.tick_base = 0  #单位为0.1
+        #閺堬拷鐨捄鍐插З
+        self.tick_base = 0  #閸楁洑缍呮稉锟�1
         self.start_tick_id = 0
         self.last_tick_id = 0
         # market snapshot
@@ -77,7 +94,7 @@ class Stock(Instrument):
         self.initialize()
         
     def initialize(self):
-    	self.product = self.name
+        self.product = self.name
         self.ptype = ProductType.Stock
         self.start_tick_id = 1530000
         self.last_tick_id  = 2130000
@@ -124,11 +141,13 @@ class OptionInst(Instrument):
         self.underlying = ''   # only used by option
         Instrument.__init__(self, name)
         self.pricer = None
+        self.pricer_func = pyktlib.BlackPricer
         self.pv = 0.0
         self.delta = 1
         self.theta = 0.0
         self.gamma = 0.0
         self.vega = 0.0
+        self.margin_param = [0.15, 0.1]
         self.initialize()
         
     def initialize(self):
@@ -137,6 +156,24 @@ class OptionInst(Instrument):
     def update_param(self, tday):
         pass
     
+    def set_pricer(self, vg, irate):
+        expiry = inst.expiry
+        dexp = vg.dexp[expiry]
+        fwd = vg.fwd[expiry]
+        self.pricer = self.pricer_func(vg.dtoday, 
+                                       vg.dexp[expiry],
+                                       vg.fwd[expiry], 
+                                       vg.volnode[expiry], 
+                                       self.strike, 
+                                       irate, 
+                                       self.otype)
+    def update_greeks(self):
+        self.pv = self.pricer.price() 
+        self.delta = self.pricer.delta()
+        self.gamma = self.pricer.gamma()
+        self.vega  = self.pricer.vega()/100.0
+        theta = self.pricer.theta()
+        
     def calc_risk(self, risk_name, refresh = True):
         if self.pricer == None:
             return None    
@@ -145,14 +182,30 @@ class OptionInst(Instrument):
             risk_func = 'price'
         if refresh:
             risk = getattr(self.pricer, risk_func)()
+            if risk_name == 'vega':
+                risk = risk/100
             setattr(self, risk_name, risk)
         else:
             risk = getattr(self, risk_name)
         return risk
+       
+    def calc_margin_amount(self, direction, price = 0.0):
+        my_margin = self.price
+        if direction == ORDER_SELL:
+            a = self.margin_param[0]
+            b = self.margin_param[1]
+            if price == 0.0:
+                price = self.strike
+            if self.otype == 'C':
+                my_margin += max(price * a - max(self.strike-price, 0), price * b)
+            else:
+                my_margin += max(price * a - max(price - self.strike, 0), self.strike * b)
+        return my_margin * self.multiple
         
 class StockOptionInst(OptionInst):
     def __init__(self,name):    
         OptionInst.__init__(self, name)
+        self.margin_param = [0.12, 0.07]
         self.initialize()
         
     def initialize(self):
@@ -172,10 +225,16 @@ class StockOptionInst(OptionInst):
 class FutOptionInst(OptionInst):
     def __init__(self,name):    
         OptionInst.__init__(self, name)
+        if self.exchange != 'CFFEX':
+            self.pricer_func = pyktlib.AmericanFutPricer
+            self.margin_param = [0.15, 0.1]
+        else:
+            self.pricer_func = pyktlib.BlackPricer
+            self.margin_param = [0.15, 0.1]            
         self.initialize()
         
     def initialize(self):
-    	self.ptype = ProductType.Option
+        self.ptype = ProductType.Option
         self.product = inst2product(self.name)
         if self.product == 'IO_Opt':
             self.underlying = self.name[:6].replace('IO','IF')

@@ -204,24 +204,25 @@ class TLStratGui(StratGui):
                             'EntryLow': 'float',
                             'ExitHigh': 'float',
                             'ExitLow':  'float'} 
-            
-class OptStratGui(object):
-    def __init__(self, strat, app, master):
-        self.pricer = strat.pricer
+           
+class OptVolgridGui(object):
+    def __init__(self, vg, app, master):
+        all_insts = app.agent.instruments
         self.root = master
-        self.name = strat.name
+        self.name = vg.name
         self.app = app
-        self.underliers = strat.underliers
-        self.option_insts = strat.option_insts.keys()
-        self.expiries = strat.expiries
-        self.spot_model = strat.spot_model
-        self.cont_mth = []
-        if len(self.underliers) == 1:
-            self.cont_mth = [ d.year*100+d.month for d in self.expiries]
-        else:
-            self.cont_mth = [ 201000 + int(inst[-3:]) for inst in self.underliers]
-        self.strikes = strat.strikes
-        self.opt_dict = strat.opt_dict
+        self.expiries = vg.underlier.values()
+        self.expiries.sort()
+        self.underliers = [vg.underlier[expiry] for expiry in self.expiries] 
+        self.option_insts = list(set().union(*vg.option_insts.values()))
+        self.spot_model = vg.spot_model
+        self.cont_mth = list(set([ all_insts[inst].cont_mth for inst in self.option_insts]))
+        self.cont_mth.sort()
+        self.strikes = [list(set([ all_insts[inst].strike for inst in vg.option_insts[expiry]])).sort() for expiry in self.expiries]
+        self.opt_dict = {}
+        for inst in self.option_insts:
+            key = (all_insts[inst].underlying, all_insts[inst].cont_mth, all_insts[inst].otype, all_insts[inst].strike)
+            self.opt_dict[key] = inst
         self.canvas = None
         self.pos_canvas = None
         self.frame = None
@@ -232,7 +233,7 @@ class OptStratGui(object):
         self.fwds = {}
         self.vol_params = {}
         self.curr_insts = {} 
-        self.rf = strat.irate
+        self.rf = app.agent.irate
         for expiry in self.expiries:
             vol = strat.volgrids[expiry]
             dtoday = vol.dtoday_()
@@ -499,6 +500,8 @@ class Gui(tk.Tk):
         self.status_ents = {}
         self.strat_frame = {}
         self.strat_gui = {}
+        self.volgrid_gui = {}
+        self.volgrid_frame = {}
         self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap']
         self.status_fields = ['Positions', 'Orders', 'Trades', 'Insts', 'ScurDay', 'EodFlag', 'Initialized', 'ProcLock', \
                               'CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
@@ -524,8 +527,11 @@ class Gui(tk.Tk):
                 self.strat_gui[strat.name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
                 self.strat_gui[strat.name] = TLStratGui(strat, app, self)
-            elif 'Opt' in strat.__class__.__name__:
-                self.strat_gui[strat.name] = OptStratGui(strat, app, self)
+        
+        if ('Option' in app.agent.__class__.__name__) and (len(app.agent.volgrids)>0):
+            for prod in app.agent.volgrids:
+                self.volgrid_gui[prod] = OptVolgridGui(app.agent.volgrids[prod], app, self)
+                
         menu = tk.Menu(self)
         toolmenu = tk.Menu(menu, tearoff=0)
         toolmenu.add_command(label = 'MarketViewer', command=self.market_view)
@@ -541,6 +547,11 @@ class Gui(tk.Tk):
         #self.status_win = ttk.Frame(self.notebook)
         #self.make_status_form()
         #self.notebook.add(self.status_win, text = 'Orders')
+        for prod in self.volgrid_gui:
+            self.volgrid_frame[prod] = ttk.Frame(self)
+            self.volgrid_gui[prod].set_frame(self.volgrid_frame[prod])
+            self.notebook.add(self.volgrid_frame[prod], text = 'VG_' + prod)
+                    
         for strat in self.app.agent.strategies:
             name = strat.name
             self.strat_frame[name] = ttk.Frame(self)
@@ -805,26 +816,8 @@ class MainApp(object):
         for strat in self.agent.strategies:
             if strat.name == strat_name:
                 for field in fields:
-                    if field == 'Volgrid':
-                        vol_info = {}
-                        for idx, expiry in enumerate(strat.expiries):
-                            if strat.spot_model:
-                                under = strat.underlers[0]
-                            else:
-                                under = strat.underliers[idx]
-                            vn = strat.volgrids[expiry]
-                            vol_info[expiry] = {'Under': under, 'Df':strat.DFs[idx], 'Fwd': vn.fwd_(), 'Expiry': expiry,
-                                                'Atm': vn.atmVol_(), 'V90': vn.d90Vol_(), 
-                                                'V75': vn.d75Vol_(), 'V25': vn.d25Vol_(), 
-                                                'V10': vn.d10Vol_(), 'Updated': strat.last_updated[expiry]['dtoday']}
-                        params[field] = vol_info
-                    elif (field == 'OptionMap') or (field == 'GroupRisk'):
-                        var = field2variable(field)
-                        value = getattr(strat, var)
-                        params[field] = value.to_dict()
-                    else:
-                        var = field2variable(field)
-                        params[field] = getattr(strat, var)
+                    var = field2variable(field)
+                    params[field] = getattr(strat, var)
                 break 
         return params
     
@@ -832,13 +825,9 @@ class MainApp(object):
         for strat in self.agent.strategies:
             if strat.name == strat_name:
                 for field in params:
-                    if field == 'Volgrid':
-                        for expiry in strat.expiries:
-                            strat.set_volgrids(expiry, params[field][expiry])
-                    else:
-                        var = field2variable(field)
-                        value = params[field]
-                        setattr(strat, var, value)
+                    var = field2variable(field)
+                    value = params[field]
+                    setattr(strat, var, value)
                 break 
         return
     
