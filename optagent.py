@@ -124,10 +124,9 @@ class OptAgentMixin(object):
             inst.update_greeks()
         return
     
-    def reval_volgrids(self, is_recalib = True):
-        for prod in self.volgrids.keys():
-            for expiry in self.volgrids[prod].option_insts:
-                self.reval_volgrid(prod, expiry, is_recalib)
+    def reval_volgrids(self, prod, is_recalib = True):
+        for expiry in self.volgrids[prod].option_insts:
+            self.reval_volgrid(prod, expiry, is_recalib)
         return
     
     def create_volgrids(self):
