@@ -706,7 +706,7 @@ class Agent(AbsAgent):
         '''
         if not self.initialized:
             for inst in self.instruments:
-                self.instruments[inst].update_param()
+                self.instruments[inst].update_param(self.scur_day)
             self.resume()
             #for strat in self.strategies:
             #    strat.initialize()

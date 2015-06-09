@@ -5,7 +5,7 @@ import os
 import csv
 import numpy as np
 import datetime
-import agent
+import tradeagent as agent
 from misc import *
 
 def discount(irate, dtoday, dexp):
@@ -45,7 +45,7 @@ class OptAgentMixin(object):
                 for expiry in self.volgrids[prod].option_insts:
                     dexp = date2xl(expiry) + 15.0/24.0
                     under_instID = self.volgrids[prod].underlier[expiry]
-                    fwd = self.instruments[under_instID].price()
+                    fwd = self.instruments[under_instID].fair_price()
                     if self.volgrids[prod].spot_model:
                         fwd = fwd / self.volgrids[prod].df[expiry]
                     self.volgrids[prod].fwd[expiry] = fwd
@@ -75,7 +75,7 @@ class OptAgentMixin(object):
         return
     
     def set_opt_pricers(self):
-        opt_insts = [inst for inst in self.instruments if inst.ptype == instrument.ProductType.Option]
+        opt_insts = [inst for inst in self.instruments.values() if inst.ptype == instrument.ProductType.Option]
         for inst in opt_insts:
             expiry = inst.expiry
             prod = inst.product
@@ -105,9 +105,9 @@ class OptAgentMixin(object):
         return
     
     def reval_volgrid(self, product, expiry, is_recalib=True):
-        dtoday = date2xl(self.agent.scur_day) + max(self.agent.tick_id - 600000, 0)/2400000.0
+        dtoday = date2xl(self.scur_day) + max(self.tick_id - 600000, 0)/2400000.0
         under = self.volgrids[product].underlier[expiry]
-        fwd = self.instruments[under].price()
+        fwd = self.instruments[under].fair_price()
         if self.volgrids[product].spot_model:
             fwd = fwd/self.volgrids[product].df[expiry]
         vg = self.volgrids[product].volnode[expiry]
@@ -149,11 +149,11 @@ class OptAgentMixin(object):
                     accr = 'CFFEX'
             if prod not in volgrids:
                 volgrids[prod] = instrument.VolGrid(prod, accrual= accr, is_spot = is_spot)
-                if expiry not in volgrids[prod].option_insts:
-                    volgrids[prod].option_insts[expiry] = []
-                    volgrids[prod].underlier[expiry] = inst.underlying
-                    volgrids[prod].volparam[expiry] = [0.2, 0.0, 0.0, 0.0, 0.0]
-                volgrids[prod].option_insts[expiry].append(inst.name)
+            if expiry not in volgrids[prod].option_insts:
+                volgrids[prod].option_insts[expiry] = []
+                volgrids[prod].underlier[expiry] = inst.underlying
+                volgrids[prod].volparam[expiry] = [0.2, 0.0, 0.0, 0.0, 0.0]
+            volgrids[prod].option_insts[expiry].append(inst.name)
         self.volgrids = volgrids
         return
       
@@ -166,11 +166,12 @@ class OptionAgent(agent.Agent, OptAgentMixin):
         OptAgentMixin.__init__(self, irate)
         self.create_volgrids()
         self.load_volgrids()
-        self.setup_opt_pricers()
+        self.set_opt_pricers()
     
     def resume(self):
         #self.load_volgrids()
-        self.reval_volgrids(is_recalib = True)
+        for prod in self.volgrids:
+            self.reval_volgrids(prod, True)
         agent.Agent.resume(self)
         return
         

@@ -16,7 +16,6 @@ class VolGrid(object):
         self.fwd = {}
         self.volnode = {}
         self.volparam = {}
-        self.df = {}
         self.underlier = {}
         self.dexp = {}
         self.main_cont = ''
@@ -74,7 +73,7 @@ class Instrument(object):
         self.expiry = datetime.date(2050,12,31)
         self.day_finalized = False
     
-    def price(self):
+    def fair_price(self):
         self.mid_price = (self.ask_price1 + self.bid_price1)/2.0
         return self.mid_price
 
@@ -157,7 +156,7 @@ class OptionInst(Instrument):
         pass
     
     def set_pricer(self, vg, irate):
-        expiry = inst.expiry
+        expiry = self.expiry
         dexp = vg.dexp[expiry]
         fwd = vg.fwd[expiry]
         self.pricer = self.pricer_func(vg.dtoday, 
