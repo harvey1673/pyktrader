@@ -17,18 +17,77 @@ def get_option_map(underliers, strikes):
                 opt_map[key] = instID
     return opt_map
     
-class OptionTestStrat(strategy.Strategy):
-    def __init__(self, future_conts, strikes):
+class OptionArbStrat(strategy.Strategy):
+    def __init__(self, name, future_conts, strikes, agent = None, email_notify = []):
         self.option_map = get_option_map(future_conts, strikes)
+		sself.
         underliers = []
         volumes = []
         trade_units = []
+		self.cp_parity = {}
+		self.call_spread = {}
+		self.put_spread = {}
+		self.call_bfly = {}
+		self.put_bfly = {}
+		idx = 0
         for fut, strike_list in zip(future_conts, strikes):
-            for strike in strikes:
+			slen = len(strike_list)
+            for i, strike in enumerate(strike_list):
                 call_key = (fut, 'C', strike)
                 put_key  = (fut, 'P', strike)
-                underliers.append([call_key, put_key, fut])
-                volumes.append([1, -1, -1])
+                underliers.append([self.option_map[call_key], self.option_map[put_key], fut])
+                volumes.append([3, -3, -1])
                 trade_units.append(1)
+				self.cp_parity[(fut, strike)] = {'idx':idx }
+				idx += 1
+				if (i < slen - 1):
+					next_call = (fut, 'C', strike_list[i+1])
+					underliers.append([self.option_map[call_key], self.option_map[next_call]])
+					volumes.append([1, -1])
+					trade_units.append(1)
+					self.call_spread[(fut, strike)] = {'idx':idx }
+					idx += 1
+					next_put = (fut, 'P', strike_list[i+1])
+					underliers.append([self.option_map[next_put], self.option_map[put_key]])
+					volumes.append([1, -1])
+					trade_units.append(1)
+					self.put_spread[(fut, strike)] = {'idx':idx }
+					idx += 1
+					if i > 0:
+						prev_call = (fut, 'C', strike_list[i-1])
+						underliers.append([self.option_map[prev_call], self.option_map[call_key], self.option_map[next_call]])
+						volumes.append([1, -2, 1])
+						trade_units.append(1)
+						self.call_bfly[(fut, strike)] = {'idx':idx }
+						idx += 1
+						prev_put = (fut, 'P', strike_list[i-1])
+						underliers.append([self.option_map[prev_put], self.option_map[put_key], self.option_map[next_put]])
+						volumes.append([1, -2, 1])
+						trade_units.append(1)
+						self.put_bfly[(fut, strike)] = {'idx':idx }
+						idx += 1
+		for fut, strike_list in zip(future_conts, strikes):
+            for strike in strikes:
+		strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, rmail_notify = email_notify)
+		self.profit_ratio = 0
+	
+	def initialize(self):
+		self.load_state()
+		pass 
+		
+	def load_local_variables(self, row):
+		pass
+	
+	def save_local_variables(self, file_writer):
+		pass
+	
+	def tick_run(self, ctick):
+		instID = ctick.instID
+		inst = self.agent.instruments[instID]
+		if inst.ptype:
+        if self.update_positions(idx):
+            self.save_state()
+        self.run_tick(idx, ctick)
+        return				
             
         
