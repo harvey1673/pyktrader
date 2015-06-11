@@ -73,11 +73,16 @@ class OptionArbStrat(strategy.Strategy):
         self.buy_prices = [0.0] * len(underliers)
         self.sell_prices = [0.0] * len(underliers)
         self.is_initialized = False
+        self.req_margin = [0.0] * len(underliers)
     
     def initialize(self):
         self.load_state()
+        self.update_margin()
         pass 
-        
+    
+    def update_margin(self):
+        pass 
+    
     def load_local_variables(self, row):
         pass
     
