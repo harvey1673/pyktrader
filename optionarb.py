@@ -70,6 +70,7 @@ class OptionArbStrat(strategy.Strategy):
                         idx += 1
         strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, rmail_notify = email_notify)
         self.profit_ratio = 0
+		self.is_initialized = False
     
     def initialize(self):
         self.load_state()
@@ -81,6 +82,8 @@ class OptionArbStrat(strategy.Strategy):
     def save_local_variables(self, file_writer):
         pass
     
+	def setup_trading(self):
+	
     def tick_run(self, ctick):
         instID = ctick.instID
         inst = self.agent.instruments[instID]
@@ -89,7 +92,10 @@ class OptionArbStrat(strategy.Strategy):
                 if fut == inst.name:
                     strike_list = self.strikes[i]
                     for strike in strike_list:
-                        pass
+                        key = (instID, strike)
+						idx = self.cp_parity[key]['idx']
+						self.calc_curr_price(idx)
+
                     break
                 
             
