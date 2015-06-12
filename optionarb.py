@@ -69,11 +69,13 @@ class OptionArbStrat(strategy.Strategy):
                         self.put_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None}
                         idx += 1
         strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, rmail_notify = email_notify)
-        self.profit_ratio = 0
+        self.profit_ratio = 0.1
         self.buy_prices = [0.0] * len(underliers)
         self.sell_prices = [0.0] * len(underliers)
         self.is_initialized = False
-        self.req_margin = [0.0] * len(underliers)
+        self.trade_margin = [(0.0, 0.0)] * len(underliers)
+		self.inst_margin = dict([(inst, (0.0,0.0)) for inst in self.instIDs])
+		self.days_to_expiry = dict([(inst, 1) for inst in self.instIDs])
     
     def initialize(self):
         self.load_state()
@@ -81,7 +83,19 @@ class OptionArbStrat(strategy.Strategy):
         pass 
     
     def update_margin(self):
-        pass 
+		for instID in self.instIDs:
+			inst = self.agent.instruements[instID]
+			ins_p = inst.price
+			if inst.ptype == instrument.ProductType.Option:
+				ins_p = self.agent.instruments[inst.underlying].price
+			self.inst_margin[instID] = (inst.calc_margin_amount(ORDER_BUY, ins_p), inst.calc_margin_amount(ORDER_SELL, ins_p))
+			self.days_to_expiry[instID] = (inst.expiry - self.agent.scur_day).days + 1
+		for idx, under in enumerate(self.underliers):
+			self.trade_margin[idx][0] = sum([ v * self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v > 0])
+			self.trade_margin[idx][0] -= sum([ v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v < 0])
+			self.trade_margin[idx][1] = sum([ v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v > 0])
+			self.trade_margin[idx][1] -= sum([ v * self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v < 0])				
+        return 
     
     def load_local_variables(self, row):
         pass
@@ -117,6 +131,11 @@ class OptionArbStrat(strategy.Strategy):
                         idx = self.cp_parity[key]['idx']
                         if len(self.submitted_pos[idx]) == 0:
                             self.calc_curr_price(idx)
+							if self.buy_prices[idx] < self.cp_parity[key]['lower']:
+								profit_margin = self.cp_parity[key]['lower'] - self.buy_prices[idx]
+								profit_ratio = profit_margin/self.trade_margin[idx]/self.days_to_expiry[instID]
+								if profit_margin > self.profit_ratio:
+									self.open_tradepos(idx, ORDER_BUY, profit_margin)
 
                     break
                 
@@ -126,4 +145,3 @@ class OptionArbStrat(strategy.Strategy):
         self.run_tick(idx, ctick)
         return                
             
-        
