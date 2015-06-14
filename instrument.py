@@ -29,12 +29,9 @@ class Instrument(object):
         self.ptype = ProductType.Future
         self.product = 'IF'
         self.broker_fee = 0.0
-        #娣囨繆鐦夐柌鎴犲芳
-        self.marginrate = (0,0) #(婢讹拷缁岋拷
-        #閸氬牏瀹虫稊妯绘殶
+        self.marginrate = (0,0) 
         self.multiple = 0
-        #閺堬拷鐨捄鍐插З
-        self.tick_base = 0  #閸楁洑缍呮稉锟�1
+        self.tick_base = 0  
         self.start_tick_id = 0
         self.last_tick_id = 0
         # market snapshot
@@ -171,7 +168,7 @@ class OptionInst(Instrument):
         self.delta = self.pricer.delta()
         self.gamma = self.pricer.gamma()
         self.vega  = self.pricer.vega()/100.0
-        theta = self.pricer.theta()
+        self.theta = self.pricer.theta()
         
     def calc_risk(self, risk_name, refresh = True):
         if self.pricer == None:

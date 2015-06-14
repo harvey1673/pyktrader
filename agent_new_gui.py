@@ -81,22 +81,26 @@ class StratGui(object):
         self.entry_fields = []
         self.status_fields = [] 
         self.field_types = {}
-        
+        self.lblframe = None
+        self.canvas = None
+        self.vsby = None
+        self.vsbx = None
+                
     def get_params(self):
         fields = self.entry_fields + self.status_fields
         params = self.app.get_strat_params(self.name, fields)
         for field in fields:
             for idx, underlier in enumerate(self.underliers):
-                inst = underlier[0]
+                under_key = ','.join(underlier)
                 value = params[field][idx]
                 vtype = self.field_types[field]
                 value = type2str(value, vtype)
                 if field in self.entry_fields:
-                    ent = self.entries[inst][field]
+                    ent = self.entries[under_key][field]
                     ent.delete(0, tk.END)
                     ent.insert(0, value)
                 elif field in self.status_fields:
-                    self.stringvars[inst][field].set(keepdigit(value, 4))
+                    self.stringvars[under_key][field].set(keepdigit(value, 4))
         return
         
     def set_params(self):
@@ -104,19 +108,34 @@ class StratGui(object):
         for field in self.entry_fields:
             params[field] = []
             for underlier in self.underliers:
-                inst = underlier[0]
-                ent = self.entries[inst][field]
+                under_key = ','.join(underlier)
+                ent = self.entries[under_key][field]
                 value = ent.get()
                 vtype = self.field_types[field]
                 value = str2type(value, vtype)
                 params[field].append(value)
         self.app.set_strat_params(self.name, params)
         return
-        
+
+    def OnFrameConfigure(self, event):
+        '''Reset the scroll region to encompass the inner frame'''
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))        
+        pass
+            
     def set_frame(self, root):
-        self.lblframe = ttk.Frame(root)
-        self.lblframe.grid_columnconfigure(1, weight=1)
-        fields = ['inst'] + self.entry_fields + self.status_fields
+        self.canvas = tk.Canvas(root)
+        self.lblframe = tk.Frame(self.canvas)
+        self.vsby = tk.Scrollbar(root, orient="vertical", command=self.canvas.yview)
+        self.vsbx = tk.Scrollbar(root, orient="horizontal", command=self.canvas.xview)
+        self.canvas.configure(yscrollcommand=self.vsby.set, xscrollcommand=self.vsbx.set)
+        self.vsbx.pack(side="bottom", fill="x")
+        self.vsby.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.canvas.create_window((4,4), window=self.lblframe, anchor="nw", tags="self.lblframe")
+        self.lblframe.bind("<Configure>", self.OnFrameConfigure)        
+        #self.lblframe = ttk.Frame(root)        
+        #self.lblframe.grid_columnconfigure(1, weight=1)        
+        fields = ['assets'] + self.entry_fields + self.status_fields
         for idx, field in enumerate(fields):
             lbl = ttk.Label(self.lblframe, text = field, anchor='w')
             lbl.grid(row=0, column=idx, sticky="ew")
@@ -124,24 +143,24 @@ class StratGui(object):
         entries = {}
         stringvars = {}
         for underlier in self.underliers:
-            inst = str(underlier[0])
-            inst_lbl = ttk.Label(self.lblframe, text=inst, anchor="w")
+            under_key = ','.join(underlier)
+            inst_lbl = ttk.Label(self.lblframe, text=under_key, anchor="w")
             inst_lbl.grid(row=row_id, column=0, sticky="ew")
             col_id = 1
-            entries[inst] = {}
+            entries[under_key] = {}
             for idx, field in enumerate(self.entry_fields):
                 ent = ttk.Entry(self.lblframe)
                 ent.grid(row=row_id, column=col_id+idx, sticky="ew")
                 ent.insert(0, "0")
-                entries[inst][field] = ent
+                entries[under_key][field] = ent
             col_id += len(self.entry_fields)
-            stringvars[inst] = {}
+            stringvars[under_key] = {}
             for idx, field in enumerate(self.status_fields):
                 v= get_type_var(self.field_types[field])
                 lab = ttk.Label(self.lblframe, textvariable = v, anchor='w')
                 lab.grid(row=row_id, column=col_id+idx, sticky="ew")
                 v.set('0')
-                stringvars[inst][field] = v       
+                stringvars[under_key][field] = v       
             row_id +=1
         self.entries = entries
         self.stringvars = stringvars
@@ -152,7 +171,7 @@ class StratGui(object):
         refresh_btn.grid(row=row_id, column=2, sticky="ew")
         recalc_btn = ttk.Button(self.lblframe, text='Recalc', command=self.recalc)
         recalc_btn.grid(row=row_id, column=3, sticky="ew")
-        self.lblframe.pack(side="top", fill="both", expand=True, padx=10, pady=10)
+        #self.lblframe.pack(side="top", fill="both", expand=True, padx=10, pady=10)
         self.get_params()
         return
     
@@ -206,7 +225,19 @@ class TLStratGui(StratGui):
                             'EntryLow': 'float',
                             'ExitHigh': 'float',
                             'ExitLow':  'float'} 
-           
+
+class OptionArbStratGui(StratGui):
+    def __init__(self, strat, app, master):
+        StratGui.__init__(self, strat, app, master)
+        self.root = master
+        self.entry_fields = []
+        self.status_fields = ['TradeUnit', 'BidPrices', 'AskPrices', 'DaysToExpiry', 'TradeMargin'] 
+        self.field_types = {'TradeUnit':'int', 
+                            'BidPrices': 'float',
+                            'AskPrices': 'float',
+                            'DaysToExpiry':'int',
+                            'TradeMargin':'floatlist'} 
+                   
 class OptVolgridGui(object):
     def __init__(self, vg, app, master):
         all_insts = app.agent.instruments
@@ -233,7 +264,7 @@ class OptVolgridGui(object):
         self.pos_frame = None
 
         #vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10', 'Updated']
-        self.volgrid = copy.copy(vg)
+        self.volgrid = copy.deepcopy(vg)
         self.curr_insts = {} 
         self.rf = app.agent.irate
         for expiry in self.expiries:
@@ -327,8 +358,8 @@ class OptVolgridGui(object):
         pass
     
     def recalc_risks(self):
-        params = (self.name)
-        self.app.run_agent_func(self.name, 'reval_volgrids', params)
+        params = (self.name, )
+        self.app.run_agent_func('reval_volgrids', params)
         return
 
     def show_risks(self):
@@ -401,10 +432,10 @@ class OptVolgridGui(object):
                 tk.Label(self.frame, text=vlbl).grid(row=row_id, column=col_id + idx)
                 tk.Label(self.frame, textvariable = self.stringvars['Volgrid'][expiry][vlbl]).grid(row=row_id+1, column=col_id + idx)
                 
-            ttk.Button(self.frame, text='Refresh', command= self.get_T_table).grid(row=row_id, column=12, columnspan=2)
-            ttk.Button(self.frame, text='CalcRisk', command= self.recalc_risks).grid(row=row_id+1, column=12, columnspan=2) 
-            ttk.Button(self.frame, text='CalibVol', command= self.calib_volgrids).grid(row=row_id, column=14, columnspan=2)
-            ttk.Button(self.frame, text='RiskGroup', command= self.show_risks).grid(row=row_id+1, column=14, columnspan=2)
+            ttk.Button(self.frame, text='Refresh', command= self.get_T_table).grid(row=row_id, column=10, columnspan=2)
+            ttk.Button(self.frame, text='CalcRisk', command= self.recalc_risks).grid(row=row_id+1, column=10, columnspan=2) 
+            ttk.Button(self.frame, text='CalibVol', command= self.calib_volgrids).grid(row=row_id, column=12, columnspan=2)
+            ttk.Button(self.frame, text='RiskGroup', command= self.show_risks).grid(row=row_id+1, column=12, columnspan=2)
             row_id += 2
             col_id = 0
             inst = self.underliers[under_id]
@@ -487,6 +518,8 @@ class Gui(tk.Tk):
                 self.strat_gui[strat.name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
                 self.strat_gui[strat.name] = TLStratGui(strat, app, self)
+            elif strat.__class__.__name__ == 'OptionArbStrat':
+                self.strat_gui[strat.name] = OptionArbStratGui(strat, app, self)                                
                         
         if ('Option' in app.agent.__class__.__name__) and (len(app.agent.volgrids)>0):
             for prod in app.agent.volgrids:

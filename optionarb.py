@@ -1,5 +1,6 @@
 #-*- coding:utf-8 -*-
 import instrument
+from misc import *
 import tradeagent as agent
 import strategy
 
@@ -68,14 +69,15 @@ class OptionArbStrat(strategy.Strategy):
                         trade_units.append(1)
                         self.put_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None}
                         idx += 1
-        strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, rmail_notify = email_notify)
+        strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, email_notify)
         self.profit_ratio = 0.1
-        self.buy_prices = [0.0] * len(underliers)
-        self.sell_prices = [0.0] * len(underliers)
+        self.exit_ratio = 0.01
+        self.bid_prices = [0.0] * len(underliers)
+        self.ask_prices = [0.0] * len(underliers)
         self.is_initialized = False
-        self.trade_margin = [(0.0, 0.0)] * len(underliers)
-		self.inst_margin = dict([(inst, (0.0,0.0)) for inst in self.instIDs])
-		self.days_to_expiry = dict([(inst, 1) for inst in self.instIDs])
+        self.trade_margin = [[0.0, 0.0]] * len(underliers)
+        self.inst_margin = dict([(inst, [0.0,0.0]) for inst in self.instIDs])
+        self.days_to_expiry = [1.0] * len(underliers)
     
     def initialize(self):
         self.load_state()
@@ -83,18 +85,20 @@ class OptionArbStrat(strategy.Strategy):
         pass 
     
     def update_margin(self):
-		for instID in self.instIDs:
-			inst = self.agent.instruements[instID]
-			ins_p = inst.price
-			if inst.ptype == instrument.ProductType.Option:
-				ins_p = self.agent.instruments[inst.underlying].price
-			self.inst_margin[instID] = (inst.calc_margin_amount(ORDER_BUY, ins_p), inst.calc_margin_amount(ORDER_SELL, ins_p))
-			self.days_to_expiry[instID] = (inst.expiry - self.agent.scur_day).days + 1
-		for idx, under in enumerate(self.underliers):
-			self.trade_margin[idx][0] = sum([ v * self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v > 0])
-			self.trade_margin[idx][0] -= sum([ v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v < 0])
-			self.trade_margin[idx][1] = sum([ v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v > 0])
-			self.trade_margin[idx][1] -= sum([ v * self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v < 0])				
+        for instID in self.instIDs:
+            inst = self.agent.instruments[instID]
+            ins_p = inst.price
+            if inst.ptype == instrument.ProductType.Option:
+                ins_p = self.agent.instruments[inst.underlying].price
+            self.inst_margin[instID] = [inst.calc_margin_amount(ORDER_BUY, ins_p), inst.calc_margin_amount(ORDER_SELL, ins_p)]
+        for idx, under in enumerate(self.underliers):
+            expiry = self.agent.instruments[under[0]].expiry
+            self.days_to_expiry[idx] = (expiry-self.agent.scur_day).days + 1
+            margin_l = sum([v*self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v > 0])
+            margin_l -= sum([ v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v < 0])
+            margin_s = sum([  v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v > 0])            
+            margin_s -= sum([ v * self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v < 0])
+            self.trade_margin[idx] = [margin_l, margin_s]               
         return 
     
     def load_local_variables(self, row):
@@ -111,15 +115,16 @@ class OptionArbStrat(strategy.Strategy):
         ask1 = [ self.agent.instruments[inst].ask_price1 for inst in self.underliers[idx]]
         bid1 = [ self.agent.instruments[inst].bid_price1 for inst in self.underliers[idx]]
         volumes = self.volumes[idx]
-        self.buy_prices[idx] = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v > 0])
-        self.buy_prices[idx] += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v < 0])
-        self.buy_prices[idx] = self.buy_prices[idx]/conv_f[-1]
-        self.sell_prices[idx] = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v < 0])
-        self.sell_prices[idx] += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v > 0])
-        self.sell_prices[idx] = self.sell_prices[idx]/conv_f[-1]
+        self.bid_prices[idx] = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v > 0])
+        self.bid_prices[idx] += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v < 0])
+        self.bid_prices[idx] = self.bid_prices[idx]/conv_f[-1]
+        self.ask_prices[idx] = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v < 0])
+        self.ask_prices[idx] += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v > 0])
+        self.ask_prices[idx] = self.ask_prices[idx]/conv_f[-1]
         return
     
     def tick_run(self, ctick):
+        need_save = False
         instID = ctick.instID
         inst = self.agent.instruments[instID]
         if (inst.ptype == instrument.ProductType.Future):
@@ -129,19 +134,72 @@ class OptionArbStrat(strategy.Strategy):
                     for strike in strike_list:
                         key = (instID, strike)
                         idx = self.cp_parity[key]['idx']
-                        if len(self.submitted_pos[idx]) == 0:
-                            self.calc_curr_price(idx)
-							if self.buy_prices[idx] < self.cp_parity[key]['lower']:
-								profit_margin = self.cp_parity[key]['lower'] - self.buy_prices[idx]
-								profit_ratio = profit_margin/self.trade_margin[idx]/self.days_to_expiry[instID]
-								if profit_margin > self.profit_ratio:
-									self.open_tradepos(idx, ORDER_BUY, profit_margin)
-
+                        if self.update_positions(idx):
+                            need_save = True
+                        if self.check_open_arb_pos(idx, self.cp_parity[key]):
+                            need_save = True
                     break
-                
-            
-        if self.update_positions(idx):
+        else:
+            underlying = inst.underlying
+            for i, fut in enumerate(self.future_conts):
+                if fut == underlying:
+                    strike = inst.strike
+                    stk_list = self.strikes[i]
+                    s_idx = stk_list.index(strike)
+                    key = (fut, strike)
+                    idx = self.cp_parity[key]['idx']
+                    if self.update_positions(idx):
+                        need_save = True
+                    if self.check_open_arb_pos(idx, self.cp_parity[key]):
+                        need_save = True
+                    if inst.otype == 'C':
+                        spd_dict = self.call_spread
+                        fly_dict = self.call_bfly
+                    else:
+                        spd_dict = self.put_spread
+                        fly_dict = self.put_bfly                        
+                    for j in range(max(0,s_idx-1), min(s_idx+1, len(stk_list)-1)):
+                        key = (fut, stk_list[j])
+                        idx = spd_dict[key]['idx']
+                        if self.update_positions(idx):
+                            need_save = True
+                        if self.check_open_arb_pos(idx, spd_dict[key]):
+                            need_save = True                        
+                    for j in range(max(1,s_idx-1), min(s_idx+2, len(stk_list)-1)):
+                        key = (fut, stk_list[j])
+                        idx = fly_dict[key]['idx']
+                        if self.update_positions(idx):
+                            need_save = True
+                        if self.check_open_arb_pos(idx, spd_dict[key]):
+                            need_save = True                          
+        if need_save:
             self.save_state()
-        self.run_tick(idx, ctick)
         return                
             
+    def check_open_arb_pos(self, idx, bound):
+        need_save = False
+        if len(self.submitted_pos[idx]) > 0:
+            return False
+        self.calc_curr_price(idx)
+        b_scaler = self.trade_margin[idx][0]*self.days_to_expiry[idx]
+        s_scaler = self.trade_margin[idx][1]*self.days_to_expiry[idx]
+        for tradepos in self.positions[idx]:
+            buysell = tradepos.direction
+            if ((buysell > 0) and (bound['lower'] != None) and 
+                (bound['lower'] < self.bid_prices[idx] + self.exit_ratio * b_scaler))   \
+                or ((buysell < 0) and (bound['lower'] != None) and                  \
+                    (bound['upper'] > self.ask_prices[idx] - self.exit_ratio * s_scaler)):
+                if buysell > 0:
+                    order_price = self.bid_prices[idx]
+                else:
+                    order_price = self.ask_prices[idx]
+                self.close_tradepos(idx, tradepos, order_price)
+                #self.status_notifier(msg)
+                need_save = True
+        if (bound['lower']!= None) and (bound['lower'] > self.ask_prices[idx] + self.profit_ratio * b_scaler):
+            self.open_tradepos(idx, ORDER_BUY, self.ask_prices[idx])
+            need_save = True
+        elif (bound['upper']!= None) and (bound['upper'] < self.sell_prices[idx] - self.profit_ratio * s_scaler): 
+            self.open_tradepos(idx, ORDER_SELL, self.bid_prices[idx])
+            need_save = True                
+        return need_save

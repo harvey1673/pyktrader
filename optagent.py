@@ -45,7 +45,7 @@ class OptAgentMixin(object):
                 for expiry in self.volgrids[prod].option_insts:
                     dexp = date2xl(expiry) + 15.0/24.0
                     under_instID = self.volgrids[prod].underlier[expiry]
-                    fwd = self.instruments[under_instID].fair_price()
+                    fwd = self.instruments[under_instID].price
                     if self.volgrids[prod].spot_model:
                         fwd = fwd / self.volgrids[prod].df[expiry]
                     self.volgrids[prod].fwd[expiry] = fwd
@@ -75,14 +75,17 @@ class OptAgentMixin(object):
         return
     
     def set_opt_pricers(self):
-        opt_insts = [inst for inst in self.instruments.values() if inst.ptype == instrument.ProductType.Option]
-        for inst in opt_insts:
-            expiry = inst.expiry
-            prod = inst.product
-            if expiry in self.volgrids[prod].volnode:
-                inst.set_pricer(self.volgrids[prod], self.irate)
-            else:
-                print "missing %s volgrid for %s" % (prod, expiry)
+        for instID in self.instruments:
+            inst = self.instruments[instID]
+            if inst.ptype == instrument.ProductType.Option:
+                expiry = inst.expiry
+                prod = inst.product
+                if expiry in self.volgrids[prod].volnode:
+                    inst.set_pricer(self.volgrids[prod], self.irate)
+                    inst.update_greeks()
+                else:
+                    print "missing %s volgrid for %s" % (prod, expiry)
+                
         return
 
     def set_volgrids(self, product, expiry, fwd, vol_param):
@@ -104,29 +107,30 @@ class OptAgentMixin(object):
             self.logger.info('expiry %s is not in the volgrid expiry for %s' % (expiry, product))     
         return
     
-    def reval_volgrid(self, product, expiry, is_recalib=True):
+    def calc_volgrid(self, product, expiry, is_recalib=True):
         dtoday = date2xl(self.scur_day) + max(self.tick_id - 600000, 0)/2400000.0
         under = self.volgrids[product].underlier[expiry]
-        fwd = self.instruments[under].fair_price()
+        fwd = self.instruments[under].price
         if self.volgrids[product].spot_model:
             fwd = fwd/self.volgrids[product].df[expiry]
-        vg = self.volgrids[product].volnode[expiry]
+        vg = self.volgrids[product].volnode[expiry]        
         if is_recalib:
             self.volgrids[product].dtoday = dtoday
             self.volgrids[product].fwd[expiry] = fwd            
             vg.setFwd(fwd)
             vg.setToday(dtoday)            
             vg.initialize()        
-        for instID in self.volgrids[product].option_insts[expiry]:
+        for instID in self.volgrids[product].option_insts[expiry]:            
             inst = self.instruments[instID]
-            inst.pricer.setFwd(fwd)
-            inst.pricer.setFwd(dtoday)
-            inst.update_greeks()
+            optpricer = inst.pricer                                        
+            optpricer.setFwd(fwd)
+            optpricer.setToday(dtoday)            
+            inst.update_greeks()            
         return
     
     def reval_volgrids(self, prod, is_recalib = True):
         for expiry in self.volgrids[prod].option_insts:
-            self.reval_volgrid(prod, expiry, is_recalib)
+            self.calc_volgrid(prod, expiry, is_recalib)
         return
     
     def create_volgrids(self):
