@@ -1,6 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
 import ctp.futures
 from agent import *
+import optagent
 from base import *
 import logging
 import order
@@ -186,10 +187,18 @@ def create_trader(trader_cfg, instruments, strat_cfg, agent_name, tday=datetime.
     #logging.basicConfig(filename="ctp_trade.log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     #logging.info(u'broker_id=%s,investor_id=%s,passwd=%s' % (trader_cfg.broker_id,trader_cfg.investor_id,trader_cfg.passwd))
     strategies = strat_cfg['strategies']
-    folder = strat_cfg['folder']
-    daily_days = strat_cfg['daily_data_days']
-    min_days = strat_cfg['min_data_days']
-    myagent = Agent(agent_name, None, None, instruments, strategies, tday, folder, daily_days, min_days) 
+    config = {}
+    config['folder'] = strat_cfg['folder']
+    config['daily_data_days'] = strat_cfg['daily_data_days']
+    config['min_data_days']   = strat_cfg['min_data_days']
+    if 'enable_option' in strat_cfg:
+        config['enable_option'] = strat_cfg['enable_option']
+    else:
+        config['enable_option'] = False
+    agent_class = Agent
+    if config['enable_option'] == True:
+        agent_class = optagent.OptionAgent
+    myagent = agent_class(agent_name, None, None, instruments, strategies, tday, config) 
     if trader_cfg == None:
         myagent, trader = emulator.create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday)
     else:

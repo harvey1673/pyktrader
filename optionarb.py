@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import instrument
 from misc import *
-import tradeagent as agent
+import agent
 import strategy
 
 def get_option_map(underliers, cont_mths, strikes):
@@ -199,7 +199,7 @@ class OptionArbStrat(strategy.Strategy):
         if (bound['lower']!= None) and (bound['lower'] > self.ask_prices[idx] + self.profit_ratio * b_scaler):
             self.open_tradepos(idx, ORDER_BUY, self.ask_prices[idx])
             need_save = True
-        elif (bound['upper']!= None) and (bound['upper'] < self.sell_prices[idx] - self.profit_ratio * s_scaler): 
+        elif (bound['upper']!= None) and (bound['upper'] < self.bid_prices[idx] - self.profit_ratio * s_scaler): 
             self.open_tradepos(idx, ORDER_SELL, self.bid_prices[idx])
             need_save = True                
         return need_save

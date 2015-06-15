@@ -1,5 +1,6 @@
 ﻿# coding=utf-8
 import agent
+import optagent
 import fut_api
 import time
 import logging 
@@ -123,10 +124,18 @@ class MarketDataMock(object):
 
 def create_agent_with_mocktrader(agent_name, instruments, strat_cfg, tday):
     strategies = strat_cfg['strategies']
-    folder = strat_cfg['folder']
-    daily_days = strat_cfg['daily_data_days']
-    min_days = strat_cfg['min_data_days']
-    myagent = agent.Agent(agent_name, None, None, instruments, strategies, tday, folder, daily_days, min_days) 
+    config = {}
+    config['folder'] = strat_cfg['folder']
+    config['daily_data_days'] = strat_cfg['daily_data_days']
+    config['min_data_days']   = strat_cfg['min_data_days']
+    if 'enable_option' in strat_cfg:
+        config['enable_option'] = strat_cfg['enable_option']
+    else:
+        config['enable_option'] = False
+    agent_class = agent.Agent
+    if config['enable_option'] == True:
+        agent_class = optagent.OptionAgent    
+    myagent = agent_class(agent_name, None, None, instruments, strategies, tday, config) 
     myagent.trader = trader = TraderMock(myagent)
     return myagent, trader
 

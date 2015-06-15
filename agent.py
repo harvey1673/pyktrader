@@ -9,10 +9,13 @@ import order as order
 import math
 import os
 import csv
+import instrument
 import pandas as pd
 from base import *
 from misc import *
 import data_handler
+import pyktlib
+import numpy as np
 
 MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
@@ -555,130 +558,6 @@ class CTPTraderRspMixin(object):
         '''
         self.logger.warning(u'TD:交易所撤单录入错误回报, 可能已经成交,rspInfo=%s'%(str(pRspInfo),))
         self.agent.err_order_action(pOrderAction.OrderRef,pOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
-                
-class Instrument(object):
-    def __init__(self,name):
-        self.name = name
-        self.exchange = 'CFFEX'
-        self.product = 'IF'
-        self.broker_fee = 0.0
-        #保证金率
-        self.marginrate = (0,0) #(多,空)
-        #合约乘数
-        self.multiple = 0
-        #最小跳动
-        self.tick_base = 0  #单位为0.1
-        self.start_tick_id = 0
-        self.last_tick_id = 0
-        # market snapshot
-        self.price = 0.0
-        self.prev_close = 0.0
-        self.volume = 0
-        self.open_interest = 0
-        self.last_update = datetime.datetime(1900, 1, 1, 0,0,0,0)
-        self.ask_price1 = 0.0
-        self.ask_vol1 = 0
-        self.bid_price1 = 0.0
-        self.bid_vol1 = 0
-        self.mid_price = 0.0
-        self.up_limit = 0
-        self.down_limit = 0
-        self.last_traded = datetime.datetime.now()
-        self.max_holding = (40, 40)
-        self.is_busy = False
-        self.strike = 0.0 # only used by option
-        self.otype = ''   # only used by option
-        self.underlying = ''   # only used by option
-        self.cont_mth = 205012 # only used by option and future
-        self.expiry = datetime.date(2050,12,31)
-        self.day_finalized = False
-    
-    def get_inst_info(self):
-        if self.name.isdigit():
-            self.product = 'Stock'
-            self.start_tick_id = 30000
-            self.last_tick_id = 2130000
-            self.multiple = 1
-            self.tick_base = 0.01
-            self.broker_fee = 0
-            if len(self.name) == 8:
-                self.product = 'ETF_Opt'
-                prod_info = mysqlaccess.load_stockopt_info(self.name)
-                self.exchange = prod_info['exch']
-                self.multiple = prod_info['lot_size']
-                self.tick_base = prod_info['tick_size']
-                self.strike = prod_info['strike']
-                self.otype = prod_info['otype']  
-                self.underlying = prod_info['underlying']
-                self.cont_mth = prod_info['cont_mth']
-                self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
-            elif self.name in CHN_Stock_Exch['SZE']:
-                self.exchange = 'SZE'
-            else:
-                self.exchange = 'SSE'
-            return
-        self.product = inst2product(self.name)
-        if self.product == 'IO_Opt':
-            self.underlying = self.name[:6].replace('IO','IF')
-            self.strike = float(self.name[-4:])
-            self.otype = self.name[7]
-            self.cont_mth = int(self.underlying[-4:]) + 200000 
-            self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
-            self.product = 'IO'
-        elif '_Opt' in self.product:
-            self.underlying = self.name[:5]
-            self.strike = float(self.name[-4:])
-            self.otype = self.name[7]
-            self.cont_mth = int(self.underlying[-4:]) + 200000 
-            self.expiry = get_opt_expiry(self.underlying, self.cont_mth)
-            self.product = self.product[:-4]
-        prod_info = mysqlaccess.load_product_info(self.product)
-        self.exchange = prod_info['exch']
-        if len(self.underlying) == 0:
-            if self.exchange == 'CZCE':
-                self.cont_mth = int(self.name[-3:]) + 201000
-            else:
-                self.cont_mth = int(self.name[-4:]) + 200000
-        self.start_tick_id =  prod_info['start_min'] * 1000
-        if self.product in night_session_markets:
-            self.start_tick_id = 300000
-        self.last_tick_id =  prod_info['end_min'] * 1000     
-        self.multiple = prod_info['lot_size']
-        self.tick_base = prod_info['tick_size']
-        self.broker_fee = prod_info['broker_fee']
-        return
-    
-    def get_margin_rate(self):
-        if self.name.isdigit():
-            if len(self.name) == 6:
-                self.marginrate = (1,0)
-            else:
-                self.marginrate = (1,0)
-            return
-        self.marginrate = mysqlaccess.load_inst_marginrate(self.name)
-        return
-
-    def calc_margin_amount(self, direction, price = 0.0):
-        if self.product in option_market_products:
-            if self.product == 'IO':
-                a = 0.15
-                b= 0.1
-            elif self.product == 'ETF_Opt':
-                a = 0.12
-                b = 0.07
-            my_margin = self.price
-            if direction == ORDER_SELL:
-                if price == 0.0:
-                    price = self.strike
-                if self.otype == 'C':
-                    my_margin += max(price * a - max(self.strike-price, 0), price * b)
-                else:
-                    my_margin += max(price * a - max(price - self.strike, 0), self.strike * b)
-            return my_margin * self.multiple
-        else:
-            my_marginrate = self.marginrate[0] if direction == ORDER_BUY else self.marginrate[1]
-            #print 'self.name=%s,price=%s,multiple=%s,my_marginrate=%s' % (self.name,price,self.multiple,my_marginrate)
-            return self.price * self.multiple * my_marginrate
      
 class AbsAgent(object):
     ''' 抽取与交易无关的功能，便于单独测试
@@ -719,8 +598,7 @@ class AbsAgent(object):
 
 class Agent(AbsAgent):
  
-    def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), 
-                 folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', daily_data_days=60, min_data_days=5, live_trading = False):
+    def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), config = {}):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -728,13 +606,26 @@ class Agent(AbsAgent):
         AbsAgent.__init__(self)
         ##计时, 用来激发队列
         ##
+        folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\'
+        if 'folder' in config:
+            folder = config['folder']
+        daily_data_days = 60
+        if 'daily_data_days' in config:
+            daily_data_days = config['daily_data_days']   
+        min_data_days = 5
+        if 'min_data_days' in config:
+            min_data_days = config['min_data_days']        
+        live_trading = False
+        if 'live_trading' in config:
+            live_trading = config['live_trading']  
         self.logger = logging.getLogger('ctp.agent')
         self.mdapis = []
         self.trader = trader
         self.name = name
         self.folder = folder + self.name + '\\'
         self.cuser = cuser
-        self.instruments = self.create_instruments(instruments)
+        self.instruments = {}
+        self.create_instruments(instruments, tday)
         self.request_id = 1
         self.initialized = False
         self.scur_day = tday
@@ -805,17 +696,6 @@ class Agent(AbsAgent):
 
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
-
-    def create_instruments(self, names):
-        '''根据名称序列和策略序列创建instrument
-           其中策略序列的结构为:
-           [总最大持仓量,策略1,策略2...] 
-        '''
-        objs = dict([(name,Instrument(name)) for name in names])
-        for name in names:
-            objs[name].get_inst_info()
-            objs[name].get_margin_rate()
-        return objs
         
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
@@ -825,14 +705,14 @@ class Agent(AbsAgent):
             初始化，如保证金率，账户资金等
         '''
         if not self.initialized:
-            self.resume()
             for inst in self.instruments:
-                self.instruments[inst].get_margin_rate()
-            for strat in self.strategies:
-                strat.initialize()
-            for inst in self.positions:
-                self.positions[inst].re_calc()
-            self.calc_margin() 
+                self.instruments[inst].update_param(self.scur_day)
+            self.resume()
+            #for strat in self.strategies:
+            #    strat.initialize()
+            #for inst in self.positions:
+            #    self.positions[inst].re_calc()
+            #self.calc_margin() 
         self.qry_commands.append(self.fetch_trading_account)
         #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
@@ -863,7 +743,7 @@ class Agent(AbsAgent):
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
             for inst in self.instruments:  
-                if (len(self.instruments[inst].underlying) > 0):
+                if (self.instruments[inst].ptype == instrument.ProductType.Option):
                     continue
                 self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
                 df = self.day_data[inst]
@@ -880,7 +760,7 @@ class Agent(AbsAgent):
             d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             d_end = self.scur_day
             for inst in self.instruments: 
-                if (len(self.instruments[inst].underlying) > 0):
+                if (self.instruments[inst].ptype == instrument.ProductType.Option):
                     continue
                 min_start = int(self.instruments[inst].start_tick_id/1000)
                 min_end = int(self.instruments[inst].last_tick_id/1000)+1
@@ -909,7 +789,7 @@ class Agent(AbsAgent):
                             ts = fobj.sfunc(df)
                             df[ts.name]= pd.Series(ts, index=df.index)
         return
-        
+
     def resume(self):
         #self.fetch_order()   
         #self.fetch_trade()     
@@ -1014,7 +894,7 @@ class Agent(AbsAgent):
             inst = self.instruments[instID]
             pos = self.positions[instID]
             under_price = 0.0
-            if len(inst.underlying) > 0:
+            if (inst.ptype == instrument.ProductType.Option):
                 under_price = self.instruments[inst.underlying].price
             #print inst.name, inst.marginrate, inst.calc_margin_amount(ORDER_BUY), inst.calc_margin_amount(ORDER_SELL)
             locked_margin += pos.locked_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
@@ -1101,7 +981,8 @@ class Agent(AbsAgent):
         if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
                 ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick >= curr_tick))):
             #self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
-            self.late_tick[inst].append(tick)
+            if self.save_flag:
+                self.late_tick[inst].append(tick)
             return False
                 
         self.instruments[inst].last_update = tick.timestamp
@@ -1164,7 +1045,7 @@ class Agent(AbsAgent):
                     last_tick = self.tick_data[inst][-1]
                     self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                     self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (len(self.instruments[inst].underlying)==0):
+                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
                         self.min_switch(inst)
                     else:
                         if self.save_flag:
@@ -1232,7 +1113,7 @@ class Agent(AbsAgent):
                     last_tick = self.tick_data[inst][-1]
                     self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                     self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (len(self.instruments[inst].underlying)==0):
+                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
                         self.min_switch(inst)
                     else:
                         if self.save_flag:
@@ -1243,7 +1124,7 @@ class Agent(AbsAgent):
                 if (self.cur_day[inst]['close']>0):
                     mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                     df = self.day_data[inst]
-                    if (len(self.instruments[inst].underlying)==0):
+                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
                         for fobj in self.day_data_func:
                             fobj.rfunc(df)
                     if self.save_flag:
@@ -1479,7 +1360,7 @@ class Agent(AbsAgent):
                     else:
                         direction = ORDER_SELL
                     under_price = 0.0
-                    if len(self.instruments[inst].underlying) > 0:
+                    if (self.instruments[inst].ptype == instrument.ProductType.Option):
                         under_price = self.instruments[self.instruments[inst].underlying].price
                     required_margin += vol * self.instruments[inst].calc_margin_amount(direction, under_price)
                     cond = {}
@@ -1739,6 +1620,26 @@ class Agent(AbsAgent):
         '''
         self.check_qry_commands()
         
+    def create_instruments(self, names, tday):
+        '''根据名称序列和策略序列创建instrument
+           其中策略序列的结构为:
+           [总最大持仓量,策略1,策略2...] 
+        '''
+        insts = {}
+        for name in names:
+            if name.isdigit():
+                if len(name) == 8:
+                    insts[name] = instrument.StockOptionInst(name)
+                else:
+                    insts[name] = instrument.Stock(name)
+            else:
+                if len(name) > 10:
+                    insts[name] = instrument.FutOptionInst(name)
+                else:
+                    insts[name] = instrument.Future(name)
+            insts[name].update_param(tday)
+        self.instruments = insts
+        return
 
 class SaveAgent(Agent):
     def init_init(self):
