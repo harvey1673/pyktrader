@@ -70,6 +70,7 @@ class OptionArbStrat(strategy.Strategy):
                         self.put_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None}
                         idx += 1
         strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, email_notify)
+        self.order_type = OPT_MARKET_ORDER
         self.profit_ratio = 0.1
         self.exit_ratio = 0.01
         self.bid_prices = [0.0] * len(underliers)
@@ -115,12 +116,12 @@ class OptionArbStrat(strategy.Strategy):
         ask1 = [ self.agent.instruments[inst].ask_price1 for inst in self.underliers[idx]]
         bid1 = [ self.agent.instruments[inst].bid_price1 for inst in self.underliers[idx]]
         volumes = self.volumes[idx]
-        self.bid_prices[idx] = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v > 0])
-        self.bid_prices[idx] += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v < 0])
-        self.bid_prices[idx] = self.bid_prices[idx]/conv_f[-1]
-        self.ask_prices[idx] = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v < 0])
-        self.ask_prices[idx] += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v > 0])
-        self.ask_prices[idx] = self.ask_prices[idx]/conv_f[-1]
+        bid_p = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v > 0])
+        bid_p += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v < 0])
+        self.bid_prices[idx] = bid_p/conv_f[-1]        
+        ask_p = sum([p*v*cf for p, v, cf in zip(bid1, volumes, conv_f) if v < 0])
+        ask_p += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v > 0])
+        self.ask_prices[idx] = ask_p/conv_f[-1]
         return
     
     def tick_run(self, ctick):
@@ -170,7 +171,7 @@ class OptionArbStrat(strategy.Strategy):
                         idx = fly_dict[key]['idx']
                         if self.update_positions(idx):
                             need_save = True
-                        if self.check_open_arb_pos(idx, spd_dict[key]):
+                        if self.check_open_arb_pos(idx, fly_dict[key]):
                             need_save = True                          
         if need_save:
             self.save_state()
