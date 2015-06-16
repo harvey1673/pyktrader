@@ -80,7 +80,7 @@ class StratGui(object):
         self.stringvars = {}
         self.entry_fields = []
         self.status_fields = []
-		self.shared_fields = []
+        self.shared_fields = []
         self.field_types = {}
         self.lblframe = None
         self.canvas = None
@@ -91,45 +91,46 @@ class StratGui(object):
         fields = self.entry_fields + self.status_fields
         params = self.app.get_strat_params(self.name, fields)
         for field in fields:
-			if field in self.shared_fields:
-				value = params[field]
-				if field in self.entry_fields:
-					ent.delete(0, tk.END)
-					ent.insert(0, value)
-				elif field in self.status_fields:
-					self.stringvars[field].set(keepdigit(value, 4))
-			else:
-				for idx, underlier in enumerate(self.underliers):
-					under_key = ','.join(underlier)
-					value = params[field][idx]
-					vtype = self.field_types[field]
-					value = type2str(value, vtype)
-					if field in self.entry_fields:
-						ent = self.entries[under_key][field]
-						ent.delete(0, tk.END)
-						ent.insert(0, value)
-					elif field in self.status_fields:
-						self.stringvars[under_key][field].set(keepdigit(value, 4))
+            if field in self.shared_fields:
+                value = params[field]
+                if field in self.entry_fields:
+                    ent = self.entries[field]
+                    ent.delete(0, tk.END)
+                    ent.insert(0, value)
+                elif field in self.status_fields:
+                    self.stringvars[field].set(keepdigit(value, 4))
+            else:
+                for idx, underlier in enumerate(self.underliers):
+                    under_key = ','.join(underlier)
+                    value = params[field][idx]
+                    vtype = self.field_types[field]
+                    value = type2str(value, vtype)
+                    if field in self.entry_fields:
+                        ent = self.entries[under_key][field]
+                        ent.delete(0, tk.END)
+                        ent.insert(0, value)
+                    elif field in self.status_fields:
+                        self.stringvars[under_key][field].set(keepdigit(value, 4))
         return
         
     def set_params(self):
         params = {}
         for field in self.entry_fields:
             params[field] = []
-			if field in self.shared_fields:
-				ent = self.entries[field]
-				value = ent.get()
-				vtype = self.field_types[field]
+            if field in self.shared_fields:
+                ent = self.entries[field]
+                value = ent.get()
+                vtype = self.field_types[field]
                 value = str2type(value, vtype)
                 params[field].append(value)
-			else:
-				for underlier in self.underliers:
-					under_key = ','.join(underlier)
-					ent = self.entries[under_key][field]
-					value = ent.get()
-					vtype = self.field_types[field]
-					value = str2type(value, vtype)
-					params[field].append(value)
+            else:
+                for underlier in self.underliers:
+                    under_key = ','.join(underlier)
+                    ent = self.entries[under_key][field]
+                    value = ent.get()
+                    vtype = self.field_types[field]
+                    value = str2type(value, vtype)
+                    params[field].append(value)
         self.app.set_strat_params(self.name, params)
         return
 
@@ -153,30 +154,32 @@ class StratGui(object):
         #self.lblframe.grid_columnconfigure(1, weight=1)     
         entries = {}
         stringvars = {}
-		row_id = 0
+        row_id = 0
         set_btn = ttk.Button(self.lblframe, text='Set', command=self.set_params)
         set_btn.grid(row=row_id, column=1, sticky="ew")
         refresh_btn = ttk.Button(self.lblframe, text='Refresh', command=self.get_params)
         refresh_btn.grid(row=row_id, column=2, sticky="ew")
         recalc_btn = ttk.Button(self.lblframe, text='Recalc', command=self.recalc)
-        recalc_btn.grid(row=row_id, column=3, sticky="ew")		
+        recalc_btn.grid(row=row_id, column=3, sticky="ew")        
         row_id += 1
-		for idx, field in enumerate(self.shared_fields)
+        for idx, field in enumerate(self.shared_fields):
             lbl = ttk.Label(self.lblframe, text = field, anchor='w')
             lbl.grid(row=row_id, column=idx, sticky="ew")
-			if field in self.entry_fields:
+            if field in self.entry_fields:
                 ent = ttk.Entry(self.lblframe)
-                ent.grid(row=row_id+1, column=col_id+idx, sticky="ew")
+                ent.grid(row=row_id+1, column=idx, sticky="ew")
                 ent.insert(0, "0")
                 entries[field] = ent
-			elif field in self.status_fields:
+            elif field in self.status_fields:
                 v= get_type_var(self.field_types[field])
                 lab = ttk.Label(self.lblframe, textvariable = v, anchor='w')
-                lab.grid(row=row_id+1, column=col_id+idx, sticky="ew")
+                lab.grid(row=row_id+1, column=idx, sticky="ew")
                 v.set('0')
-                stringvars[field] = v       			
-		row_id += 2
-		fields = ['assets'] + self.entry_fields + self.status_fields
+                stringvars[field] = v                   
+        row_id += 2
+        local_entry_fields = [ f for f in self.entry_fields if f not in self.shared_fields]
+        local_status_fields = [ f for f in self.status_fields if f not in self.shared_fields]
+        fields = ['assets'] + local_entry_fields + local_status_fields
         for idx, field in enumerate(fields):
             lbl = ttk.Label(self.lblframe, text = field, anchor='w')
             lbl.grid(row=row_id, column=idx, sticky="ew")
@@ -187,15 +190,13 @@ class StratGui(object):
             inst_lbl.grid(row=row_id, column=0, sticky="ew")
             col_id = 1
             entries[under_key] = {}
-			local_entry_fields = [ f for f in self.entry_fields if f not in self.shared_fields]
             for idx, field in enumerate(local_entry_fields):
                 ent = ttk.Entry(self.lblframe)
                 ent.grid(row=row_id, column=col_id+idx, sticky="ew")
                 ent.insert(0, "0")
                 entries[under_key][field] = ent
             col_id += len(local_entry_fields)
-            stringvars[under_key] = {}
-			local_status_fields = [ f for f in self.status_fields if f not in self.shared_fields]
+            stringvars[under_key] = {}            
             for idx, field in enumerate(local_status_fields):
                 v= get_type_var(self.field_types[field])
                 lab = ttk.Label(self.lblframe, textvariable = v, anchor='w')
@@ -215,9 +216,9 @@ class StratGui(object):
 class DTStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
-        self.entry_fields = ['TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
+        self.entry_fields = ['NumTick', 'OrderType', 'MinRng', 'MaWin', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
         self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'CurMa'] 
-		self.shared_fields = []
+        self.shared_fields = ['NumTick', 'OrderType', 'MinRng', 'MaWin']
         self.field_types = {'TradeUnit':'int', 
                             'Lookbacks':'int', 
                             'Ratios': 'floatlist', 
@@ -225,15 +226,18 @@ class DTStratGui(StratGui):
                             'TdayOpen': 'float',
                             'CurrPrices': 'float',
                             'CurRng':'float',
-                            'CurMa': 'float'}
+                            'CurMa': 'float',
+                            'NumTick': 'int', 
+                            'MaWin': 'int',
+                            'OrderType': 'str'}
                         
 class RBStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId']
+        self.entry_fields = ['NumTick', 'OrderType', 'EntryLimit', 'DailyCloseBuffer', 'TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId']
         self.status_fields = ['CurrPrices', 'Sbreak', 'Bsetup', 'Benter', 'Senter', 'Ssetup', 'Bbreak']
-		self.shared_fields = []
+        self.shared_fields = ['NumTick', 'OrderType', 'EntryLimit', 'DailyCloseBuffer']
         self.field_types = {'TradeUnit':'int', 
                             'MinRng':'float', 
                             'Ratios': 'floatlist', 
@@ -245,15 +249,19 @@ class RBStratGui(StratGui):
                             'Benter':'float', 
                             'Senter':'float', 
                             'Ssetup':'float',
-                            'TrailLoss':'float' }        
+                            'TrailLoss':'float',
+                            'NumTick': 'int',
+                            'EntryLimit': 'int',
+                            'DailyCloseBuffer': 'int',
+                            'OrderType': 'str' }        
 
 class TLStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['TradeUnit']
+        self.entry_fields = ['NumTick', 'OrderType', 'TradeUnit']
         self.status_fields = ['CurrPrices', 'TrailLoss', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
-		self.shared_fields = []
+        self.shared_fields = ['NumTick', 'OrderType']
         self.field_types = {'TradeUnit':'int', 
                             'TrailLoss': 'float',
                             'CurrPrices': 'float',
@@ -261,20 +269,26 @@ class TLStratGui(StratGui):
                             'EntryHigh':'float',
                             'EntryLow': 'float',
                             'ExitHigh': 'float',
-                            'ExitLow':  'float'} 
+                            'ExitLow':  'float',
+                            'NumTick': 'int',
+                            'OrderType': 'str' } 
 
 class OptionArbStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = []
+        self.entry_fields = ['ProfitRatio', 'ExitRatio']
         self.status_fields = ['TradeUnit', 'BidPrices', 'AskPrices', 'DaysToExpiry', 'TradeMargin'] 
-		self.shared_fields = []
+        self.shared_fields = ['NumTick', 'OrderType', 'ProfitRatio', 'ExitRatio']
         self.field_types = {'TradeUnit':'int', 
                             'BidPrices': 'float',
                             'AskPrices': 'float',
                             'DaysToExpiry':'int',
-                            'TradeMargin':'floatlist'} 
+                            'TradeMargin':'floatlist',
+                            'NumTick': 'int',
+                            'OrderType': 'str',
+                            'ProfitRatio': 'float', 
+                            'ExitRatio': 'float'} 
                    
 class OptVolgridGui(object):
     def __init__(self, vg, app, master):

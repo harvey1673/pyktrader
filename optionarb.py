@@ -83,33 +83,33 @@ class OptionArbStrat(strategy.Strategy):
     def initialize(self):
         self.load_state()
         self.update_margin()
-		for fut, strike_list in zip(future_conts, strikes):
-			slen = len(strike_list)
-			for i, strike in enumerate(strike_list):
-				key = (fut, strike)
-				idx = self.cp_parity[key]['idx']
-				insts = self.underliers[idx]
-				conv_f = self.agent.instruments[insts[-1]].multiple
-				self.cp_parity[key]['scaler'] = conv_f
-				if (i < slen - 1):
-					idx = self.call_spread[key]['idx']
-					insts = self.underliers[idx]
-					conv_f = self.agent.instruments[insts[-1]].multiple
-					self.call_spread[key]['scaler'] = conv_f
-					idx = self.put_spread[key]['idx']
-					insts = self.underliers[idx]
-					conv_f = self.agent.instruments[insts[-1]].multiple
-					self.put_spread[key]['scaler'] = conv_f
-					if i > 0:
-						idx = self.call_bfly[key]['idx']
-						insts = self.underliers[idx]
-						conv_f = self.agent.instruments[insts[-1]].multiple
-						self.call_bfly[key]['scaler'] = conv_f
-						idx = self.put_bfly[key]['idx']
-						insts = self.underliers[idx]
-						conv_f = self.agent.instruments[insts[-1]].multiple
-						self.put_bfly[key]['scaler'] = conv_f						
-		return
+        for fut, strike_list in zip(self.future_conts, self.strikes):
+            slen = len(strike_list)
+            for i, strike in enumerate(strike_list):
+                key = (fut, strike)
+                idx = self.cp_parity[key]['idx']
+                insts = self.underliers[idx]
+                conv_f = self.agent.instruments[insts[-1]].multiple
+                self.cp_parity[key]['scaler'] = conv_f
+                if (i < slen - 1):
+                    idx = self.call_spread[key]['idx']
+                    insts = self.underliers[idx]
+                    conv_f = self.agent.instruments[insts[-1]].multiple
+                    self.call_spread[key]['scaler'] = conv_f
+                    idx = self.put_spread[key]['idx']
+                    insts = self.underliers[idx]
+                    conv_f = self.agent.instruments[insts[-1]].multiple
+                    self.put_spread[key]['scaler'] = conv_f
+                    if i > 0:
+                        idx = self.call_bfly[key]['idx']
+                        insts = self.underliers[idx]
+                        conv_f = self.agent.instruments[insts[-1]].multiple
+                        self.call_bfly[key]['scaler'] = conv_f
+                        idx = self.put_bfly[key]['idx']
+                        insts = self.underliers[idx]
+                        conv_f = self.agent.instruments[insts[-1]].multiple
+                        self.put_bfly[key]['scaler'] = conv_f                        
+        return
     
     def update_margin(self):
         for instID in self.instIDs:
@@ -132,9 +132,6 @@ class OptionArbStrat(strategy.Strategy):
         pass
     
     def save_local_variables(self, file_writer):
-        pass
-    
-    def setup_trading(self):
         pass
 
     def calc_curr_price(self, idx):
