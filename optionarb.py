@@ -41,33 +41,33 @@ class OptionArbStrat(strategy.Strategy):
                 underliers.append([self.option_map[call_key], self.option_map[put_key], fut])
                 volumes.append([3, -3, -1])
                 trade_units.append(1)
-                self.cp_parity[(fut, strike)] = {'idx':idx, 'lower': 0, 'upper':0 }
+                self.cp_parity[(fut, strike)] = {'idx':idx, 'lower': 0, 'upper':0, 'scaler': 300.0 }
                 idx += 1
                 if (i < slen - 1):
                     next_call = (fut, 'C', strike_list[i+1])
                     underliers.append([self.option_map[call_key], self.option_map[next_call]])
                     volumes.append([1, -1])
                     trade_units.append(1)
-                    self.call_spread[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': strike_list[i+1] - strike }
+                    self.call_spread[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': strike_list[i+1] - strike, 'scaler': 100.0 }
                     idx += 1
                     next_put = (fut, 'P', strike_list[i+1])
                     underliers.append([self.option_map[next_put], self.option_map[put_key]])
                     volumes.append([1, -1])
                     trade_units.append(1)
-                    self.put_spread[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': strike_list[i+1] - strike  }
+                    self.put_spread[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': strike_list[i+1] - strike, 'scaler': 100.0  }
                     idx += 1
                     if i > 0:
                         prev_call = (fut, 'C', strike_list[i-1])
                         underliers.append([self.option_map[prev_call], self.option_map[call_key], self.option_map[next_call]])
                         volumes.append([1, -2, 1])
                         trade_units.append(1)
-                        self.call_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None}
+                        self.call_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None, 'scaler': 100.0}
                         idx += 1
                         prev_put = (fut, 'P', strike_list[i-1])
                         underliers.append([self.option_map[prev_put], self.option_map[put_key], self.option_map[next_put]])
                         volumes.append([1, -2, 1])
                         trade_units.append(1)
-                        self.put_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None}
+                        self.put_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None, 'scaler': 100.0}
                         idx += 1
         strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, email_notify)
         self.order_type = OPT_MARKET_ORDER
@@ -83,7 +83,33 @@ class OptionArbStrat(strategy.Strategy):
     def initialize(self):
         self.load_state()
         self.update_margin()
-        pass 
+		for fut, strike_list in zip(future_conts, strikes):
+			slen = len(strike_list)
+			for i, strike in enumerate(strike_list):
+				key = (fut, strike)
+				idx = self.cp_parity[key]['idx']
+				insts = self.underliers[idx]
+				conv_f = self.agent.instruments[insts[-1]].multiple
+				self.cp_parity[key]['scaler'] = conv_f
+				if (i < slen - 1):
+					idx = self.call_spread[key]['idx']
+					insts = self.underliers[idx]
+					conv_f = self.agent.instruments[insts[-1]].multiple
+					self.call_spread[key]['scaler'] = conv_f
+					idx = self.put_spread[key]['idx']
+					insts = self.underliers[idx]
+					conv_f = self.agent.instruments[insts[-1]].multiple
+					self.put_spread[key]['scaler'] = conv_f
+					if i > 0:
+						idx = self.call_bfly[key]['idx']
+						insts = self.underliers[idx]
+						conv_f = self.agent.instruments[insts[-1]].multiple
+						self.call_bfly[key]['scaler'] = conv_f
+						idx = self.put_bfly[key]['idx']
+						insts = self.underliers[idx]
+						conv_f = self.agent.instruments[insts[-1]].multiple
+						self.put_bfly[key]['scaler'] = conv_f						
+		return
     
     def update_margin(self):
         for instID in self.instIDs:
@@ -94,13 +120,13 @@ class OptionArbStrat(strategy.Strategy):
             self.inst_margin[instID] = [inst.calc_margin_amount(ORDER_BUY, ins_p), inst.calc_margin_amount(ORDER_SELL, ins_p)]
         for idx, under in enumerate(self.underliers):
             expiry = self.agent.instruments[under[0]].expiry
-            self.days_to_expiry[idx] = (expiry-self.agent.scur_day).days + 1
+            self.days_to_expiry[idx] = (expiry-self.agent.scur_day).days + 0.5
             margin_l = sum([v*self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v > 0])
             margin_l -= sum([ v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v < 0])
             margin_s = sum([  v * self.inst_margin[ins][1] for v, ins in zip(self.volumes[idx], under) if v > 0])            
             margin_s -= sum([ v * self.inst_margin[ins][0] for v, ins in zip(self.volumes[idx], under) if v < 0])
             self.trade_margin[idx] = [margin_l, margin_s]               
-        return 
+        return
     
     def load_local_variables(self, row):
         pass
@@ -182,8 +208,8 @@ class OptionArbStrat(strategy.Strategy):
         if len(self.submitted_pos[idx]) > 0:
             return False
         self.calc_curr_price(idx)
-        b_scaler = self.trade_margin[idx][0]*self.days_to_expiry[idx]
-        s_scaler = self.trade_margin[idx][1]*self.days_to_expiry[idx]
+        b_scaler = self.trade_margin[idx][0]*self.days_to_expiry[idx]/bound['scaler']
+        s_scaler = self.trade_margin[idx][1]*self.days_to_expiry[idx]/bound['scaler']
         for tradepos in self.positions[idx]:
             buysell = tradepos.direction
             if ((buysell > 0) and (bound['lower'] != None) and 
