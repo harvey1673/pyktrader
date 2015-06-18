@@ -30,12 +30,13 @@ def filter_main_cont(sdate):
             main_insts.append(inst)
     return main_insts
         
-def save_all(tday):
+def save_all(tday, prod_md = misc.PROD_USER):
     logging.basicConfig(filename="save_all_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     save_insts = filter_main_cont(tday)
     app_name = 'SaveAgent'
-    my_agent = agent.SaveAgent(name = app_name, trader = None, cuser = None, instruments=save_insts, daily_data_days=0, min_data_days=0, tday = tday)
-    fut_api.make_user(my_agent, misc.PROD_USER)
+    config = {'daily_data_days': 0, 'min_data_days': 0}
+    my_agent = agent.SaveAgent(name = app_name, trader = None, cuser = None, instruments=save_insts,tday = tday, config = config)
+    fut_api.make_user(my_agent, prod_md)
     try:
         while 1:
             time.sleep(1)
