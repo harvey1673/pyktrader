@@ -1017,61 +1017,61 @@ class Agent(AbsAgent):
         else:
             self.instruments[inst].is_busy = True        
         
-        try:
-            if (self.cur_day[inst]['open'] == 0.0):
-                self.cur_day[inst]['open'] = tick.price
-                #mysqlaccess.insert_daily_data(inst, self.cur_day[inst], True)
-                self.logger.info('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
-            self.cur_day[inst]['close'] = tick.price
-            self.cur_day[inst]['high']  = tick.high
-            self.cur_day[inst]['low']   = tick.low
-            self.cur_day[inst]['openInterest'] = tick.openInterest
-            self.cur_day[inst]['volume'] = tick.volume
-            self.cur_day[inst]['date'] = tick.timestamp.date()
+        #try:
+        if (self.cur_day[inst]['open'] == 0.0):
+            self.cur_day[inst]['open'] = tick.price
+            #mysqlaccess.insert_daily_data(inst, self.cur_day[inst], True)
+            self.logger.info('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
+        self.cur_day[inst]['close'] = tick.price
+        self.cur_day[inst]['high']  = tick.high
+        self.cur_day[inst]['low']   = tick.low
+        self.cur_day[inst]['openInterest'] = tick.openInterest
+        self.cur_day[inst]['volume'] = tick.volume
+        self.cur_day[inst]['date'] = tick.timestamp.date()
 
-            for strat in self.strategies:
-                if (inst in strat.instIDs):
-                    strat.tick_run(tick)
-                    
-            if (tick_min == self.cur_min[inst]['min_id']):
-                self.tick_data[inst].append(tick)
-                self.cur_min[inst]['close'] = tick.price
-                if self.cur_min[inst]['high'] < tick.price:
-                    self.cur_min[inst]['high'] = tick.price
-                if self.cur_min[inst]['low'] > tick.price:
-                    self.cur_min[inst]['low'] = tick.price
-            else:
-                if (len(self.tick_data[inst]) > 0) :
-                    last_tick = self.tick_data[inst][-1]
-                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
-                        self.min_switch(inst)
-                    else:
-                        if self.save_flag:
-                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
-                            if len(self.late_tick[inst])>0:
-                                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
-                                self.late_tick[inst] = []                     
-                    self.cur_min[inst]['volume'] = last_tick.volume                    
+        for strat in self.strategies:
+            if (inst in strat.instIDs):
+                strat.tick_run(tick)
                 
-                self.tick_data[inst] = []
-                self.cur_min[inst]['open']  = tick.price
-                self.cur_min[inst]['close'] = tick.price
-                self.cur_min[inst]['high']  = tick.price
-                self.cur_min[inst]['low']   = tick.price
-                self.cur_min[inst]['min_id']  = tick_min
-                self.cur_min[inst]['openInterest'] = tick.openInterest
-                self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
-                if ((tick_min>0) and (tick.price>0)): 
-                    self.tick_data[inst].append(tick)
+        if (tick_min == self.cur_min[inst]['min_id']):
+            self.tick_data[inst].append(tick)
+            self.cur_min[inst]['close'] = tick.price
+            if self.cur_min[inst]['high'] < tick.price:
+                self.cur_min[inst]['high'] = tick.price
+            if self.cur_min[inst]['low'] > tick.price:
+                self.cur_min[inst]['low'] = tick.price
+        else:
+            if (len(self.tick_data[inst]) > 0) :
+                last_tick = self.tick_data[inst][-1]
+                self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+                self.cur_min[inst]['openInterest'] = last_tick.openInterest
+                if (self.instruments[inst].ptype != instrument.ProductType.Option):
+                    self.min_switch(inst)
+                else:
+                    if self.save_flag:
+                        mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+                        if len(self.late_tick[inst])>0:
+                            mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
+                            self.late_tick[inst] = []                     
+                self.cur_min[inst]['volume'] = last_tick.volume                    
             
-            if tick_id >= self.instruments[inst].last_tick_id:
-                self.day_finalize([inst])
+            self.tick_data[inst] = []
+            self.cur_min[inst]['open']  = tick.price
+            self.cur_min[inst]['close'] = tick.price
+            self.cur_min[inst]['high']  = tick.price
+            self.cur_min[inst]['low']   = tick.price
+            self.cur_min[inst]['min_id']  = tick_min
+            self.cur_min[inst]['openInterest'] = tick.openInterest
+            self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
+            if ((tick_min>0) and (tick.price>0)): 
+                self.tick_data[inst].append(tick)
+        
+        if tick_id >= self.instruments[inst].last_tick_id:
+            self.day_finalize([inst])
 
-        except Exception as e:
-            print "exception = %s time = %s" % (e, datetime.datetime.now())
-            pass
+        #except Exception as e:
+            #print "exception = %s time = %s" % (e, datetime.datetime.now())
+            #pass
         self.instruments[inst].is_busy = False               
         return True  
     
