@@ -421,6 +421,30 @@ def SVAPO(df, period = 8, cutoff = 1, stdev_l = 1.3, stdev_period = 100):
     HA = HEIKEN_ASHI(df, 1)
     haCl = (HA.HAopen + HA.HAclose + HA.HAhigh + HA.HAlow)/4.0
     haC = TEMA( haCl, 0.625 * period )
-    Vavg = tsMA(df['volume'], 5 * period)
-    Vc = pd.concat([df['volume'], Vavg*2], axis=1).min(axis=1)
-    
+    vave = tsMA(df['volume'], 5 * period).shift(1)
+	vc = pd.concat([df['volume'], vave*2], axis=1).min(axis=1)
+	
+# Inputs: Price(NumericSeries), Len(NumericSimple);
+# Variables: X(0), Num1(0), Num2(0), SumBars(0), SumSqrBars(0), SumY(0), Sum1(0), Sum2(0);
+
+# If Len = 0 Then
+	# LinearRegSlope=0;
+
+# SumBars = Len * (Len - 1) * .5;
+# SumSqrBars = (Len - 1) * Len * (2 * Len - 1) / 6;
+# Sum1 = 0;
+
+# For X = 0 To Len - 1 Begin
+	# Sum1= Sum1 + X * Price[X];
+# End;
+
+# SumY = Summation(Price, Len);
+# Sum2 = SumBars * SumY;
+# Num1 = Len * Sum1 - Sum2;
+# Num2 = SumBars * SumBars - Len * SumSqrBars;
+
+# If Num2 <> 0 Then 
+	# LinearRegSlope = Num1 / Num2
+# Else 
+	# LinearRegSlope = 0;    
+	
