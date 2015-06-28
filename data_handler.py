@@ -1,6 +1,7 @@
 import datetime
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 
 def conv_ohlc_freq(df, freq):
     highcol = pd.DataFrame(df['high']).resample(freq, how ='max').dropna()
@@ -415,36 +416,49 @@ def TEMA(ts, n):
     ts_ema2 = pd.Series( pd.ewma(ts_ema1, span = n, adjust = False), name = 'EMA2_' + str(n) )
     ts_ema3 = pd.Series( pd.ewma(ts_ema2, span = n, adjust = False), name = 'EMA3_' + str(n) )
     ts_tema = pd.Series( 3 * ts_ema1 - 3 * ts_ema2 + ts_ema3, name = 'TEMA_' + str(n) )
-    return pd.concat([ts_tema,ts_ema1, ts_ema2, ts_ema3], join='outer', axis=1)
+    return ts_tema
     
-def SVAPO(df, period = 8, cutoff = 1, stdev_l = 1.3, stdev_period = 100):
+def SVAPO(df, period = 8, cutoff = 1, stdev_h = 1.5, stdev_l = 1.3, stdev_period = 100):
     HA = HEIKEN_ASHI(df, 1)
     haCl = (HA.HAopen + HA.HAclose + HA.HAhigh + HA.HAlow)/4.0
     haC = TEMA( haCl, 0.625 * period )
     vave = tsMA(df['volume'], 5 * period).shift(1)
-	vc = pd.concat([df['volume'], vave*2], axis=1).min(axis=1)
-	
-# Inputs: Price(NumericSeries), Len(NumericSimple);
-# Variables: X(0), Num1(0), Num2(0), SumBars(0), SumSqrBars(0), SumY(0), Sum1(0), Sum2(0);
+    vc = pd.concat([df['volume'], vave*2], axis=1).min(axis=1)
+    vtrend = TEMA(LINEAR_REG_SLOPE(df.volume, period), period)
+    UpD = pd.Series(vc)
+    DoD = pd.Series(-vc)
+    UpD[(haC<=haC.shift(1)*(1+cutoff/1000.0))|(vtrend < vtrend.shift(1))] = 0
+    DoD[(haC>=haC.shift(1)*(1-cutoff/1000.0))|(vtrend > vtrend.shift(1))] = 0
+    delta_sum = pd.rolling_sum(UpD + DoD, period)/(vave+1)
+    svapo = pd.Series(TEMA(delta_sum, period), name = 'SVAPO_%s' % period)
+    svapo_std = pd.rolling_std(svapo, stdev_period)
+    svapo_ub = pd.Series(svapo_std * stdev_h, name = 'SVAPO_UB%s' % period)
+    svapo_lb = pd.Series(-svapo_std * stdev_l, name = 'SVAPO_LB%s' % period)
+    return pd.concat([svapo, svapo_ub, svapo_lb], join='outer', axis=1)
 
-# If Len = 0 Then
-	# LinearRegSlope=0;
+def LINEAR_REG_SLOPE(ts, n):
+    sumbars = n*(n-1)*0.5
+    sumsqrbars = (n-1)*n*(2*n-1)/6.0
+    lrs = pd.Series(index = ts.index, name = 'LINREGSLOPE_%s' % n)
+    for idx, d in enumerate(ts.index):
+        if idx >= n-1:
+            y_array = ts[idx-n+1:idx+1].values
+            x_array = np.arange(n-1,-1,-1)
+            lrs[idx] = (n * np.dot(x_array, y_array) - sumbars * y_array.sum())/(sumbars*sumbars-n*sumsqrbars)
+    return lrs
 
-# SumBars = Len * (Len - 1) * .5;
-# SumSqrBars = (Len - 1) * Len * (2 * Len - 1) / 6;
-# Sum1 = 0;
-
-# For X = 0 To Len - 1 Begin
-	# Sum1= Sum1 + X * Price[X];
-# End;
-
-# SumY = Summation(Price, Len);
-# Sum2 = SumBars * SumY;
-# Num1 = Len * Sum1 - Sum2;
-# Num2 = SumBars * SumBars - Len * SumSqrBars;
-
-# If Num2 <> 0 Then 
-	# LinearRegSlope = Num1 / Num2
-# Else 
-	# LinearRegSlope = 0;    
-	
+def DVO(df, w = [0.5, 0.5, 0, 0], N = 2, s = [0.5, 0.5], M = 252):
+    ratio = df.close/(df.high * w[0] + df.low * w[1] + df.open * w[2] + df.close * w[3])
+    theta = pd.Series(index = df.index)
+    dvo = pd.Series(index = df.index, name='DV%s_%s' % (N, M))
+    ss = np.array(list(reversed(s)))
+    for idx, d in enumerate(ratio.index):
+        if idx >= N-1:
+            y = ratio[idx-N+1:idx+1].values
+            theta[idx] = np.dot(y, ss)
+        if idx >= M+N-2:
+            ts = theta[idx-(M-1):idx+1]
+            dvo[idx] = stats.percentileofscore(ts.values, theta[idx])
+    return dvo
+            
+        
