@@ -41,7 +41,7 @@ class OptionArbStrat(strategy.Strategy):
                 underliers.append([self.option_map[call_key], self.option_map[put_key], fut])
                 volumes.append([3, -3, -1])
                 trade_units.append(1)
-                self.cp_parity[(fut, strike)] = {'idx':idx, 'lower': 0, 'upper':0, 'scaler': 300.0 }
+                self.cp_parity[(fut, strike)] = {'idx':idx, 'lower': -strike, 'upper':-strike, 'scaler': 300.0 }
                 idx += 1
                 if (i < slen - 1):
                     next_call = (fut, 'C', strike_list[i+1])
@@ -221,9 +221,9 @@ class OptionArbStrat(strategy.Strategy):
                 #self.status_notifier(msg)
                 need_save = True
         if (bound['lower']!= None) and (bound['lower'] > self.ask_prices[idx] + self.profit_ratio * b_scaler):
-            self.open_tradepos(idx, ORDER_BUY, self.ask_prices[idx])
+            self.open_tradepos(idx, 1, self.ask_prices[idx])
             need_save = True
         elif (bound['upper']!= None) and (bound['upper'] < self.bid_prices[idx] - self.profit_ratio * s_scaler): 
-            self.open_tradepos(idx, ORDER_SELL, self.bid_prices[idx])
+            self.open_tradepos(idx, -1, self.bid_prices[idx])
             need_save = True                
         return need_save
