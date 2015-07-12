@@ -16,6 +16,8 @@ from misc import *
 import data_handler
 import pyktlib
 import numpy as np
+from eventType import *
+from eventEngine import *
 
 MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
@@ -92,21 +94,24 @@ class StockTick(TickData):
         pass
         
 class CTPMdMixin(object):
-    def checkErrorRspInfo(self, info):
-        if info.ErrorID !=0:
-            self.logger.error(u"MD:ErrorID:%s,ErrorMsg:%s" %(info.ErrorID,info.ErrorMsg))
-        return info.ErrorID !=0
 
     def OnRspError(self, info, RequestId, IsLast):
-        self.logger.error(u'MD:requestID:%s,IsLast:%s,info:%s' % (RequestId,IsLast,str(info)))
-        pass
+        """错误回报"""
+        event = Event(type=EVENT_LOG)
+        log = u'行情错误回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')
+        event.dict['log'] = log
+        self.eventEngine.put(event)
     
     def OnFrontDisConnected(self, reason):
-        self.logger.info(u'MD:front disconnected,reason:%s' % (reason,))
-        pass
+        """服务器断开"""
+        event = Event(type=EVENT_LOG)
+        event.dict['log'] = u'行情服务器连接断开'
+        self.eventEngine.put(event)
     
     def OnFrontConnected(self):
-        self.logger.info(u'MD:front connected')
+        event = Event(type=EVENT_LOG)
+        event.dict['log'] = u'行情服务器连接成功'
+        self.eventEngine.put(event)
         self.user_login(self.broker_id, self.investor_id, self.passwd)
 
     def user_login(self, broker_id, investor_id, passwd):
@@ -115,8 +120,14 @@ class CTPMdMixin(object):
         pass
     
     def OnRspUserLogin(self, userlogin, info, rid, is_last):
-        self.logger.info(u'MD:user login,info:%s,rid:%s,is_last:%s' % (info,rid,is_last))
-        if is_last and not self.checkErrorRspInfo(info):
+        event = Event(type=EVENT_LOG)        
+        if info.ErrorID == 0:
+            log = u'行情服务器登陆成功'
+        else:
+            log = u'登陆回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')        
+        event.dict['log'] = log
+        self.eventEngine.put(event)
+        if is_last and (info.ErrorID == 0):
             trade_day_str = self.GetTradingDay()
             trading_day = datetime.date.today()
             if len(trade_day_str) > 0:
@@ -124,20 +135,18 @@ class CTPMdMixin(object):
                     trading_day = datetime.datetime.strptime(trade_day_str,'%Y%m%d').date()
                 except ValueError:
                     pass
-            self.logger.info(u"MD:get today's trading day:%s" % trade_day_str)
             self.subscribe_market_data(self.instruments)
             if trading_day > self.agent.scur_day:    #换日,重新设置volume
-                self.logger.info(u'MD:换日, %s-->%s' % (self.agent.scur_day,trading_day))
-                #self.agent.scur_day = scur_day
-                self.agent.day_switch(trading_day)             
+                event = Event(type=EVENT_DAYSWITCH)
+                event.dict['log'] = u'换日: %s -> %s' % (self.agent.scur_day, trading_day)
+                event.dict['date'] = trading_day
+                self.eventEngine.put(event)
+                #self.agent.day_switch(trading_day)             
 
     def OnRtnDepthMarketData(self, dp):
         try:
             if dp.LastPrice > 999999 or dp.LastPrice < 0.0001:
                 self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
-                return
-            if dp.InstrumentID not in self.instruments:
-                self.logger.warning(u'MD:收到未订阅的行情:%s' %(dp.InstrumentID,))
                 return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
             if len(dp.TradingDay.strip()) > 0:
@@ -148,7 +157,9 @@ class CTPMdMixin(object):
             timestamp = datetime.datetime.strptime(timestr, '%Y%m%d %H:%M:%S %f')
             self.last_day = timestamp.year*10000+timestamp.month*100+timestamp.day
             tick = self.market_data2tick(dp, timestamp)
-            self.agent.RtnTick(tick)
+            event = Event(type=EVENT_MARKETDATA)
+            event.dict['data'] = tick
+            self.eventEngine.put(event)            
         finally:
             pass
                 
@@ -179,7 +190,6 @@ class CTPTraderQryMixin(object):
     def query_trading_account(self):            
         req = self.ApiStruct.QryTradingAccount(BrokerID=self.broker_id, InvestorID=self.investor_id)
         r=self.ReqQryTradingAccount(req,self.agent.inc_request_id())
-        #self.logger.info(u'A:查询资金账户, 函数发出返回值:%s' % r)
         return r
 
     def query_investor_position(self, instrument_id):
@@ -223,7 +233,9 @@ class CTPTraderQryMixin(object):
     ###交易操作
     def send_order(self, iorder):
         if not self.is_logged:
-            self.logger.warning('The trader is not logged, can not send the order!')
+            event = Event(type=EVENT_LOG)
+            event.dict['log'] = 'The trader is not logged, cannot send the order, so cancelling order ref = %s, sysid = %s' % (iorder.order_ref, iorder.sys_id)
+            self.eventEngine.put(event)     
             iorder.on_cancel()
             return False 
         if iorder.direction == ORDER_BUY:
@@ -266,20 +278,23 @@ class CTPTraderQryMixin(object):
                 UserForceClose = 0,
                 TimeCondition = self.ApiStruct.TC_GFD,
                 )
-        self.logger.info(u'下单: instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % 
-                         (iorder.instrument.name,
+        event = Event(type=EVENT_LOG)
+        event.dict['log'] = u'下单: instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % (iorder.instrument.name, \
                           'open' if iorder.action_type == OF_OPEN else 'close',
                           u'多' if iorder.direction==ORDER_BUY else u'空',
                           iorder.volume,
                           iorder.limit_price, 
-                          iorder.price_type))
+                          iorder.price_type)
+        self.eventEngine.put(event) 
         r = self.ReqOrderInsert(req,self.agent.inc_request_id())
         return r
     
     def cancel_order(self, iorder):
         inst = iorder.instrument
-        self.logger.info(u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
-                % (iorder.order_ref, iorder.sys_id, inst.exchange, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume))
+        event = Event(type=EVENT_LOG)
+        event.dict['log'] = u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' % (iorder.order_ref, \
+                            iorder.sys_id, inst.exchange, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume)
+        self.eventEngine.put(event)         
         if len(iorder.sys_id) >0:
             exch = inst.exchange
             req = self.ApiStruct.InputOrderAction(
@@ -289,10 +304,11 @@ class CTPTraderQryMixin(object):
                 ExchangeID = exch,
                 OrderSysID = iorder.sys_id,
                 ActionFlag = self.ApiStruct.AF_Delete,
-                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
             )
         else:
-            self.logger.warning('order=%s has no OrderSysID, using Order_ref to cancel' % (iorder.order_ref)) 
+            event = Event(type=EVENT_LOG)
+            event.dict['log'] = 'order=%s has no OrderSysID, using Order_ref to cancel' % (iorder.order_ref)
+            self.eventEngine.put(event)         
             req = self.ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
                 OrderRef = str(iorder.order_ref),
@@ -301,7 +317,6 @@ class CTPTraderQryMixin(object):
                 FrontID = self.front_id,
                 SessionID = self.session_id,
                 ActionFlag = self.ApiStruct.AF_Delete,
-                #OrderActionRef = self.inc_order_ref()  #没用,不关心这个，每次撤单成功都需要去查资金
             )
         r = self.ReqOrderAction(req,self.agent.inc_request_id())
         return r
@@ -311,7 +326,6 @@ class CTPTraderRspMixin(object):
         return RspInfo == None or RspInfo.ErrorID == 0
 
     def login(self):
-        self.logger.info(u'try login...')
         self.user_login(self.broker_id, self.investor_id, self.passwd)
 
     ##交易初始化
@@ -319,49 +333,65 @@ class CTPTraderRspMixin(object):
         '''
             当客户端与交易后台建立起通信连接时（还未登录前），该方法被调用。
         '''
-        self.logger.info(u'TD:trader front connected')
+        """服务器连接"""
+        event = Event(type=EVENT_LOG)
+        event.dict['log'] = u'交易服务器连接成功'
+        self.eventEngine.put(event)
         self.login()
 
     def OnFrontDisconnected(self, nReason):
-        self.logger.info(u'TD:trader front disconnected,reason=%s' % (nReason,))
+        """服务器断开"""
+        event = Event(type=EVENT_LOG)
+        event.dict['log'] = u'交易服务器连接断开'
+        self.eventEngine.put(event)
 
     def user_login(self, broker_id, investor_id, passwd):
         req = self.ApiStruct.ReqUserLogin(BrokerID=broker_id, UserID=investor_id, Password=passwd)
         r=self.ReqUserLogin(req,self.agent.inc_request_id())
 
     def OnRspUserLogin(self, pRspUserLogin, pRspInfo, nRequestID, bIsLast):
-        self.logger.info(u'TD:trader login')
-        self.logger.debug(u"TD:loggin %s" % str(pRspInfo))
-        if not self.isRspSuccess(pRspInfo):
-            self.logger.warning(u'TD:trader login failed' )
-            #self.logger.warning(u'TD:trader login failed, errMsg=%s' %(pRspInfo.ErrorMsg,))
-            print u'综合交易平台登陆失败，请检查网络或用户名/口令'
+        event = Event(type=EVENT_LOG)        
+        if pRspInfo.ErrorID == 0:
+            log = u'交易服务器登陆成功'
+        else:
+            log = u'登陆回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')        
+        event.dict['log'] = log
+        self.eventEngine.put(event)
+        
+        if pRspInfo.ErrorID == 0:
+            self.is_logged = True
+            self.front_id = pRspUserLogin.FrontID
+            self.session_id = pRspUserLogin.SessionID
+        else:
             self.is_logged = False
             time.sleep(30)
             self.login()
-            return
-        self.is_logged = True
-        self.logger.info(u'TD:trader login success')
-        self.front_id = pRspUserLogin.FrontID
-        self.session_id = pRspUserLogin.SessionID
-        self.agent.login_success(pRspUserLogin.FrontID,pRspUserLogin.SessionID,pRspUserLogin.MaxOrderRef)
     
     def OnRspUserLogout(self, pUserLogout, pRspInfo, nRequestID, bIsLast):
         '''登出请求响应'''
-        self.logger.info(u'TD:trader logout')
+        event = Event(type=EVENT_LOG)        
+        if pRspInfo.ErrorID == 0:
+            log = u'交易服务器登出成功'
+        else:
+            log = u'登陆回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')        
+        event.dict['log'] = log
+        self.eventEngine.put(event)
         self.is_logged = False
 
     def resp_common(self,rsp_info,bIsLast,name='默认'):
-        #self.logger.debug("resp: %s" % str(rsp_info))
+        event = Event(type=EVENT_LOG)        
         if not self.isRspSuccess(rsp_info):
-            self.logger.info(u"TD:%s失败" % name)
-            return -1
+            log = u'TD:%s失败' % name
+            val = -1
         elif bIsLast and self.isRspSuccess(rsp_info):
-            self.logger.info(u"TD:%s成功" % name)
-            return 1
+            log = u'TD:%s成功' % name
+            val = 1
         else:
-            self.logger.info(u"TD:%s结果: 等待数据接收完全..." % name)
-            return 0
+            log = u'TD:%s结果: 等待数据接收完全...' % name
+            val = 0
+        event.dict['log'] = log
+        self.eventEngine.put(event) 
+        return val
         
     def OnRspQryDepthMarketData(self, depth_market_data, pRspInfo, nRequestID, bIsLast):
         pass
@@ -371,15 +401,11 @@ class CTPTraderRspMixin(object):
         '''
             保证金率回报。返回的必然是绝对值
         '''
-        if self.name == 'LTS-TD':
-            return (0,0)
-        if bIsLast and self.isRspSuccess(pRspInfo):
-            marginrate = (pInstMarginRate.LongMarginRatioByMoney,pInstMarginRate.ShortMarginRatioByMoney)
-            self.agent.rsp_qry_instrument_marginrate(pInstMarginRate.InstrumentID, marginrate)
-        #print marginRate.InstrumentID,self.instruments[marginRate.InstrumentID].marginrate
-        else:
-            #logging
-            pass
+        if self.isRspSuccess(pRspInfo):
+            event = Event(type = EVENT_MARGINRATE)
+            event.dict['data'] = pInstMarginRate
+            event.dict['error'] = pRspInfo
+            self.eventEngine.put(event)         
         
     def OnRspQryInstrument(self, pInstrument, pRspInfo, nRequestID, bIsLast):
         '''
@@ -387,225 +413,184 @@ class CTPTraderRspMixin(object):
             这里的保证金率应该是和期货公司无关，所以不能使用
         '''
         if pInstrument.InstrumentID not in self.agent.instruments:
-            #self.logger.warning(u'A_RQI:收到未监控的合约查询:%s' % (pInstrument.InstrumentID))
             return
-        if self.name == 'LTS-TD':
-            margin_rate = (0,0)
+
+        if self.isRspSuccess(pRspInfo):
+            event = Event(type = EVENT_INSTRUMENT)
+            event.dict['data'] = pInstrument
+            event.dict['error'] = pRspInfo
+            self.eventEngine.put(event)     
         else:
-            margin_rate = (pInstrument.LongMarginRatio, pInstrument.ShortMarginRatio)
-        p_inst = BaseObject(instID = pInstrument.InstrumentID, 
-                            multiple = pInstrument.VolumeMultiple, 
-                            tick_base = pInstrument.PriceTick, 
-                            marginrate = margin_rate)
-        if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_instrument(p_inst)
-        else:
-            self.agent.rsp_qry_instrument(p_inst)  #模糊查询的结果,获得了多个合约的数据，只有最后一个的bLast是True
+            event = Event(type=EVENT_LOG)
+            log = u'合约投资者回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+            event.dict['log'] = log
+            self.eventEngine.put(event)             
         
     def OnRspQryTradingAccount(self, pTradingAccount, pRspInfo, nRequestID, bIsLast):
-        '''
-            请求查询资金账户响应
-        '''
-        print u'查询资金账户响应'
-        self.logger.info(u'TD:资金账户响应:%s' % pTradingAccount)
-        if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_trading_account(pTradingAccount.Available)
+        """资金账户查询回报"""
+        if self.isRspSuccess(pRspInfo):
+            event = Event(type = EVENT_ACCOUNT)
+            event.dict['data'] = pTradingAccount
+            event.dict['error'] = pRspInfo
+            self.eventEngine.put(event)
         else:
-            #logging
-            pass
+            event = Event(type=EVENT_LOG)
+            log = u'账户查询回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+            event.dict['log'] = log
+            self.eventEngine.put(event)
 
-    def OnRspQryInvestorPosition(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
-        '''
-                            查询持仓回报, 每个合约最多得到4个持仓回报，历史多/空、今日多/空
-        '''
-        print u'查询持仓响应'
-        if self.isRspSuccess(pRspInfo): #每次一个单独的数据报
-            self.logger.info(u'agent 持仓:%s' % str(pInvestorPosition))
-            isToday = False
-            isLong = False
-            if (pInvestorPosition != None) and (pInvestorPosition.InstrumentID in self.agent.positions):    
-                if pInvestorPosition.PosiDirection == self.ApiStruct.PD_Long:
-                    if pInvestorPosition.PositionDate == self.ApiStruct.PSD_Today:
-                        isToday = True
-                        isLong = True
-                    else:
-                        isLong = True
-                else:#空头
-                    if pInvestorPosition.PositionDate == self.ApiStruct.PSD_Today:
-                        isToday = True
-                self.agent.rsp_qry_position(pInvestorPosition.InstrumentID, isToday, isLong, pInvestorPosition.Position)    
+    def OnRspQryInvestor(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
+        """投资者查询回报"""
+        if self.isRspSuccess(pRspInfo):
+            event = Event(type=EVENT_INVESTOR)
+            event.dict['data'] = pInvestorPosition
+            self.eventEngine.put(event)
         else:
-            #logging
-            pass
-        
+            event = Event(type=EVENT_LOG)
+            log = u'合约投资者回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+            event.dict['log'] = log
+            self.eventEngine.put(event)
+            
+    def OnRspQryInvestorPosition(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
+        """持仓查询回报"""
+        if error['ErrorID'] == 0:
+            event = Event(type=EVENT_POSITION)
+            event.dict['data'] = pInvestorPosition
+            event.dict['error'] = pRspInfo
+            self.eventEngine.put(event)
+        else:
+            event = Event(type=EVENT_LOG)
+            log = u'持仓查询回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+            event.dict['log'] = log
+            self.eventEngine.put(event)
+      
     def OnRspQryInvestorPositionDetail(self, pInvestorPositionDetail, pRspInfo, nRequestID, bIsLast):
         '''请求查询投资者持仓明细响应'''
-        self.logger.info(str(pInvestorPositionDetail))
-        if self.isRspSuccess(pRspInfo): #每次一个单独的数据报
-            self.agent.rsp_qry_position_detail(pInvestorPositionDetail)
-        else:
-            #logging
-            pass
+        pass
         
     def OnRspError(self, info, RequestId, IsLast):
-        ''' 错误应答
-        '''
-        self.logger.error(u'TD:requestID:%s,IsLast:%s,info:%s' % (RequestId,IsLast,str(info)))
+        """错误回报"""
+        event = Event(type=EVENT_LOG)
+        log = u'交易错误回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')
+        event.dict['log'] = log
+        self.eventEngine.put(event)
 
     def OnRspQryOrder(self, porder, pRspInfo, nRequestID, bIsLast):
         '''请求查询报单响应'''
-        #print porder
-        if (porder!= None) and (porder.InstrumentID in self.agent.instruments):
-            self.ctp_orders[porder.OrderRef] = porder
-        if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_order(porder)
+        if self.isRspSuccess(pRspInfo):
+            event = Event(type=EVENT_QRYORDER)
+            event.dict['data'] = porder
+            self.eventEngine.put(event)         
         else:
-            self.agent.rsp_qry_order(porder) 
+            event = Event(type=EVENT_LOG)
+            log = u'交易错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+            event.dict['log'] = log
+            self.eventEngine.put(event)
         
     def OnRspQryTrade(self, ptrade, pRspInfo, nRequestID, bIsLast):
         '''请求查询成交响应'''
-        #print ptrade
-        if (ptrade != None) and (ptrade.InstrumentID in self.agent.instruments):
-            self.ctp_trades[ptrade.OrderRef] = ptrade
-            
-        if bIsLast and self.isRspSuccess(pRspInfo):
-            self.agent.rsp_qry_trade(ptrade)
+        if self.isRspSuccess(pRspInfo):
+            event = Event(type=EVENT_QRYTRADE)
+            event.dict['data'] = ptrade
+            self.eventEngine.put(event)         
         else:
-            self.agent.rsp_qry_trade(ptrade)
+            event = Event(type=EVENT_LOG)
+            log = u'交易错误回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')
+            event.dict['log'] = log
+            self.eventEngine.put(event)
     
     def OnRspOrderInsert(self, pInputOrder, pRspInfo, nRequestID, bIsLast):
         '''
             报单未通过参数校验,被CTP拒绝
             正常情况后不应该出现
         '''
-        #print pRspInfo,nRequestID
-        self.logger.warning(u'TD:CTP报单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
-        #self.logger.warning(u'报单校验错误,ErrorID=%s,ErrorMsg=%s,pRspInfo=%s,bIsLast=%s' % (pRspInfo.ErrorID,pRspInfo.ErrorMsg,str(pRspInfo),bIsLast))
-        #self.agent.rsp_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
-        self.agent.err_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
+        event = Event(type=EVENT_LOG)
+        log = u' 发单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+        event.dict['log'] = log
+        self.eventEngine.put(event)
+        event2 = Event(type=EVENT_ERRORDERINSERT)
+        event2.dict['data'] = pInputOrder
+        event2.dict['error'] = pRspInfo
+        self.eventEngine.put(event2)        
     
     def OnErrRtnOrderInsert(self, pInputOrder, pRspInfo):
-        '''
-            交易所报单录入错误回报
-            正常情况后不应该出现
-            这个回报因为没有request_id,所以没办法对应
-        '''
-        #print u'ERROR Order Insert'
-        self.logger.warning(u'TD:交易所报单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
-        self.agent.err_order_insert(pInputOrder.OrderRef,pInputOrder.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
+        """发单错误回报（交易所）"""
+        event = Event(type=EVENT_LOG)
+        log = u'发单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+        event.dict['log'] = log
+        self.eventEngine.put(event)
+        
+        event2 = Event(type=EVENT_ERRORDERINSERT)
+        event2.dict['data'] = pInputOrder
+        event2.dict['error'] = pRspInfo
+        self.eventEngine.put(event2)                
     
     def OnRtnOrder(self, porder):
         ''' 报单通知
             CTP、交易所接受报单(CTP接受的已经被过滤)
             Agent中不区分，所得信息只用于撤单,暂时只处理撤单的回报.
         '''
-        #print repr(porder)
-        self.logger.info(u'成交/撤单回报,Order=%s' % str(porder))
-        if porder.OrderStatus == 'a':
-            #CTP接受，但未发到交易所
-            #print u'CTP接受Order，但未发到交易所, BrokerID=%s,BrokerOrderSeq = %s,TraderID=%s, OrderLocalID=%s' % (pOrder.BrokerID,pOrder.BrokerOrderSeq,pOrder.TraderID,pOrder.OrderLocalID)
-            self.logger.info(u'TD:CTP接受Order，但未发到交易所, BrokerID=%s,BrokerOrderSeq = %s,TraderID=%s, OrderLocalID=%s' % (porder.BrokerID,porder.BrokerOrderSeq,porder.TraderID,porder.OrderLocalID))
-        else:
-            #print u'交易所接受Order,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' % (pOrder.ExchangeID,pOrder.OrderSysID,pOrder.TraderID,pOrder.OrderLocalID)
-            self.logger.info(u'TD:交易所接受Order,exchangeID=%s,OrderSysID=%s,TraderID=%s, OrderLocalID=%s' % (porder.ExchangeID,porder.OrderSysID,porder.TraderID,porder.OrderLocalID))            
-        order_ref = int(porder.OrderRef)
-        if (order_ref not in self.agent.ref2order):
-            self.logger.info('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)
-            return
-        self.agent.ref2order[order_ref].sys_id = porder.OrderSysID
-        if porder.OrderStatus in [ self.ApiStruct.OST_Canceled, self.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
-            self.logger.info(u'撤单, 撤销开/平仓单')            
-            sorder = BaseObject(instID = porder.InstrumentID,
-                                order_ref = int(porder.OrderRef),
-                                order_sysid = porder.OrderSysID,
-                                order_status = porder.OrderStatus)
-            self.agent.rtn_order(sorder)
-        return
+        # 常规报单事件
+        event1 = Event(type=EVENT_ORDER)
+        event1.dict['data'] = porder
+        self.eventEngine.put(event1)
+        
+        # 特定合约行情事件
+        event2 = Event(type=(EVENT_ORDER_ORDERREF+porder.OrderRef))
+        event2.dict['data'] = porder
+        self.eventEngine.put(event2)
 
     def OnRtnTrade(self, ptrade):
+        '''成交回报
+        #TODO: 必须考虑出现平仓信号时，position还没完全成交的情况在OnTrade中进行position的细致处理 
+        #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''
-            成交回报
-            #TODO: 必须考虑出现平仓信号时，position还没完全成交的情况
-                   在OnTrade中进行position的细致处理 
-            #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
-        '''
-        self.logger.info(u'TD:成交回报,Trade=%s' % repr(ptrade))
-        #print ptrade
-        self.logger.info(u'A_RT1:成交回报,%s:OrderRef=%s,OrderSysID=%s,price=%s' % (ptrade.InstrumentID,ptrade.OrderRef,ptrade.OrderSysID,ptrade.Price))
-        if int(ptrade.OrderRef) not in self.agent.ref2order or ptrade.InstrumentID not in self.agent.instruments:
-            self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))
-            return 
-        trade = BaseObject( instID = ptrade.InstrumentID,
-                            order_ref = int(ptrade.OrderRef),
-                            order_sysid = ptrade.OrderSysID,
-                            price = ptrade.Price,
-                            volume= ptrade.Volume,
-                            trade_id = ptrade.TradeID )
-        self.agent.rtn_trade(trade)
+        # 常规成交事件
+        event1 = Event(type=EVENT_TRADE)
+        event1.dict['data'] = ptrade
+        self.eventEngine.put(event1)
+        
+        # 特定合约成交事件
+        event2 = Event(type=(EVENT_TRADE_CONTRACT+ptrade.InstrumentID))
+        event2.dict['data'] = ptrade
+        self.eventEngine.put(event2)
         
     def OnRspOrderAction(self, pInputOrderAction, pRspInfo, nRequestID, bIsLast):
         '''
             ctp撤单校验错误
         '''
-        self.logger.warning(u'TD:CTP撤单录入错误回报, 正常后不应该出现,rspInfo=%s'%(str(pRspInfo),))
-        #self.agent.rsp_order_action(pInputOrderAction.OrderRef,pInputOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
-        self.agent.err_order_action(pInputOrderAction.OrderRef,pInputOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
+        event = Event(type=EVENT_LOG)
+        log = u'撤单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+        event.dict['log'] = log
+        self.eventEngine.put(event)
+        
+        event2 = Event(type=EVENT_ERRORDERCANCEL)
+        event2.dict['data'] = pInputOrderAction
+        event2.dict['error'] = pRspInfo
+        self.eventEngine.put(event2)  
 
     def OnErrRtnOrderAction(self, pOrderAction, pRspInfo):
-        ''' 
-            交易所撤单操作错误回报
-            正常情况后不应该出现
-        '''
-        self.logger.warning(u'TD:交易所撤单录入错误回报, 可能已经成交,rspInfo=%s'%(str(pRspInfo),))
-        self.agent.err_order_action(pOrderAction.OrderRef,pOrderAction.InstrumentID,pRspInfo.ErrorID,pRspInfo.ErrorMsg)
-     
-class AbsAgent(object):
-    ''' 抽取与交易无关的功能，便于单独测试
-    '''
-    def __init__(self):
-        ##命令队列(不区分查询和交易)
-        self.commands = []  #每个元素为(trigger_tick,func), 用于当tick==trigger_tick时触发func
-        self.tick_id = 0
+        """撤单错误回报（交易所）"""
+        event = Event(type=EVENT_LOG)
+        log = u'撤单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
+        event.dict['log'] = log
+        self.eventEngine.put(event)
         
-    def put_command(self,trigger_tick,command): #按顺序插入
-        #print func_name(command)
-        cticks = [ttick for ttick,cmd in self.commands] #不要用command这个名称，否则会覆盖传入的参数,导致后面的插入操作始终插入的是原序列最后一个command的拷贝
-        ii = bisect.bisect(cticks,trigger_tick)
-        #print 'trigger_tick=%s,cticks=%s,len(command)=%s' % (trigger_tick,str(cticks),len(self.commands))
-        self.commands.insert(ii,(trigger_tick,command))
-        self.logger.debug(u'AA_P:trigger_tick=%s,cticks=%s,len(command)=%s' % (trigger_tick,str(cticks),len(self.commands)))
-
-    def check_commands(self):   
-        '''
-            执行命令队列中触发时间<=当前tick的命令. 注意一个tick=0.5s
-            以后考虑一个tick只触发一个命令?
-        '''
-        #print 'in check command'
-        l = len(self.commands)
-        i = 0
-        #if l>0:
-        #    pass
-        #    print 'in check command,len=%s,self.tick=%s,command time=%s' % (l,self.tick,self.commands[-1][0])
-        while(i<l and self.tick_id >= self.commands[i][0]):
-            self.logger.info(u'AA_C:exec command,i=%s,tick=%s,command[i][0]=%s' % (i,self.tick,self.commands[i][0]))
-            self.commands[i][1]()
-            i += 1
-        if i>0:
-            #print 'del execed command'
-            del self.commands[0:i]
-        #print len(self.commands)
+        event2 = Event(type=EVENT_ERRORDERCANCEL)
+        event2.dict['data'] = pOrderAction
+        event2.dict['error'] = pRspInfo
+        self.eventEngine.put(event2)         
 
 
-class Agent(AbsAgent):
+class Agent(object):
  
     def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), config = {}):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
         '''
-        AbsAgent.__init__(self)
-        ##计时, 用来激发队列
-        ##
+        self.tick_id = 0
+        self.request_id = 1
         folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\'
         if 'folder' in config:
             folder = config['folder']
@@ -626,14 +611,12 @@ class Agent(AbsAgent):
         self.cuser = cuser
         self.instruments = {}
         self.create_instruments(instruments, tday)
-        self.request_id = 1
         self.initialized = False
         self.scur_day = tday
         self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
         self.live_trading = live_trading
-        self.day_switch_locked = False
         self.tick_db_table = 'fut_tick'
         self.min_db_table  = 'fut_min'
         self.daily_db_table = 'fut_daily'
@@ -659,12 +642,27 @@ class Agent(AbsAgent):
         self.curr_capital = 1000000.0
         self.prev_capital = 1000000.0
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
-        
+        self.qry_pos = dict([(inst, {} ) for inst in instruments])
         self.day_data_func = []
         self.min_data_func = {}
         
         self.startup_time = datetime.datetime.now()
-
+        self.eventEngine = EventEngine()
+        self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
+        self.eventEngine.register(EVENT_LOG, self.log_handler)
+        self.eventEngine.register(EVENT_ORDER, self.rtn_order)
+        self.eventEngine.register(EVENT_TRADE, self.rtn_trade)
+        self.eventEngine.register(EVENT_MARKETDATA, self.RtnTick)
+        self.eventEngine.register(EVENT_ERRORDERINSERT, self.err_order_insert)
+        self.eventEngine.register(EVENT_ERRORDERCANCEL, self.err_order_action)
+        self.eventEngine.register(EVENT_MARGINRATE, self.rsp_qry_instrument_marginrate)
+        self.eventEngine.register(EVENT_ACCOUNT, self.rsp_qry_trading_account)
+        self.eventEngine.register(EVENT_INSTRUMENT, self.rsp_qry_instrument)
+        self.eventEngine.register(EVENT_POSITION, self.rsp_qry_position)
+        self.eventEngine.register(EVENT_QRYORDER, self.rsp_qry_order)
+        self.eventEngine.register(EVENT_QRYTRADE, self.rsp_qry_trade)
+        self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
+        
         self.strategies = strategies
         for strat in self.strategies:
             strat.agent = self
@@ -672,9 +670,6 @@ class Agent(AbsAgent):
 
         self.prepare_data_env(mid_day = True)
         self.get_eod_positions()
-        #for inst in instruments:
-        #    self.cur_day[inst]['date'] = tday
-        #    self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(tday.toordinal())
 
         ###交易
         self.ref2order = {}    #orderref==>order
@@ -686,11 +681,6 @@ class Agent(AbsAgent):
         ##查询命令队列
         self.qry_commands = []  #每个元素为查询命令，用于初始化时查询相关数据
         
-        #调度器
-        #self.scheduler = sched.scheduler(time.time, time.sleep)
-        #保存锁
-        #self.event = threading.Event()
-        #actions
         self.etrades = []
         self.init_init()    #init中的init,用于子类的处理
 
@@ -699,26 +689,24 @@ class Agent(AbsAgent):
         
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
-        
+    
+    def log_handler(self, event):
+        self.logger.info(event['log'])
+
     def initialize(self):
         '''
             初始化，如保证金率，账户资金等
         '''
+        self.isSettlementInfoConfirmed = True
         if not self.initialized:
             for inst in self.instruments:
                 self.instruments[inst].update_param(self.scur_day)
             self.resume()
-            #for strat in self.strategies:
-            #    strat.initialize()
-            #for inst in self.positions:
-            #    self.positions[inst].re_calc()
-            #self.calc_margin() 
+        self.qry_commands = []
         self.qry_commands.append(self.fetch_trading_account)
-        #self.qry_commands.append(fcustom(self.fetch_investor_position,instrument_id=''))
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
-        self.check_qry_commands()
-        #避免因为断开后自动重连造成的重复访问
+        self.eventEngine.register(EVENT_TIMER, self.check_qry_commands)
 
     def register_data_func(self, freq, fobj):
         if 'd' in freq:
@@ -791,13 +779,8 @@ class Agent(AbsAgent):
         return
 
     def resume(self):
-        #self.fetch_order()   
-        #self.fetch_trade()     
         if self.initialized:
             return 
-        self.proc_lock = True
-        #time.sleep(1)
-        #self.get_eod_positions()
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
@@ -826,16 +809,11 @@ class Agent(AbsAgent):
             self.positions[inst].re_calc()        
         self.calc_margin()
         self.initialized = True
-        self.proc_lock = False
-        
-        
-    def check_qry_commands(self):
-        #必然是在rsp中要发出另一个查询
+                
+    def check_qry_commands(self, event):
         if len(self.qry_commands)>0:
-            time.sleep(1)   #这个只用于非行情期的执行. 
             self.qry_commands[0]()
             del self.qry_commands[0]
-        self.logger.debug(u'查询命令序列长度:%s' % (len(self.qry_commands),))
         
     def get_eod_positions(self):
         file_prefix = self.folder
@@ -931,14 +909,15 @@ class Agent(AbsAgent):
             tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
             tick.date = self.scur_day.strftime('%Y%m%d')
         tick_date = tick.timestamp.date()
-        if inst not in self.instruments:
-            self.logger.info(u'接收到未订阅的合约数据:%s' % (inst,))
-            return False
         if (self.scur_day > tick_date) or (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
             return False
         if self.scur_day < tick_date:
             self.logger.info('tick date is later than scur_day, finalizing the day and run EOD')
-            self.day_switch(tick_date)
+            event = Event(type = EVENT_DAYSWITCH)
+            event.dict['date'] = tick_date
+            event.dict['log'] =  u'换日: %s -> %s' % (self.scur_day, tick_date)
+            self.eventEngine.put(event)
+            return False
         product = self.instruments[inst].product
         exch = self.instruments[inst].exchange
         hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
@@ -1017,61 +996,61 @@ class Agent(AbsAgent):
         else:
             self.instruments[inst].is_busy = True        
         
-        try:
-            if (self.cur_day[inst]['open'] == 0.0):
-                self.cur_day[inst]['open'] = tick.price
-                #mysqlaccess.insert_daily_data(inst, self.cur_day[inst], True)
-                self.logger.info('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
-            self.cur_day[inst]['close'] = tick.price
-            self.cur_day[inst]['high']  = tick.high
-            self.cur_day[inst]['low']   = tick.low
-            self.cur_day[inst]['openInterest'] = tick.openInterest
-            self.cur_day[inst]['volume'] = tick.volume
-            self.cur_day[inst]['date'] = tick.timestamp.date()
+        #try:
+        if (self.cur_day[inst]['open'] == 0.0):
+            self.cur_day[inst]['open'] = tick.price
+            #mysqlaccess.insert_daily_data(inst, self.cur_day[inst], True)
+            self.logger.info('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
+        self.cur_day[inst]['close'] = tick.price
+        self.cur_day[inst]['high']  = tick.high
+        self.cur_day[inst]['low']   = tick.low
+        self.cur_day[inst]['openInterest'] = tick.openInterest
+        self.cur_day[inst]['volume'] = tick.volume
+        self.cur_day[inst]['date'] = tick.timestamp.date()
 
-            for strat in self.strategies:
-                if (inst in strat.instIDs):
-                    strat.tick_run(tick)
-                    
-            if (tick_min == self.cur_min[inst]['min_id']):
-                self.tick_data[inst].append(tick)
-                self.cur_min[inst]['close'] = tick.price
-                if self.cur_min[inst]['high'] < tick.price:
-                    self.cur_min[inst]['high'] = tick.price
-                if self.cur_min[inst]['low'] > tick.price:
-                    self.cur_min[inst]['low'] = tick.price
-            else:
-                if (len(self.tick_data[inst]) > 0) :
-                    last_tick = self.tick_data[inst][-1]
-                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
-                        self.min_switch(inst)
-                    else:
-                        if self.save_flag:
-                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
-                            if len(self.late_tick[inst])>0:
-                                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
-                                self.late_tick[inst] = []                     
-                    self.cur_min[inst]['volume'] = last_tick.volume                    
+        for strat in self.strategies:
+            if (inst in strat.instIDs):
+                strat.tick_run(tick)
                 
-                self.tick_data[inst] = []
-                self.cur_min[inst]['open']  = tick.price
-                self.cur_min[inst]['close'] = tick.price
-                self.cur_min[inst]['high']  = tick.price
-                self.cur_min[inst]['low']   = tick.price
-                self.cur_min[inst]['min_id']  = tick_min
-                self.cur_min[inst]['openInterest'] = tick.openInterest
-                self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
-                if ((tick_min>0) and (tick.price>0)): 
-                    self.tick_data[inst].append(tick)
+        if (tick_min == self.cur_min[inst]['min_id']):
+            self.tick_data[inst].append(tick)
+            self.cur_min[inst]['close'] = tick.price
+            if self.cur_min[inst]['high'] < tick.price:
+                self.cur_min[inst]['high'] = tick.price
+            if self.cur_min[inst]['low'] > tick.price:
+                self.cur_min[inst]['low'] = tick.price
+        else:
+            if (len(self.tick_data[inst]) > 0) :
+                last_tick = self.tick_data[inst][-1]
+                self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+                self.cur_min[inst]['openInterest'] = last_tick.openInterest
+                if (self.instruments[inst].ptype != instrument.ProductType.Option):
+                    self.min_switch(inst)
+                else:
+                    if self.save_flag:
+                        mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
+                        if len(self.late_tick[inst])>0:
+                            mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
+                            self.late_tick[inst] = []                     
+                self.cur_min[inst]['volume'] = last_tick.volume                    
             
-            if tick_id >= self.instruments[inst].last_tick_id:
-                self.day_finalize([inst])
+            self.tick_data[inst] = []
+            self.cur_min[inst]['open']  = tick.price
+            self.cur_min[inst]['close'] = tick.price
+            self.cur_min[inst]['high']  = tick.price
+            self.cur_min[inst]['low']   = tick.price
+            self.cur_min[inst]['min_id']  = tick_min
+            self.cur_min[inst]['openInterest'] = tick.openInterest
+            self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
+            if ((tick_min>0) and (tick.price>0)): 
+                self.tick_data[inst].append(tick)
+        
+        if tick_id >= self.instruments[inst].last_tick_id:
+            self.day_finalize([inst])
 
-        except Exception as e:
-            print "exception = %s time = %s" % (e, datetime.datetime.now())
-            pass
+        #except Exception as e:
+            #print "exception = %s time = %s" % (e, datetime.datetime.now())
+            #pass
         self.instruments[inst].is_busy = False               
         return True  
     
@@ -1167,8 +1146,7 @@ class Agent(AbsAgent):
             self.positions[inst].pos_yday.short = eod_pos[inst][1]
             self.positions[inst].re_calc()
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
-            self.instruments[inst].volume = 0
-            #print "inst=%s, long=%s, short=%s, prev_close=%s" % (inst, eod_pos[inst][0], eod_pos[inst][1], self.instruments[inst].prev_close)
+            self.instruments[inst].volume = 0            
         self.initialized = False
         self.proc_lock = False
 
@@ -1177,11 +1155,9 @@ class Agent(AbsAgent):
         strat.agent = self
         strat.reset()
          
-    def day_switch(self, newday):  #重新初始化opener
-        if self.day_switch_locked:
-            return
-        else:
-            self.day_switch_locked = True
+    def day_switch(self, newday):
+        if newday <= self.scur_day:
+            return 
         self.logger.info('switching the trading day from %s to %s' % (self.scur_day, newday))
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
@@ -1198,7 +1174,6 @@ class Agent(AbsAgent):
             self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(newday.toordinal())
             self.instruments[inst].day_finalized = False
         self.eod_flag = False
-        self.day_switch_locked = False
                 
     def init_init(self):    #init中的init,用于子类的处理
         pass
@@ -1229,7 +1204,6 @@ class Agent(AbsAgent):
         self.logger.info(u'A:获取合约%s的当前持仓..' % (instrument_id,))
         r = self.trader.query_investor_position(instrument_id)
         return r
-        #self.logger.info(u'A:查询持仓, 函数发出返回值:%s' % rP)
     
     def fetch_investor_position_detail(self,instrument_id):
         '''
@@ -1256,22 +1230,19 @@ class Agent(AbsAgent):
         r = self.trader.query_instruments_by_exch(exchange_id)
         self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
         return r 
-        #if r < 0:
-        #    self.qry_commands.append(self.fetch_instruments_by_exchange)
                     
     def fetch_order(self, start_time='', end_time=''):
         r = self.trader.query_order( start_time, end_time )
         self.logger.info(u'A:查询报单, 函数发出返回值:%s' % r)
         return r
-        #if r < 0:
-        #    self.qry_commands.append(self.fetch_order)
 
     def fetch_trade(self, start_time='', end_time=''):
         r = self.trader.query_trade( start_time, end_time )
         self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
         return r
     
-    def RtnTick(self,ctick):#行情处理主循环
+    def RtnTick(self, event):#行情处理主循环
+        ctick = event['data']
         if self.live_trading:
             now_ticknum = get_tick_num(datetime.datetime.now())
             cur_ticknum = get_tick_num(ctick.timestamp)
@@ -1446,13 +1417,11 @@ class Agent(AbsAgent):
                                 exec_trade.order_dict[inst].append(iorder)
                                 pos.add_order(iorder)
                                 self.ref2order[iorder.order_ref] = iorder
-
         Is_Set = (self.check_order_list()) or Is_Set
         if Is_Set:
             self.save_state()
         
     def check_order_list(self):
-        Is_Set = self.trader.check_order_status()
         order_ids = self.ref2order.keys()
         order_ids.sort()
         for order_id in order_ids:
@@ -1463,8 +1432,7 @@ class Agent(AbsAgent):
         return Is_Set
     
     def send_order(self,iorder):
-        ''' 
-            发出下单指令
+        ''' 发出下单指令
         '''
         self.logger.info(u'A_CC:开仓平仓命令')
         inst = iorder.instrument
@@ -1485,8 +1453,7 @@ class Agent(AbsAgent):
         
 
     def cancel_order(self,iorder):
-        '''
-            发出撤单指令  
+        '''发出撤单指令  
         '''
         self.trader.cancel_order(iorder)
     
@@ -1494,135 +1461,146 @@ class Agent(AbsAgent):
         self.etrades.append(etrade)
          
     ###回应
-    def rtn_trade(self,strade):
-        '''
-            成交回报
-            #TODO: 必须考虑出现平仓信号时，position还没完全成交的情况
-                   在OnTrade中进行position的细致处理 
-            #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
-        '''
-        myorder = self.ref2order[strade.order_ref]
-        if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
-            myorder.on_trade(price=strade.price,volume=strade.volume,trade_id=strade.trade_id)
-            self.logger.info(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (strade.price,strade.trade_id));
+    def rtn_trade(self, event):
+        '''成交回报
+        #TODO: 必须考虑出现平仓信号时，position还没完全成交的情况在OnTrade中进行position的细致处理 
+        #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
+        '''        
+        ptrade = event['data']
+        order_ref = int(ptrade.OrderRef)
+        if (order_ref in self.ref2order) and (ptrade.InstrumentID in self.instruments):
+            myorder = self.ref2order[order_ref]
+            if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
+                myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume, trade_id = ptrade.TradeID)
+                self.logger.info(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
+            else:
+                myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume, trade_id = ptrade.TradeID)
+                self.logger.info(u'A_RT32,平仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
+            self.process_trade_list()
         else:
-            myorder.on_trade(price=strade.price,volume=strade.volume,trade_id=strade.trade_id)
-            self.logger.info(u'A_RT32,平仓回报,price=%s,trade_id=%s' % (strade.price, strade.trade_id));
-        self.process_trade_list()
-        #self.save_state()
-        return
-        
-        ##查询可用资金
-        #print 'fetch_trading_account'
-        #if myorder.action_type == OF_CLOSE or is_completed:#平仓或者开仓完全成交
-        #    self.put_command(self.get_tick()+1,self.fetch_trading_account)
-        #self.put_command(self.get_tick()+1,self.fetch_trading_account)  #不完全成交也可以，也就是多查询几次。有可能被抑制
+            self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))        
 
-
-    def rtn_order(self,sorder):
+    def rtn_order(self, event):
+        '''交易所接受下单回报(CTP接受的已经被过滤)暂时只处理撤单的回报. 
         '''
-            交易所接受下单回报(CTP接受的已经被过滤)
-            暂时只处理撤单的回报. 
-        '''
-        order_ref = sorder.order_ref
-        myorder = self.ref2order[order_ref]
-        myorder.on_cancel()
-        #self.process_trade_list()
-        #self.save_state()
-        return
+        porder = event['data']
+        order_ref = int(porder.OrderRef)
+        if (order_ref in self.agent.ref2order):
+            myorder = self.ref2order[order_ref]
+            myorder.sys_id = porder.OrderSysID
+            if porder.OrderStatus in [ self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
+                self.logger.info(u'撤单, 撤销开/平仓单')
+                myorder.on_cancel()                
+        else:
+            self.logger.info('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)        
             
-    def err_order_insert(self,order_ref,instrument_id,error_id,error_msg):
+    def err_order_insert(self, event):
         '''
-            ctp/交易所下单错误回报，不区分ctp和交易所
-            正常情况下不应当出现
+            ctp/交易所下单错误回报，不区分ctp和交易所正常情况下不应当出现
         '''
-        
-        print "order insert error"
-        if int(order_ref) not in self.ref2order:
-            self.logger.warning(u'非本程序保单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error_msg))
+        porder = event['data']
+        order_ref = int(porder.OrderRef)
+        instrument_id = porder.InstrumentID
+        error = event['error']
+        if order_ref in self.ref2order:
+            self.logger.warning(u'报单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
+            myorder = self.ref2order[order_ref]
+            myorder.on_cancel()
         else:
-            self.logger.warning(u'报单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error_msg))
-            myorder = self.ref2order[int(order_ref)]
-            myorder.on_cancel()
-            self.save_state()
-        pass    #可以忽略
+            self.logger.warning(u'非本程序保单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))        
 
-    def err_order_action(self,order_ref,instrument_id,error_id,error_msg):
+    def err_order_action(self, event):
         '''
-            ctp/交易所撤单错误回报，不区分ctp和交易所
-            必须处理，如果已成交，撤单后必然到达这个位置
+            ctp/交易所撤单错误回报，不区分ctp和交易所必须处理，如果已成交，撤单后必然到达这个位置
         '''
-        self.logger.info(u'撤单时已成交，error_id=%s,error_msg=%s, order_ref=%s' %(error_id,error_msg, order_ref))
-        if len(order_ref) == 0:
-            self.fetch_order()
-            return
-        myorder = self.ref2order[int(order_ref)]
-        #print order_ref, error_id, error_msg
-        if int(error_id) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
-            self.logger.info(u'撤销开仓单')
-            myorder.on_cancel()
-            #self.process_trade_list()
+        porder = event['data']
+        error = event['error']
+        if len(porder.OrderRef) > 0:
+            order_ref = int(porder.OrderRef)
+            myorder = self.ref2order[order_ref]
+            if int(error.ErrorID) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
+                self.logger.info(u'撤销开仓单')
+                myorder.on_cancel()
+        else:
+            self.qry_commands.append(self.fetch_order)
     
     ###辅助   
-    def rsp_qry_position(self, instID, isToday, isLong, pos):
-#         cur_pos = self.positions[instID]
-#         if isLong:
-#             if isToday:
-#                 cur_pos.pos_tday.long = pos
-#             else:
-#                 cur_pos.pos_tday.long = pos
-#         else:
-#             if isToday:
-#                 cur_pos.pos_tday.short = pos
-#             else:
-#                 cur_pos.pos_tday.short = pos 
-        self.check_qry_commands() 
+    def rsp_qry_position(self, event):
+        pposition = event['data']
+        error = event['error']
+        instID = pposition.InstrumentID
+        if (error.ErrorID == 0) and (pposition != None) and (instID in self.qry_pos):
+            key = pposition.PosiDirection + '.' + pposition.PositionDate
+            self.qry_pos[instID][key] =  pposition.Position
+        # need to cross check position accuracy
 
-    def rsp_qry_instrument_marginrate(self, instID, marginRate):
-        '''
-            查询保证金率回报. 
-        '''
-        self.instruments[instID].marginrate = marginRate
-        self.check_qry_commands()
+    def rsp_qry_instrument_marginrate(self, event):
+        '''查询保证金率回报. '''
+        pinst = event['data']
+        instID = pinst.InstrumentID
+        if instID in self.instruments:
+            inst = self.instruments[instID]
+            inst.marginrate = (pinst.LongMarginRatio, pinst.ShortMarginRatio)    
 
-    def rsp_qry_trading_account(self,avail):
-        '''
-            查询资金帐户回报
-        '''
-        self.available = avail
-        self.check_qry_commands()        
+    def rsp_qry_trading_account(self, event):
+        '''查询资金帐户回报'''
+        paccount = event['data']
+        self.available = paccount.Available      
     
-    def rsp_qry_instrument(self, pinst):
-        inst = self.instruments[pinst.instID]
-        inst.multiple = pinst.multiple
-        inst.tick_base = pinst.tick_base
-        inst.marginrate = pinst.marginrate
-        self.check_qry_commands()
+    def rsp_qry_instrument(self, event):
+        pinst = event['data']
+        instID = pinst.InstrumentID
+        if instID in self.instruments:
+            inst = self.instruments[instID]
+            inst.multiple = pinst.VolumeMultiple
+            inst.tick_base = pinst.PriceTick
+            inst.marginrate = (pinst.LongMarginRatio, pinst.ShortMarginRatio)        
 
     def rsp_qry_position_detail(self,position_detail):
+        '''查询持仓明细回报, 得到每一次成交的持仓,其中若已经平仓,则持量为0,平仓量>=1必须忽略
         '''
-            查询持仓明细回报, 得到每一次成交的持仓,其中若已经平仓,则持量为0,平仓量>=1
-            必须忽略
-        '''
-        self.check_qry_commands()
+        pass
 
-    def rsp_qry_order(self,sorder):
-        '''
-            查询报单
-            可以忽略
-        '''
-        self.check_qry_commands()
+    def rsp_qry_order(self, event):
+        '''查询报单'''
+        sorder = event['data']
+        if (sorder == None) or (sorder.InstrumentID not in self.instruments) or (len(sorder.OrderRef) == 0):
+            return
+        order_ref = int(sorder.OrderRef) 
+        if (order_ref in self.agent.ref2order):
+            iorder = self.ref2order[order_ref]
+            iorder.sys_id = sorder.OrderSysID
+            if sorder.OrderStatus in [self.trader.ApiStruct.OST_NoTradeQueueing, self.trader.ApiStruct.OST_PartTradedQueueing, self.trader.ApiStruct.OST_Unknown]:
+                if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}: 
+                    self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status))
+                    iorder.status = order.OrderStatus.Sent
+                    iorder.conditionals = {}
+                    #iorpder.position.re_calc()
+            elif sorder.OrderStatus in [self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing, self.trader.ApiStruct.OST_NoTradeNotQueueing]:
+                if iorder.status != order.OrderStatus.Cancelled:                     
+                    self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status))                          
+                    iorder.on_cancel()
+                    #iorpder.position.re_calc()
 
-    def rsp_qry_trade(self,strade):
-        '''
-            查询成交
-            可以忽略
-        '''
-        self.check_qry_commands()
+    def rsp_qry_trade(self, event):
+        '''查询成交'''
+        strade = event['data']
+        if (strade == None) or (strade.InstrumentID not in self.instruments) or (len(strade.OrderRef) == 0):
+            return
+        order_ref = int(strade.OrderRef) 
+        if (order_ref in self.agent.ref2order):
+            iorder = self.ref2order[order_ref]
+            iorder.sys_id = strade.OrderSysID
+            if (iorder.status not in [order.OrderStatus.Done, order.OrderStatus.Cancelled]) or (iorder.filled_volume != strade.Volume):
+                iorder.status = order.OrderStatus.Done
+                iorder.filled_volume = strade.Volume
+                iorder.cancelled_volume = iorder.volume - iorder.filled_volume
+                iorder.volume = iorder.filled_volume
+                iorder.filled_price = strade.Price
+                #iorpder.position.re_calc()        
         
     def create_instruments(self, names, tday):
-        '''根据名称序列和策略序列创建instrument
-           其中策略序列的结构为:
+        '''根据名称序列和策略序列创建instrument其中策略序列的结构为:
            [总最大持仓量,策略1,策略2...] 
         '''
         insts = {}
@@ -1640,6 +1618,14 @@ class Agent(AbsAgent):
             insts[name].update_param(tday)
         self.instruments = insts
         return
+
+    def exit(self):
+        """退出"""
+        # 销毁API对象
+        self.trader = None
+        self.mdapis = []
+        # 停止事件驱动引擎
+        self.eventEngine.stop()        
 
 class SaveAgent(Agent):
     def init_init(self):
