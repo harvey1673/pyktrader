@@ -16,6 +16,7 @@ EVENT_TIMER = 'eTimer'                  # 计时器事件，每隔1秒发送一�
 EVENT_LOG = 'eLog'                      # 日志事件，通常使用某个监听函数直接显示
 
 EVENT_TDLOGIN = 'eTdLogin'                  # 交易服务器登录成功事件
+EVENT_TDDISCONNECTED = 'eTdDisconnected'
 
 EVENT_MARKETDATA = 'eMarketData'            # 行情推送事件
 EVENT_MARKETDATA_CONTRACT = 'eMarketData.'  # 特定合约的行情事件

@@ -32,6 +32,17 @@ def get_tick_num(dt):
 def get_min_id(dt):
     return ((dt.hour+6)%24)*100+dt.minute
 
+def trading_hours(product, exch):
+    hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
+    if exch in ['SSE', 'SZE']:
+        hrs = [(1530, 1730), (1900, 2100)]
+    elif exch == 'CFFEX':
+        hrs = [(1515, 1730), (1900, 2115)]
+    else:
+        if product in night_session_markets:
+            night_idx = night_session_markets[product]
+            hrs = [night_trading_hrs[night_idx]] + hrs   
+                    
 class TickData:
     def __init__(self, instID='IF1412', high=0.0, low=0.0, price=0.0, volume=0, openInterest=0, 
                  bidPrice1=0.0, bidVol1=0, askPrice1=0.0, askVol1=0, 
@@ -341,9 +352,14 @@ class CTPTraderRspMixin(object):
 
     def OnFrontDisconnected(self, nReason):
         """服务器断开"""
+        self.is_logged = False
         event = Event(type=EVENT_LOG)
         event.dict['log'] = u'交易服务器连接断开'
         self.eventEngine.put(event)
+
+        event2 = Event(type=EVENT_TDDISCONNECTED)
+        event2.dict['log'] = u'交易服务器连接断开'
+        self.eventEngine.put(event2)        
 
     def user_login(self, broker_id, investor_id, passwd):
         req = self.ApiStruct.ReqUserLogin(BrokerID=broker_id, UserID=investor_id, Password=passwd)
@@ -625,7 +641,6 @@ class Agent(object):
         self.daily_data_days = daily_data_days
         self.min_data_days = min_data_days
         self.tick_data  = dict([(inst, []) for inst in instruments])
-        self.late_tick  = dict([(inst, []) for inst in instruments])
         self.day_data  = dict([(inst, pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])) for inst in instruments])
         self.min_data  = dict([(inst, {1:pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}) for inst in instruments])
         self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
@@ -662,7 +677,8 @@ class Agent(object):
         self.eventEngine.register(EVENT_QRYORDER, self.rsp_qry_order)
         self.eventEngine.register(EVENT_QRYTRADE, self.rsp_qry_trade)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
-        
+        self.eventEngine.register(EVENT_TDDISCONNECTED, self.td_disconnected)
+        self.eventEngine.start()      
         self.strategies = strategies
         for strat in self.strategies:
             strat.agent = self
@@ -691,8 +707,14 @@ class Agent(object):
         self.margin_cap = margin_cap
     
     def log_handler(self, event):
-        self.logger.info(event['log'])
+        self.logger.info(event.dict['log'])
 
+    def td_disconnected(self, event):
+        self.eventEngine.unregister(EVENT_TIMER, self.check_qry_commands)
+    
+    def timer_handler(self, event):
+        pass
+            
     def initialize(self):
         '''
             初始化，如保证金率，账户资金等
@@ -707,7 +729,7 @@ class Agent(object):
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
         self.eventEngine.register(EVENT_TIMER, self.check_qry_commands)
-
+   
     def register_data_func(self, freq, fobj):
         if 'd' in freq:
             for func in self.day_data_func:
@@ -737,7 +759,7 @@ class Agent(object):
                 df = self.day_data[inst]
                 if len(df) > 0:
                     self.instruments[inst].price = df['close'][-1]
-                    self.instruments[inst].last_update = datetime.datetime.fromordinal(df.index[-1].toordinal())
+                    self.instruments[inst].last_update = 0
                     self.instruments[inst].prev_close = df['close'][-1]
                     for fobj in self.day_data_func:
                         ts = fobj.sfunc(df)
@@ -767,7 +789,7 @@ class Agent(object):
                         self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
                         self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
                         self.instruments[inst].price = float(mindata.ix[-1,'close'])
-                        self.instruments[inst].last_update = datetime.datetime.now()
+                        self.instruments[inst].last_update = 0
                         self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))                        
                     for m in self.min_data_func:
                         if m != 1:
@@ -813,7 +835,6 @@ class Agent(object):
     def check_qry_commands(self, event):
         if len(self.qry_commands)>0:
             self.qry_commands[0]()
-            del self.qry_commands[0]
         
     def get_eod_positions(self):
         file_prefix = self.folder
@@ -903,6 +924,8 @@ class Agent(object):
     
     def validate_tick(self, tick):
         inst = tick.instID
+        if self.instruments[inst].day_finalized:
+            return False
         if (self.instruments[inst].exchange == 'CZCE') and \
                 (tick.tick_id <= 530000+4) and (tick.tick_id >= 300000-4) and \
                 (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
@@ -920,15 +943,7 @@ class Agent(object):
             return False
         product = self.instruments[inst].product
         exch = self.instruments[inst].exchange
-        hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
-        if exch in ['SSE', 'SZE']:
-            hrs = [(1530, 1730), (1900, 2100)]
-        elif exch == 'CFFEX':
-            hrs = [(1515, 1730), (1900, 2115)]
-        else:
-            if product in night_session_markets:
-                night_idx = night_session_markets[product]
-                hrs = [night_trading_hrs[night_idx]] + hrs        
+        hrs = trading_hours(product, exch)
         tick_id = tick.tick_id
         if self.tick_id < tick_id:
             self.tick_id = tick_id
@@ -937,34 +952,18 @@ class Agent(object):
             if (tick_id>=ptime[0]*1000-5) and (tick_id<=ptime[1]*1000+5):
                 tick_status = True
                 break
-        if not tick_status:
-            if (tick_id > 2116000) and (not self.eod_flag):
-                self.eod_flag = True
-                self.logger.info('Received tick for inst=%s after trading hour, received tick: %s, tick_id=%s' % (tick.instID, tick.timestamp, tick_id))
-                self.day_finalize(self.instruments.keys())
-                self.run_eod()
-            elif (tick_id >= hrs[-1][1]*1000+4) and (not self.instruments[inst].day_finalized):
-                self.day_finalize([inst])
         return tick_status
     
     def update_instrument(self, tick):      
         inst = tick.instID    
         curr_tick = tick.tick_id
-        update_tick = get_tick_id(self.instruments[inst].last_update)
         self.instruments[inst].up_limit   = tick.upLimit
         self.instruments[inst].down_limit = tick.downLimit        
         if (tick.askPrice1 > MKT_DATA_BIGNUMBER) or (tick.askPrice1 == 0):
             tick.askPrice1 = tick.bidPrice1
         if (tick.bidPrice1 > MKT_DATA_BIGNUMBER) or (tick.bidPrice1 == 0):
             tick.bidPrice1 = tick.askPrice1  
-        if (self.instruments[inst].last_update.date() > tick.timestamp.date() or \
-                ((self.instruments[inst].last_update.date() == tick.timestamp.date()) and (update_tick >= curr_tick))):
-            #self.logger.warning('Instrument %s has received late tick, curr tick: %s, received tick: %s' % (tick.instID, self.instruments[tick.instID].last_update, tick.timestamp,))
-            if self.save_flag:
-                self.late_tick[inst].append(tick)
-            return False
-                
-        self.instruments[inst].last_update = tick.timestamp
+        self.instruments[inst].last_update = curr_tick
         self.instruments[inst].bid_price1 = tick.bidPrice1
         self.instruments[inst].ask_price1 = tick.askPrice1
         self.instruments[inst].mid_price = (tick.askPrice1 + tick.bidPrice1)/2.0
@@ -976,30 +975,25 @@ class Agent(object):
         if tick.volume > last_volume:
             self.instruments[inst].price  = tick.price
             self.instruments[inst].volume = tick.volume
-            self.instruments[inst].last_traded = tick.timestamp    
+            self.instruments[inst].last_traded = curr_tick    
         return True
-        
-    def update_hist_data(self, tick):
+    
+    def get_bar_id(self, tick_id):
+        return int(tick_id/1000)
+    
+    def conv_bar_id(self, bar_id):
+        return int(bar_id/100)*60 + bar_id % 100 + 1
+            
+    def update_min_bar(self, tick):
         inst = tick.instID
         tick_dt = tick.timestamp
         tick_id = tick.tick_id
-        tick_min = int(tick_id/1000)
-        if ((self.cur_min[inst]['datetime'].date() > tick_dt.date()) or (self.cur_min[inst]['min_id'] > tick_min)):
+        tick_min = self.get_bar_id(tick_id)
+        if (self.cur_min[inst]['min_id'] > tick_min):
             return False
-        
-        if self.cur_day[inst]['date'] != tick_dt.date():
-            self.logger.warning('the daily data date is not same as tick data, daily data=%s, tick data-%s' % (self.cur_day[inst]['date'], tick_dt.date()))
-            return False
-        
-        if self.instruments[inst].is_busy or self.instruments[inst].day_finalized:
-            return False
-        else:
-            self.instruments[inst].is_busy = True        
-        
         #try:
         if (self.cur_day[inst]['open'] == 0.0):
             self.cur_day[inst]['open'] = tick.price
-            #mysqlaccess.insert_daily_data(inst, self.cur_day[inst], True)
             self.logger.info('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
         self.cur_day[inst]['close'] = tick.price
         self.cur_day[inst]['high']  = tick.high
@@ -1007,7 +1001,7 @@ class Agent(object):
         self.cur_day[inst]['openInterest'] = tick.openInterest
         self.cur_day[inst]['volume'] = tick.volume
         self.cur_day[inst]['date'] = tick.timestamp.date()
-
+        
         for strat in self.strategies:
             if (inst in strat.instIDs):
                 strat.tick_run(tick)
@@ -1028,12 +1022,8 @@ class Agent(object):
                     self.min_switch(inst)
                 else:
                     if self.save_flag:
-                        mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
-                        if len(self.late_tick[inst])>0:
-                            mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
-                            self.late_tick[inst] = []                     
-                self.cur_min[inst]['volume'] = last_tick.volume                    
-            
+                        mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)              
+                self.cur_min[inst]['volume'] = last_tick.volume                                
             self.tick_data[inst] = []
             self.cur_min[inst]['open']  = tick.price
             self.cur_min[inst]['close'] = tick.price
@@ -1043,25 +1033,19 @@ class Agent(object):
             self.cur_min[inst]['openInterest'] = tick.openInterest
             self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
             if ((tick_min>0) and (tick.price>0)): 
-                self.tick_data[inst].append(tick)
-        
-        if tick_id >= self.instruments[inst].last_tick_id:
-            self.day_finalize([inst])
-
-        #except Exception as e:
-            #print "exception = %s time = %s" % (e, datetime.datetime.now())
-            #pass
-        self.instruments[inst].is_busy = False               
+                self.tick_data[inst].append(tick)        
+        #if tick_id >= self.instruments[inst].last_tick_id:
+        #    self.day_finalize([inst])      
         return True  
     
     def min_switch(self, inst):
         min_id = self.cur_min[inst]['min_id']
-        mins = int(min_id/100)*60 + min_id % 100 + 1
+        min_sn = self.conv_bar_id(min_id)
         df = self.min_data[inst][1]
         mysqlaccess.insert_min_data_to_df(df, self.cur_min[inst])
         for m in self.min_data_func:
             df_m = self.min_data[inst][m]
-            if m > 1 and mins % m == 0:
+            if m > 1 and min_sn % m == 0:
                 s_start = self.cur_min[inst]['datetime'] - datetime.timedelta(minutes=m)
                 slices = df[df.index>s_start]
                 new_data = {'open':slices['open'][0],'high':max(slices['high']), \
@@ -1069,15 +1053,12 @@ class Agent(object):
                             'volume': sum(slices['volume']), 'min_id':slices['min_id'][0]}
                 df_m.loc[s_start] = pd.Series(new_data)
                 print df_m.loc[s_start]
-            if mins % m == 0:
+            if min_sn % m == 0:
                 for fobj in self.min_data_func[m]:
                     fobj.rfunc(df_m)
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
-            mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)
-            if len(self.late_tick[inst])>0:
-                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
-                self.late_tick[inst] = []                
+            mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)        
         for strat in self.strategies:
             if inst in strat.instIDs:
                 strat.run_min(inst)
@@ -1096,10 +1077,7 @@ class Agent(object):
                         self.min_switch(inst)
                     else:
                         if self.save_flag:
-                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
-                            if len(self.late_tick[inst])>0:
-                                mysqlaccess.bulkinsert_tick_data(inst, self.late_tick[inst], dbtable = self.tick_db_table)
-                                self.late_tick[inst] = []      
+                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)  
                 if (self.cur_day[inst]['close']>0):
                     mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                     df = self.day_data[inst]
@@ -1155,7 +1133,8 @@ class Agent(object):
         strat.agent = self
         strat.reset()
          
-    def day_switch(self, newday):
+    def day_switch(self, event):
+        newday = event.dict['date']
         if newday <= self.scur_day:
             return 
         self.logger.info('switching the trading day from %s to %s' % (self.scur_day, newday))
@@ -1242,27 +1221,30 @@ class Agent(object):
         return r
     
     def RtnTick(self, event):#行情处理主循环
-        ctick = event['data']
+        ctick = event.dict['data']
         if self.live_trading:
             now_ticknum = get_tick_num(datetime.datetime.now())
             cur_ticknum = get_tick_num(ctick.timestamp)
             if abs(cur_ticknum - now_ticknum)> MAX_REALTIME_DIFF:
                 self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, ticknum= %s, now_ticknum=%s' % (ctick.instID, cur_ticknum, now_ticknum))
                 return 0
+            
         if (not self.validate_tick(ctick)):
+            print ctick.instID, ctick.timestamp, ctick.tick_id
+            print "stop at validating tick"
             return 0
         
         if (not self.update_instrument(ctick)):
-            # print "stop at update inst"
+            print ctick.instID, ctick.timestamp, ctick.tick_id
+            print "stop at update inst"
             return 0
      
-        if( not self.update_hist_data(ctick)):
+        if( not self.update_min_bar(ctick)):
+            print ctick.instID, ctick.timestamp, ctick.tick_id
+            print "stop at hist data update"            
             return 0
    
-        if not self.proc_lock:
-            self.proc_lock = True
-            self.process_trade_list()
-            self.proc_lock = False
+        self.process_trade_list()
         return 1
     
     def process_trade(self, exec_trade):
@@ -1424,6 +1406,7 @@ class Agent(object):
     def check_order_list(self):
         order_ids = self.ref2order.keys()
         order_ids.sort()
+        Is_Set = False
         for order_id in order_ids:
             iorder = self.ref2order[order_id]                                                        
             if iorder.status == order.OrderStatus.Ready:
@@ -1466,7 +1449,7 @@ class Agent(object):
         #TODO: 必须考虑出现平仓信号时，position还没完全成交的情况在OnTrade中进行position的细致处理 
         #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''        
-        ptrade = event['data']
+        ptrade = event.dict['data']
         order_ref = int(ptrade.OrderRef)
         if (order_ref in self.ref2order) and (ptrade.InstrumentID in self.instruments):
             myorder = self.ref2order[order_ref]
@@ -1483,7 +1466,7 @@ class Agent(object):
     def rtn_order(self, event):
         '''交易所接受下单回报(CTP接受的已经被过滤)暂时只处理撤单的回报. 
         '''
-        porder = event['data']
+        porder = event.dict['data']
         order_ref = int(porder.OrderRef)
         if (order_ref in self.agent.ref2order):
             myorder = self.ref2order[order_ref]
@@ -1498,10 +1481,10 @@ class Agent(object):
         '''
             ctp/交易所下单错误回报，不区分ctp和交易所正常情况下不应当出现
         '''
-        porder = event['data']
+        porder = event.dict['data']
         order_ref = int(porder.OrderRef)
         instrument_id = porder.InstrumentID
-        error = event['error']
+        error = event.dict['error']
         if order_ref in self.ref2order:
             self.logger.warning(u'报单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
             myorder = self.ref2order[order_ref]
@@ -1513,8 +1496,8 @@ class Agent(object):
         '''
             ctp/交易所撤单错误回报，不区分ctp和交易所必须处理，如果已成交，撤单后必然到达这个位置
         '''
-        porder = event['data']
-        error = event['error']
+        porder = event.dict['data']
+        error = event.dict['error']
         if len(porder.OrderRef) > 0:
             order_ref = int(porder.OrderRef)
             myorder = self.ref2order[order_ref]
@@ -1526,8 +1509,8 @@ class Agent(object):
     
     ###辅助   
     def rsp_qry_position(self, event):
-        pposition = event['data']
-        error = event['error']
+        pposition = event.dict['data']
+        error = event.dict['error']
         instID = pposition.InstrumentID
         if (error.ErrorID == 0) and (pposition != None) and (instID in self.qry_pos):
             key = pposition.PosiDirection + '.' + pposition.PositionDate
@@ -1536,7 +1519,7 @@ class Agent(object):
 
     def rsp_qry_instrument_marginrate(self, event):
         '''查询保证金率回报. '''
-        pinst = event['data']
+        pinst = event.dict['data']
         instID = pinst.InstrumentID
         if instID in self.instruments:
             inst = self.instruments[instID]
@@ -1544,11 +1527,11 @@ class Agent(object):
 
     def rsp_qry_trading_account(self, event):
         '''查询资金帐户回报'''
-        paccount = event['data']
+        paccount = event.dict['data']
         self.available = paccount.Available      
     
     def rsp_qry_instrument(self, event):
-        pinst = event['data']
+        pinst = event.dict['data']
         instID = pinst.InstrumentID
         if instID in self.instruments:
             inst = self.instruments[instID]
@@ -1563,7 +1546,7 @@ class Agent(object):
 
     def rsp_qry_order(self, event):
         '''查询报单'''
-        sorder = event['data']
+        sorder = event.dict['data']
         if (sorder == None) or (sorder.InstrumentID not in self.instruments) or (len(sorder.OrderRef) == 0):
             return
         order_ref = int(sorder.OrderRef) 
@@ -1584,7 +1567,7 @@ class Agent(object):
 
     def rsp_qry_trade(self, event):
         '''查询成交'''
-        strade = event['data']
+        strade = event.dict['data']
         if (strade == None) or (strade.InstrumentID not in self.instruments) or (len(strade.OrderRef) == 0):
             return
         order_ref = int(strade.OrderRef) 

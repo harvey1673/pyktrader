@@ -66,9 +66,10 @@ class EventEngine:
     def onTimer(self):
         """向事件队列中存入计时器事件"""
         # 创建计时器事件
-        event = Event(type=EVENT_TIMER)
-        # 向队列中存入计时器事件
-        self.put(event)    
+        if self.is_active:
+            event = Event(type=EVENT_TIMER)
+            # 向队列中存入计时器事件
+            self.put(event)    
 
     #----------------------------------------------------------------------
     def start(self):
