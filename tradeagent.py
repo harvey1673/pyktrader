@@ -41,7 +41,8 @@ def trading_hours(product, exch):
     else:
         if product in night_session_markets:
             night_idx = night_session_markets[product]
-            hrs = [night_trading_hrs[night_idx]] + hrs   
+            hrs = [night_trading_hrs[night_idx]] + hrs  
+    return hrs 
                     
 class TickData:
     def __init__(self, instID='IF1412', high=0.0, low=0.0, price=0.0, volume=0, openInterest=0, 
@@ -327,8 +328,7 @@ class CTPTraderQryMixin(object):
                 InvestorID = self.investor_id,
                 FrontID = self.front_id,
                 SessionID = self.session_id,
-                ActionFlag = self.ApiStruct.AF_Delete,
-            )
+                ActionFlag = self.ApiStruct.AF_Delete)
         r = self.ReqOrderAction(req,self.agent.inc_request_id())
         return r
 
@@ -1608,7 +1608,8 @@ class Agent(object):
         self.trader = None
         self.mdapis = []
         # 停止事件驱动引擎
-        self.eventEngine.stop()        
+        self.eventEngine.stop()
+        self.eventEngine = None        
 
 class SaveAgent(Agent):
     def init_init(self):

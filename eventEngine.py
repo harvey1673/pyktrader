@@ -53,6 +53,7 @@ class EventEngine:
                 self.process(event)
             except Queue.Empty:
                 pass
+        print "exit the run"
             
     #----------------------------------------------------------------------
     def process(self, event):
@@ -91,9 +92,11 @@ class EventEngine:
         
         # 停止计时器
         self.timer.cancel()
+        self.timer = None
         
         # 等待事件处理线程退出
         self.thread.join()
+        self.thread = None
             
     #----------------------------------------------------------------------
     def register(self, etype, handler):
@@ -152,10 +155,12 @@ def test():
     ee = EventEngine(0.5)
     ee.register(EVENT_TIMER, simpletest)
     ee.start()
-    for i in range(10):
+    for i in range(1000):
         time.sleep(1.0)
         print "loop %s" % i
-    ee.stop()
+        if i>5:
+            ee.stop()
+            break
     
 # 直接运行脚本可以进行测试
 if __name__ == '__main__':
