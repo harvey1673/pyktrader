@@ -158,7 +158,7 @@ class CTPMdMixin(object):
     def OnRtnDepthMarketData(self, dp):
         try:
             if dp.LastPrice > 999999 or dp.LastPrice < 0.0001:
-                self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
+                #self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
                 return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
             if len(dp.TradingDay.strip()) > 0:
@@ -328,7 +328,8 @@ class CTPTraderQryMixin(object):
                 InvestorID = self.investor_id,
                 FrontID = self.front_id,
                 SessionID = self.session_id,
-                ActionFlag = self.ApiStruct.AF_Delete)
+                ActionFlag = self.ApiStruct.AF_Delete,
+            )
         r = self.ReqOrderAction(req,self.agent.inc_request_id())
         return r
 
@@ -629,7 +630,6 @@ class Agent(object):
         self.create_instruments(instruments, tday)
         self.initialized = False
         self.scur_day = tday
-        self.proc_lock = True
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
         self.live_trading = live_trading
@@ -661,7 +661,6 @@ class Agent(object):
         self.day_data_func = []
         self.min_data_func = {}
         
-        self.startup_time = datetime.datetime.now()
         self.eventEngine = EventEngine()
         self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
         self.eventEngine.register(EVENT_LOG, self.log_handler)
@@ -1092,7 +1091,6 @@ class Agent(object):
         self.eod_flag = True
         if self.trader == None:
             return 
-        self.proc_lock = True
         print 'run EOD process'
         pfilled_list = []
         for etrade in self.etrades:
@@ -1126,7 +1124,6 @@ class Agent(object):
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
             self.instruments[inst].volume = 0            
         self.initialized = False
-        self.proc_lock = False
 
     def add_strategy(self, strat):
         self.append(strat)
@@ -1230,18 +1227,18 @@ class Agent(object):
                 return 0
             
         if (not self.validate_tick(ctick)):
-            print ctick.instID, ctick.timestamp, ctick.tick_id
-            print "stop at validating tick"
+            #print ctick.instID, ctick.timestamp, ctick.tick_id
+            #print "stop at validating tick"
             return 0
         
         if (not self.update_instrument(ctick)):
-            print ctick.instID, ctick.timestamp, ctick.tick_id
-            print "stop at update inst"
+            #print ctick.instID, ctick.timestamp, ctick.tick_id
+            #print "stop at update inst"
             return 0
      
         if( not self.update_min_bar(ctick)):
-            print ctick.instID, ctick.timestamp, ctick.tick_id
-            print "stop at hist data update"            
+            #print ctick.instID, ctick.timestamp, ctick.tick_id
+            #print "stop at hist data update"            
             return 0
    
         self.process_trade_list()
