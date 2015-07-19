@@ -5,7 +5,7 @@ import datetime
 import logging
 import bisect
 import mysqlaccess
-import order as order
+import order as trade
 import math
 import os
 import csv
@@ -656,7 +656,7 @@ class Agent(object):
         self.pnl_total = 0.0
         self.curr_capital = 1000000.0
         self.prev_capital = 1000000.0
-        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
+        self.positions= dict([(inst, trade.Position(self.instruments[inst])) for inst in instruments])
         self.qry_pos = dict([(inst, {} ) for inst in instruments])
         self.day_data_func = []
         self.min_data_func = {}
@@ -666,7 +666,7 @@ class Agent(object):
         self.eventEngine.register(EVENT_LOG, self.log_handler)
         self.eventEngine.register(EVENT_ORDER, self.rtn_order)
         self.eventEngine.register(EVENT_TRADE, self.rtn_trade)
-        self.eventEngine.register(EVENT_MARKETDATA, self.RtnTick)
+        self.eventEngine.register(EVENT_MARKETDATA, self.rtn_tick)
         self.eventEngine.register(EVENT_ERRORDERINSERT, self.err_order_insert)
         self.eventEngine.register(EVENT_ERRORDERCANCEL, self.err_order_action)
         self.eventEngine.register(EVENT_MARGINRATE, self.rsp_qry_instrument_marginrate)
@@ -804,7 +804,7 @@ class Agent(object):
             return 
         self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder
-        self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
+        self.ref2order = trade.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
         if len(keys) > 1:
             keys.sort()
@@ -813,7 +813,7 @@ class Agent(object):
             if len(iorder.conditionals)>0:
                 self.ref2order[key].conditionals = dict([(self.ref2order[o_id], iorder.conditionals[o_id]) 
                                                          for o_id in iorder.conditionals])
-        self.etrades = order.load_trade_list(self.scur_day, file_prefix)
+        self.etrades = trade.load_trade_list(self.scur_day, file_prefix)
         for etrade in self.etrades:
             orderdict = etrade.order_dict
             for inst in orderdict:
@@ -917,8 +917,8 @@ class Agent(object):
         '''
         self.logger.info(u'保存执行状态.....................')
         file_prefix = self.folder
-        order.save_order_list(self.scur_day, self.ref2order, file_prefix)
-        order.save_trade_list(self.scur_day, self.etrades, file_prefix)
+        trade.save_order_list(self.scur_day, self.ref2order, file_prefix)
+        trade.save_trade_list(self.scur_day, self.etrades, file_prefix)
         return
     
     def validate_tick(self, tick):
@@ -1095,15 +1095,15 @@ class Agent(object):
         pfilled_list = []
         for etrade in self.etrades:
             etrade.update()
-            if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
-                etrade.status = order.ETradeStatus.Cancelled
-            elif etrade.status == order.ETradeStatus.PFilled:
-                etrade.status = order.ETradeStatus.Cancelled
+            if etrade.status == trade.ETradeStatus.Pending or etrade.status == trade.ETradeStatus.Processed:
+                etrade.status = trade.ETradeStatus.Cancelled
+            elif etrade.status == trade.ETradeStatus.PFilled:
+                etrade.status = trade.ETradeStatus.Cancelled
                 self.logger.warning('Still partially filled after close. trade id= %s' % etrade.id)
                 pfilled_list.append(etrade)
         if len(pfilled_list)>0:
             file_prefix = self.folder + 'PFILLED_'
-            order.save_trade_list(self.scur_day, pfilled_list, file_prefix)    
+            trade.save_trade_list(self.scur_day, pfilled_list, file_prefix)    
         for strat in self.strategies:
             strat.day_finalize()
             strat.initialize()
@@ -1115,7 +1115,7 @@ class Agent(object):
             eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
         self.etrades = []
         self.ref2order = {}
-        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
+        self.positions= dict([(inst, trade.Position(self.instruments[inst])) for inst in self.instruments])
         self.prev_capital = self.curr_capital
         for inst in self.positions:
             self.positions[inst].pos_yday.long = eod_pos[inst][0] 
@@ -1217,7 +1217,7 @@ class Agent(object):
         self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
         return r
     
-    def RtnTick(self, event):#行情处理主循环
+    def rtn_tick(self, event):#行情处理主循环
         ctick = event.dict['data']
         if self.live_trading:
             now_ticknum = get_tick_num(datetime.datetime.now())
@@ -1264,7 +1264,7 @@ class Agent(object):
                 if ((v>0) and (v > pos.can_close.long + pos.can_yclose.long + pos.can_open.long)) or \
                         ((v<0) and (-v > pos.can_close.short + pos.can_yclose.short + pos.can_open.short)):
                     self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
-                    exec_trade.status = order.ETradeStatus.Cancelled
+                    exec_trade.status = trade.ETradeStatus.Cancelled
                     return False
 
                 if v>0:
@@ -1279,11 +1279,11 @@ class Agent(object):
                 if vol > 0:
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
-                        cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
+                        cond = { o:trade.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
                     order_type = OF_CLOSE
                     if (self.instruments[inst].exchange == "SHFE"):
                         order_type = OF_CLOSE_TDAY                        
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond )
+                    iorder = trade.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond )
                     orders.append(iorder)
                   
                 if (self.instruments[inst].exchange == "SHFE") and (abs(remained)>0) and (pos.can_yclose.short+pos.can_yclose.long>0):
@@ -1299,8 +1299,8 @@ class Agent(object):
                     if vol > 0:
                         cond = {}
                         if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
-                            cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond )
+                            cond = { o:trade.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
+                        iorder = trade.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond )
                         orders.append(iorder)
                 
                 vol = abs(remained)
@@ -1315,14 +1315,14 @@ class Agent(object):
                     required_margin += vol * self.instruments[inst].calc_margin_amount(direction, under_price)
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
-                        cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond )
+                        cond = { o:trade.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
+                    iorder = trade.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond )
                     orders.append(iorder)
                 all_orders[inst] = orders
                 
             if required_margin + self.locked_margin > self.margin_cap:
                 self.logger.warning("ETrade %s is cancelled due to margin cap: %s" % (exec_trade.id, inst))
-                exec_trade.status = order.ETradeStatus.Cancelled                
+                exec_trade.status = trade.ETradeStatus.Cancelled                
                 return False
 
             exec_trade.order_dict = all_orders
@@ -1331,7 +1331,7 @@ class Agent(object):
                 for iorder in all_orders[inst]:
                     pos.add_order(iorder)
                     self.ref2order[iorder.order_ref] = iorder
-            exec_trade.status = order.ETradeStatus.Processed
+            exec_trade.status = trade.ETradeStatus.Processed
             self.save_state()
             return True
         else:
@@ -1340,28 +1340,28 @@ class Agent(object):
         
     def process_trade_list(self):
         Is_Set = False
-        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes, etrade.filled_price, etrade.filled_vol, etrade.valid_time) for etrade in self.etrades if etrade.status == order.ETradeStatus.StratConfirm ] 
+        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes, etrade.filled_price, etrade.filled_vol, etrade.valid_time) for etrade in self.etrades if etrade.status == trade.ETradeStatus.StratConfirm ] 
         if len(confirmed)>0:
             Is_Set = True
             print confirmed
             self.logger.info('(%s) trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
-        self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.StratConfirm ]
+        self.etrades = [ etrade for etrade in self.etrades if etrade.status != trade.ETradeStatus.StratConfirm ]
         for exec_trade in self.etrades:
-            if exec_trade.status == order.ETradeStatus.Pending:
+            if exec_trade.status == trade.ETradeStatus.Pending:
                 if (exec_trade.valid_time < self.tick_id):
-                    exec_trade.status = order.ETradeStatus.Cancelled
+                    exec_trade.status = trade.ETradeStatus.Cancelled
                     Is_Set = True
                     continue
                 else:
                     if self.process_trade(exec_trade):
                         Is_Set = True
-            elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
+            elif (exec_trade.status == trade.ETradeStatus.Processed) or (exec_trade.status == trade.ETradeStatus.PFilled):
                 prev_update = exec_trade.status
                 exec_trade.update()
                 if exec_trade.status != prev_update:
                     Is_Set = True
                 if (exec_trade.valid_time < self.tick_id): 
-                    if exec_trade.status == order.ETradeStatus.Done:
+                    if exec_trade.status == trade.ETradeStatus.Done:
                         continue
                     else:
                         # cancel first, if PFilled, market order the unfilled.
@@ -1372,14 +1372,14 @@ class Agent(object):
                             orders = []
                             for iorder in exec_trade.order_dict[inst]:
                                 if (iorder.volume > iorder.filled_volume):
-                                    if ( iorder.status == order.OrderStatus.Waiting) \
-                                            or (iorder.status == order.OrderStatus.Ready):
+                                    if ( iorder.status == trade.OrderStatus.Waiting) \
+                                            or (iorder.status == trade.OrderStatus.Ready):
                                         iorder.on_cancel()
                                     else:
                                         self.cancel_order(iorder)
-                                    if exec_trade.status == order.ETradeStatus.PFilled:                                        
-                                        cond = {iorder:order.OrderStatus.Cancelled}
-                                        norder =   order.Order(iorder.position, 
+                                    if exec_trade.status == trade.ETradeStatus.PFilled:                                        
+                                        cond = {iorder:trade.OrderStatus.Cancelled}
+                                        norder =   trade.Order(iorder.position, 
                                                      0, 
                                                      0, # fill in the volume when the dependent order is cancelled 
                                                      self.tick_id, 
@@ -1406,7 +1406,7 @@ class Agent(object):
         Is_Set = False
         for order_id in order_ids:
             iorder = self.ref2order[order_id]                                                        
-            if iorder.status == order.OrderStatus.Ready:
+            if iorder.status == trade.OrderStatus.Ready:
                 self.send_order(iorder)
                 Is_Set = True        
         return Is_Set
@@ -1428,7 +1428,7 @@ class Agent(object):
                     iorder.limit_price = max(inst.down_limit, inst.bid_price1 - inst.tick_base * self.market_order_tick_multiple)
             else:
                 iorder.limit_price = 0.0
-        iorder.status = order.OrderStatus.Sent        
+        iorder.status = trade.OrderStatus.Sent        
         self.trader.send_order(iorder)
         
 
@@ -1498,7 +1498,7 @@ class Agent(object):
         if len(porder.OrderRef) > 0:
             order_ref = int(porder.OrderRef)
             myorder = self.ref2order[order_ref]
-            if int(error.ErrorID) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
+            if int(error.ErrorID) in [25,26] and myorder.status!=trade.OrderStatus.Cancelled:
                 self.logger.info(u'撤销开仓单')
                 myorder.on_cancel()
         else:
@@ -1551,13 +1551,13 @@ class Agent(object):
             iorder = self.ref2order[order_ref]
             iorder.sys_id = sorder.OrderSysID
             if sorder.OrderStatus in [self.trader.ApiStruct.OST_NoTradeQueueing, self.trader.ApiStruct.OST_PartTradedQueueing, self.trader.ApiStruct.OST_Unknown]:
-                if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}: 
+                if iorder.status != trade.OrderStatus.Sent or iorder.conditionals != {}: 
                     self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status))
-                    iorder.status = order.OrderStatus.Sent
+                    iorder.status = trade.OrderStatus.Sent
                     iorder.conditionals = {}
                     #iorpder.position.re_calc()
             elif sorder.OrderStatus in [self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing, self.trader.ApiStruct.OST_NoTradeNotQueueing]:
-                if iorder.status != order.OrderStatus.Cancelled:                     
+                if iorder.status != trade.OrderStatus.Cancelled:                     
                     self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status))                          
                     iorder.on_cancel()
                     #iorpder.position.re_calc()
@@ -1571,8 +1571,8 @@ class Agent(object):
         if (order_ref in self.agent.ref2order):
             iorder = self.ref2order[order_ref]
             iorder.sys_id = strade.OrderSysID
-            if (iorder.status not in [order.OrderStatus.Done, order.OrderStatus.Cancelled]) or (iorder.filled_volume != strade.Volume):
-                iorder.status = order.OrderStatus.Done
+            if (iorder.status not in [trade.OrderStatus.Done, trade.OrderStatus.Cancelled]) or (iorder.filled_volume != strade.Volume):
+                iorder.status = trade.OrderStatus.Done
                 iorder.filled_volume = strade.Volume
                 iorder.cancelled_volume = iorder.volume - iorder.filled_volume
                 iorder.volume = iorder.filled_volume
