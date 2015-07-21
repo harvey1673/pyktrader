@@ -626,8 +626,6 @@ class Agent(object):
         self.name = name
         self.folder = folder + self.name + '\\'
         self.cuser = cuser
-        self.instruments = {}
-        self.create_instruments(instruments, tday)
         self.initialized = False
         self.scur_day = tday
         #保存分钟数据标志
@@ -640,14 +638,16 @@ class Agent(object):
         # market data
         self.daily_data_days = daily_data_days
         self.min_data_days = min_data_days
-        self.tick_data  = dict([(inst, []) for inst in instruments])
-        self.day_data  = dict([(inst, pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])) for inst in instruments])
-        self.min_data  = dict([(inst, {1:pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}) for inst in instruments])
-        self.cur_min = dict([(inst, dict([(item, 0) for item in min_data_list])) for inst in instruments])
-        self.cur_day = dict([(inst, dict([(item, 0) for item in day_data_list])) for inst in instruments])  
-        for inst in instruments:
-            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-            self.cur_day[inst]['date'] = self.scur_day
+        self.instruments = {}
+        self.tick_data  = {}
+        self.day_data  = {}
+        self.min_data  = {}
+        self.cur_min = {}
+        self.cur_day = {}  
+        self.positions= {} 
+        self.qry_pos = {}
+        self.add_instruments(instruments, self.scur_day)
+                    
         #当前资金/持仓
         self.available = 0  #可用资金
         self.locked_margin = 0
@@ -656,8 +656,7 @@ class Agent(object):
         self.pnl_total = 0.0
         self.curr_capital = 1000000.0
         self.prev_capital = 1000000.0
-        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in instruments])
-        self.qry_pos = dict([(inst, {} ) for inst in instruments])
+        
         self.day_data_func = []
         self.min_data_func = {}
         
@@ -678,16 +677,17 @@ class Agent(object):
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
         self.eventEngine.register(EVENT_TDDISCONNECTED, self.td_disconnected)
         self.eventEngine.start()      
-        self.strategies = strategies
+        self.strategies = []
         for strat in self.strategies:
-            strat.agent = self
-            strat.reset()
+            self.add_strategy(strat)
 
         self.prepare_data_env(mid_day = True)
         self.get_eod_positions()
 
         ###交易
         self.ref2order = {}    #orderref==>order
+        self.ref2trade = {}
+        self.inst2strat = {}
         #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
         
         self.cancel_protect_period = 200
@@ -695,8 +695,6 @@ class Agent(object):
         
         ##查询命令队列
         self.qry_commands = []  #每个元素为查询命令，用于初始化时查询相关数据
-        
-        self.etrades = []
         self.init_init()    #init中的init,用于子类的处理
 
         #结算单
@@ -813,8 +811,9 @@ class Agent(object):
             if len(iorder.conditionals)>0:
                 self.ref2order[key].conditionals = dict([(self.ref2order[o_id], iorder.conditionals[o_id]) 
                                                          for o_id in iorder.conditionals])
-        self.etrades = order.load_trade_list(self.scur_day, file_prefix)
-        for etrade in self.etrades:
+        self.ref2trade = order.load_trade_list(self.scur_day, file_prefix)
+        for trade_id in self.ref2trade:
+            etrade = self.ref2trade[trade_id]
             orderdict = etrade.order_dict
             for inst in orderdict:
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
@@ -822,7 +821,7 @@ class Agent(object):
         
         for strat in self.strategies:
             strat.initialize()
-            strat_trades = [ etrade for etrade in self.etrades if etrade.strategy == strat.name ]
+            strat_trades = [ etrade for etrade in self.ref2trade.values() if etrade.strategy == strat.name ]
             for trade in strat_trades:
                 strat.add_submitted_pos(trade)
             
@@ -918,7 +917,7 @@ class Agent(object):
         self.logger.info(u'保存执行状态.....................')
         file_prefix = self.folder
         order.save_order_list(self.scur_day, self.ref2order, file_prefix)
-        order.save_trade_list(self.scur_day, self.etrades, file_prefix)
+        order.save_trade_list(self.scur_day, self.ref2trade, file_prefix)
         return
     
     def validate_tick(self, tick):
@@ -1092,18 +1091,19 @@ class Agent(object):
         if self.trader == None:
             return 
         print 'run EOD process'
-        pfilled_list = []
-        for etrade in self.etrades:
+        pfilled_dict = {}
+        for trade_id in self.ref2trade:
+            etrade = self.ref2trade[trade_id]
             etrade.update()
             if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
                 etrade.status = order.ETradeStatus.Cancelled
             elif etrade.status == order.ETradeStatus.PFilled:
                 etrade.status = order.ETradeStatus.Cancelled
-                self.logger.warning('Still partially filled after close. trade id= %s' % etrade.id)
-                pfilled_list.append(etrade)
-        if len(pfilled_list)>0:
+                self.logger.warning('Still partially filled after close. trade id= %s' % trade_id)
+                pfilled_dict[trade_id] = etrade
+        if len(pfilled_dict)>0:
             file_prefix = self.folder + 'PFILLED_'
-            order.save_trade_list(self.scur_day, pfilled_list, file_prefix)    
+            order.save_trade_list(self.scur_day, pfilled_dict, file_prefix)    
         for strat in self.strategies:
             strat.day_finalize()
             strat.initialize()
@@ -1113,7 +1113,7 @@ class Agent(object):
         for inst in self.positions:
             pos = self.positions[inst]
             eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
-        self.etrades = []
+        self.ref2trade = {}
         self.ref2order = {}
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
         self.prev_capital = self.curr_capital
@@ -1125,8 +1125,33 @@ class Agent(object):
             self.instruments[inst].volume = 0            
         self.initialized = False
 
+    def add_instruments(self, names, tday):
+        add_names = [ name for name in names if name not in self.instruments]
+        for name in add_names:
+            if name.isdigit():
+                if len(name) == 8:
+                    self.instruments[name] = instrument.StockOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Stock(name)
+            else:
+                if len(name) > 10:
+                    self.instruments[name] = instrument.FutOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Future(name)
+            self.instruments[name].update_param(tday)                    
+            self.tick_data[name] = []
+            self.day_data[name]  = pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])
+            self.min_data[name]  = {1: pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}
+            self.cur_min[name]   = dict([(item, 0) for item in min_data_list])
+            self.cur_day[name]   = dict([(item, 0) for item in day_data_list])  
+            self.positions[name] = order.Position(self.instruments[name])
+            self.qry_pos[name]   = {}
+            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+            self.cur_day[name]['date'] = tday
+        
     def add_strategy(self, strat):
-        self.append(strat)
+        self.add_instruments(strat.instIDs, self.scur_day)
+        self.strategies.append(strat)
         strat.agent = self
         strat.reset()
          
@@ -1340,13 +1365,13 @@ class Agent(object):
         
     def process_trade_list(self):
         Is_Set = False
-        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes, etrade.filled_price, etrade.filled_vol, etrade.valid_time) for etrade in self.etrades if etrade.status == order.ETradeStatus.StratConfirm ] 
+        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes, etrade.filled_price, etrade.filled_vol, etrade.valid_time) for etrade in self.ref2trade.values() if etrade.status == order.ETradeStatus.StratConfirm ] 
         if len(confirmed)>0:
             Is_Set = True
             print confirmed
             self.logger.info('(%s) trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
-        self.etrades = [ etrade for etrade in self.etrades if etrade.status != order.ETradeStatus.StratConfirm ]
-        for exec_trade in self.etrades:
+        #self.ref2trade = [ etrade for etrade in self.ref2trade if etrade.status != order.ETradeStatus.StratConfirm ]
+        for exec_trade in self.ref2trade.values():
             if exec_trade.status == order.ETradeStatus.Pending:
                 if (exec_trade.valid_time < self.tick_id):
                     exec_trade.status = order.ETradeStatus.Cancelled
@@ -1438,7 +1463,7 @@ class Agent(object):
         self.trader.cancel_order(iorder)
     
     def submit_trade(self, etrade):
-        self.etrades.append(etrade)
+        self.ref2trade[etrade.id] = etrade
          
     ###回应
     def rtn_trade(self, event):
@@ -1578,26 +1603,6 @@ class Agent(object):
                 iorder.volume = iorder.filled_volume
                 iorder.filled_price = strade.Price
                 #iorpder.position.re_calc()        
-        
-    def create_instruments(self, names, tday):
-        '''根据名称序列和策略序列创建instrument其中策略序列的结构为:
-           [总最大持仓量,策略1,策略2...] 
-        '''
-        insts = {}
-        for name in names:
-            if name.isdigit():
-                if len(name) == 8:
-                    insts[name] = instrument.StockOptionInst(name)
-                else:
-                    insts[name] = instrument.Stock(name)
-            else:
-                if len(name) > 10:
-                    insts[name] = instrument.FutOptionInst(name)
-                else:
-                    insts[name] = instrument.Future(name)
-            insts[name].update_param(tday)
-        self.instruments = insts
-        return
 
     def exit(self):
         """退出"""
