@@ -651,7 +651,7 @@ class Agent(object):
         self.add_instruments(instruments, self.scur_day)
         
 		self.strategies = {}	
-        for strat in self.strategies:
+        for strat in strategies:
             self.add_strategy(strat)
 
         ###交易
@@ -1093,9 +1093,8 @@ class Agent(object):
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
             mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)        
-        for strat in self.strategies:
-            if inst in strat.instIDs:
-                strat.run_min(inst)
+        for strat in self.inst2strat:
+            self.strategies[strat].run_min():
         return
         
     def day_finalize(self, insts):        
