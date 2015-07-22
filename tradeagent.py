@@ -647,19 +647,17 @@ class Agent(object):
         self.positions= {} 
         self.qry_pos = {}
         self.day_data_func = {}
-        self.min_data_func = {}			
+        self.min_data_func = {}
+        self.inst2strat = {}            
         self.add_instruments(instruments, self.scur_day)
-        
-		self.strategies = {}	
+        self.strategies = {}    
         for strat in strategies:
-            self.add_strategy(strat)
-
+            self.add_strategy(strat)        
         ###交易
         self.ref2order = {}    #orderref==>order
         self.ref2trade = {}
-        self.inst2strat = {}
         #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
-		
+        
         #当前资金/持仓
         self.available = 0  #可用资金
         self.locked_margin = 0
@@ -733,18 +731,19 @@ class Agent(object):
             self.cur_min[name]   = dict([(item, 0) for item in min_data_list])
             self.cur_day[name]   = dict([(item, 0) for item in day_data_list])  
             self.positions[name] = order.Position(self.instruments[name])
-			self.day_data_func[name] = []
-			self.min_data_func[name] = {}	
+            self.day_data_func[name] = []
+            self.min_data_func[name] = {}    
             self.qry_pos[name]   = {}
             self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
             self.cur_day[name]['date'] = tday
+            self.inst2strat[name] = {}
         
     def add_strategy(self, strat):
         self.add_instruments(strat.instIDs, self.scur_day)
         self.strategies[strat.name] = strat
         strat.agent = self
         strat.reset()
-         		
+                 
     def initialize(self):
         '''
             初始化，如保证金率，账户资金等
@@ -761,9 +760,9 @@ class Agent(object):
         self.eventEngine.register(EVENT_TIMER, self.check_qry_commands)
    
     def register_data_func(self, inst, freq, fobj):
-		if inst not in self.day_data_func:
-			self.day_data_func[inst] = []
-			self.min_data_func[inst] = {}
+        if inst not in self.day_data_func:
+            self.day_data_func[inst] = []
+            self.min_data_func[inst] = {}
         if 'd' in freq:
             for func in self.day_data_func[inst]:
                 if fobj.name == func.name:
@@ -1036,9 +1035,8 @@ class Agent(object):
         self.cur_day[inst]['volume'] = tick.volume
         self.cur_day[inst]['date'] = tick.timestamp.date()
         
-        for strat in self.strategies:
-            if (inst in strat.instIDs):
-                strat.run_tick(tick)
+        for strat_name in self.inst2strat[inst]:
+            self.strategies[strat_name].run_tick(tick)
                 
         if (tick_min == self.cur_min[inst]['min_id']):
             self.tick_data[inst].append(tick)
