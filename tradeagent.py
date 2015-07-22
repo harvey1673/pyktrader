@@ -646,8 +646,20 @@ class Agent(object):
         self.cur_day = {}  
         self.positions= {} 
         self.qry_pos = {}
+        self.day_data_func = {}
+        self.min_data_func = {}			
         self.add_instruments(instruments, self.scur_day)
-                    
+        
+		self.strategies = {}	
+        for strat in self.strategies:
+            self.add_strategy(strat)
+
+        ###交易
+        self.ref2order = {}    #orderref==>order
+        self.ref2trade = {}
+        self.inst2strat = {}
+        #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
+		
         #当前资金/持仓
         self.available = 0  #可用资金
         self.locked_margin = 0
@@ -655,10 +667,8 @@ class Agent(object):
         self.margin_cap = 1500000
         self.pnl_total = 0.0
         self.curr_capital = 1000000.0
-        self.prev_capital = 1000000.0
-        
-        self.day_data_func = []
-        self.min_data_func = {}
+        self.prev_capital = 1000000.0        
+
         
         self.eventEngine = EventEngine()
         self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
@@ -677,18 +687,9 @@ class Agent(object):
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
         self.eventEngine.register(EVENT_TDDISCONNECTED, self.td_disconnected)
         self.eventEngine.start()      
-        self.strategies = []
-        for strat in self.strategies:
-            self.add_strategy(strat)
 
         self.prepare_data_env(mid_day = True)
         self.get_eod_positions()
-
-        ###交易
-        self.ref2order = {}    #orderref==>order
-        self.ref2trade = {}
-        self.inst2strat = {}
-        #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
         
         self.cancel_protect_period = 200
         self.market_order_tick_multiple = 5
@@ -711,7 +712,39 @@ class Agent(object):
     
     def timer_handler(self, event):
         pass
-            
+
+    def add_instruments(self, names, tday):
+        add_names = [ name for name in names if name not in self.instruments]
+        for name in add_names:
+            if name.isdigit():
+                if len(name) == 8:
+                    self.instruments[name] = instrument.StockOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Stock(name)
+            else:
+                if len(name) > 10:
+                    self.instruments[name] = instrument.FutOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Future(name)
+            self.instruments[name].update_param(tday)                    
+            self.tick_data[name] = []
+            self.day_data[name]  = pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])
+            self.min_data[name]  = {1: pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}
+            self.cur_min[name]   = dict([(item, 0) for item in min_data_list])
+            self.cur_day[name]   = dict([(item, 0) for item in day_data_list])  
+            self.positions[name] = order.Position(self.instruments[name])
+			self.day_data_func[name] = []
+			self.min_data_func[name] = {}	
+            self.qry_pos[name]   = {}
+            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+            self.cur_day[name]['date'] = tday
+        
+    def add_strategy(self, strat):
+        self.add_instruments(strat.instIDs, self.scur_day)
+        self.strategies[strat.name] = strat
+        strat.agent = self
+        strat.reset()
+         		
     def initialize(self):
         '''
             初始化，如保证金率，账户资金等
@@ -727,21 +760,24 @@ class Agent(object):
         self.qry_commands.append(self.fetch_trade)
         self.eventEngine.register(EVENT_TIMER, self.check_qry_commands)
    
-    def register_data_func(self, freq, fobj):
+    def register_data_func(self, inst, freq, fobj):
+		if inst not in self.day_data_func:
+			self.day_data_func[inst] = []
+			self.min_data_func[inst] = {}
         if 'd' in freq:
-            for func in self.day_data_func:
+            for func in self.day_data_func[inst]:
                 if fobj.name == func.name:
                     return False
-            self.day_data_func.append(fobj)
+            self.day_data_func[inst].append(fobj)
             return True
         else:
             mins = int(freq[:-1])
-            if mins not in self.min_data_func:
-                self.min_data_func[mins] = []
-            for func in self.min_data_func[mins]:
+            if mins not in self.min_data_func[inst]:
+                self.min_data_func[inst][mins] = []
+            for func in self.min_data_func[inst][mins]:
                 if fobj.name == func.name:
                     return False            
-            self.min_data_func[mins].append(fobj)
+            self.min_data_func[inst][mins].append(fobj)
             return True
         
     def prepare_data_env(self, mid_day = True): 
@@ -1041,7 +1077,7 @@ class Agent(object):
         min_sn = self.conv_bar_id(min_id)
         df = self.min_data[inst][1]
         mysqlaccess.insert_min_data_to_df(df, self.cur_min[inst])
-        for m in self.min_data_func:
+        for m in self.min_data_func[inst]:
             df_m = self.min_data[inst][m]
             if m > 1 and min_sn % m == 0:
                 s_start = self.cur_min[inst]['datetime'] - datetime.timedelta(minutes=m)
@@ -1052,7 +1088,7 @@ class Agent(object):
                 df_m.loc[s_start] = pd.Series(new_data)
                 print df_m.loc[s_start]
             if min_sn % m == 0:
-                for fobj in self.min_data_func[m]:
+                for fobj in self.min_data_func[inst][m]:
                     fobj.rfunc(df_m)
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
@@ -1080,7 +1116,7 @@ class Agent(object):
                     mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
                     df = self.day_data[inst]
                     if (self.instruments[inst].ptype != instrument.ProductType.Option):
-                        for fobj in self.day_data_func:
+                        for fobj in self.day_data_func[inst]:
                             fobj.rfunc(df)
                     if self.save_flag:
                         mysqlaccess.insert_daily_data(inst, self.cur_day[inst], dbtable = self.daily_db_table)
@@ -1125,36 +1161,6 @@ class Agent(object):
             self.instruments[inst].volume = 0            
         self.initialized = False
 
-    def add_instruments(self, names, tday):
-        add_names = [ name for name in names if name not in self.instruments]
-        for name in add_names:
-            if name.isdigit():
-                if len(name) == 8:
-                    self.instruments[name] = instrument.StockOptionInst(name)
-                else:
-                    self.instruments[name] = instrument.Stock(name)
-            else:
-                if len(name) > 10:
-                    self.instruments[name] = instrument.FutOptionInst(name)
-                else:
-                    self.instruments[name] = instrument.Future(name)
-            self.instruments[name].update_param(tday)                    
-            self.tick_data[name] = []
-            self.day_data[name]  = pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])
-            self.min_data[name]  = {1: pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}
-            self.cur_min[name]   = dict([(item, 0) for item in min_data_list])
-            self.cur_day[name]   = dict([(item, 0) for item in day_data_list])  
-            self.positions[name] = order.Position(self.instruments[name])
-            self.qry_pos[name]   = {}
-            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-            self.cur_day[name]['date'] = tday
-        
-    def add_strategy(self, strat):
-        self.add_instruments(strat.instIDs, self.scur_day)
-        self.strategies.append(strat)
-        strat.agent = self
-        strat.reset()
-         
     def day_switch(self, event):
         newday = event.dict['date']
         if newday <= self.scur_day:
