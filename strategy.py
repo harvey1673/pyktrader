@@ -132,7 +132,8 @@ class Strategy(object):
             self.logger = self.agent.logger
             if len(self.data_func)>0:
                 for (freq, fobj) in self.data_func:
-                    self.agent.register_data_func(freq,fobj)
+                    for inst in self.instIDs:
+                        self.agent.register_data_func(inst, freq, fobj)
         return
     
     def initialize(self):
@@ -237,7 +238,7 @@ class Strategy(object):
         self.curr_prices[idx] = sum([p*v*cf for p, v, cf in zip(prices, self.volumes[idx], conv_f)])/conv_f[-1]
         return
         
-    def tick_run(self, ctick):
+    def run_tick(self, ctick):
         inst = ctick.instID
         idx = self.get_index([inst]) 
         if idx < 0:
@@ -249,10 +250,13 @@ class Strategy(object):
         self.run_tick(idx, ctick)
         return
     
-    def run_tick(self, idx, ctick):
+    def run_min(self, inst, freq):
         pass
     
-    def run_min(self, inst):
+    def on_tick(self, idx, ctick):
+        pass
+    
+    def on_bar(self, idx):
         pass
     
     def speedup(self, etrade):

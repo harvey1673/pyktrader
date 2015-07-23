@@ -22,7 +22,7 @@ def save_trade_list(curr_date, trade_list, file_prefix):
         file_writer.writerow(['id', 'insts', 'volumes', 'filledvol', 'filledprice', 'otypes', 'slipticks',
                               'order_dict','limitprice', 'validtime',
                               'strategy','book','status', 'price_unit', 'conv_f'])
-        for trade in trade_list:
+        for trade in trade_list.values():
             insts = ' '.join(trade.instIDs)
             volumes = ' '.join([str(i) for i in trade.volumes])
             filled_vol = ' '.join([str(i) for i in trade.filled_vol])
@@ -44,9 +44,9 @@ def save_trade_list(curr_date, trade_list, file_prefix):
 def load_trade_list(curr_date, file_prefix):
     logfile = file_prefix + 'trade_' + curr_date.strftime('%y%m%d')+'.csv'
     if not os.path.isfile(logfile):
-        return []
+        return {}
 
-    trade_list = []
+    trade_dict = {} 
     with open(logfile, 'rb') as f:
         reader = csv.reader(f)
         for idx, row in enumerate(reader):
@@ -78,8 +78,8 @@ def load_trade_list(curr_date, file_prefix):
                 etrade.order_dict = order_dict
                 etrade.filled_vol = filled_vol 
                 etrade.filled_price = filled_price 
-                trade_list.append(etrade)    
-    return trade_list
+                trade_dict[etrade.id] = etrade    
+    return trade_dict
 
 def save_order_list(curr_date, order_dict, file_prefix):
     orders = order_dict.keys()
@@ -91,7 +91,7 @@ def save_order_list(curr_date, order_dict, file_prefix):
         file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
         
         file_writer.writerow(['order_ref', 'sysID', 'inst', 'volume', 'filledvolume', 'filledprice', 'action_type', 'direction',
-                              'price_type','limitprice','order_time', 'status', 'conditionals'])
+                              'price_type','limitprice','order_time', 'status', 'conditionals', 'trade_ref'])
 
         for order in order_list:
             inst = order.position.instrument.name
@@ -99,7 +99,7 @@ def save_order_list(curr_date, order_dict, file_prefix):
             cond_str = ' '.join(cond)
             file_writer.writerow([order.order_ref, order.sys_id, inst, order.volume, order.filled_volume, order.filled_price,
                                   order.action_type, order.direction, order.price_type,
-                                  order.limit_price, order.start_tick, order.status, cond_str])  
+                                  order.limit_price, order.start_tick, order.status, cond_str, order.trade_ref])  
     pass
 
 def load_order_list(curr_date, file_prefix, positions):
@@ -123,6 +123,7 @@ def load_order_list(curr_date, file_prefix, positions):
                 iorder.filled_volume = int(row[4])
                 iorder.filled_price = float(row[5])
                 iorder.order_ref = int(row[0])
+                iorder.trade_ref = int(row[13])
                 iorder.status = int(row[11])
                 ref2order[iorder.order_ref] = iorder
                 pos.add_order(iorder)                
@@ -163,6 +164,7 @@ class ETrade(object):
         Done_status = True
         PFill_status = False
         Zero_Volume = True
+        pending_orders = []
         volumes = [0] * len(self.instIDs)
         for idx, inst in enumerate(self.instIDs):
             for iorder in self.order_dict[inst]:
@@ -174,6 +176,7 @@ class ETrade(object):
                         iorder.volume = sorder.cancelled_volume
                         iorder.status = OrderStatus.Ready
                         iorder.conditionals = {}
+                        pending_orders.append(iorder.order_ref)
                         logging.info('order %s is ready after %s is canceld, the remaining volume is %s' \
                                         % (iorder.order_ref, sorder.order_ref, iorder.volume))
                 elif len(iorder.conditionals)> 0:
@@ -188,6 +191,7 @@ class ETrade(object):
                     else:
                         logging.info('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
                         iorder.status = OrderStatus.Ready
+                        pending_orders.append(iorder.order_ref)
                         iorder.conditionals = {}
             self.filled_vol[idx] = sum([iorder.filled_volume for iorder in self.order_dict[inst]])
             if self.filled_vol[idx] > 0:
@@ -198,19 +202,19 @@ class ETrade(object):
             if self.filled_vol[idx] < volumes[idx]:
                 Done_status = False
             if self.filled_vol[idx] > 0:
-                PFill_status = True
-                            
+                PFill_status = True                            
         if Zero_Volume:
             self.status = ETradeStatus.Cancelled
         elif Done_status:
             self.status = ETradeStatus.Done
         elif PFill_status:
             self.status = ETradeStatus.PFilled
+        return pending_orders
     
 ####下单
 class Order(object):
     id_generator = itertools.count(int(datetime.datetime.strftime(datetime.datetime.now(),'%d%H%M%S')))
-    def __init__(self,position,limit_price,vol,order_time,action_type,direction, price_type, conditionals={}):
+    def __init__(self,position,limit_price,vol,order_time,action_type,direction, price_type, conditionals={}, trade_ref = 0):
         self.position = position
         self.limit_price = limit_price        #开仓基准价
         self.start_tick  = order_time
@@ -218,6 +222,7 @@ class Order(object):
         ##衍生
         self.instrument = position.instrument
         self.sys_id = ''
+        self.trade_ref = trade_ref
         self.direction = direction # ORDER_BUY, ORDER_SELL
         ##操作类型
         self.action_type = action_type # OF_CLOSE_TDAY, OF_CLOSE, OF_OPEN
@@ -227,37 +232,37 @@ class Order(object):
         self.filled_volume = 0  #实际成交手数
         self.filled_price  = 0
         self.cancelled_volume = 0
-        self.filled_orders = []
         self.conditionals = conditionals
         if len(self.conditionals) == 0:
             self.status = OrderStatus.Ready
         else:
             self.status = OrderStatus.Waiting
-        self.close_lock = False #平仓锁定，即已经发出平仓信号
+        #self.close_lock = False #平仓锁定，即已经发出平仓信号
 
-    def on_trade(self,price,volume,trade_id):
+    def on_trade(self, price, volume):
         ''' 返回是否完全成交
         '''
-        if trade_id not in [o.trade_id for o in self.filled_orders]:
-            self.filled_orders.append(BaseObject(price = price, volume = volume, trade_id = trade_id))
-            self.filled_volume = sum([o.volume for o in self.filled_orders])
-            self.filled_price = sum([o.volume*o.price for o in self.filled_orders])/self.filled_volume
-            logging.info(u'成交纪录:price=%s,volume=%s,trade_id=%s,filled_vol=%s, is_closed=%s' % (price,volume,trade_id, self.filled_volume,self.is_closed()))
-            if self.filled_volume > self.volume:
-                self.filled_volume = self.volume
-                logging.warning(u'a new trade confirm exceeds the order volume price=%s,volume=%s, trade_id=%s, filled_vol=%s, order_vol =%s' % \
-                                (price, volume, trade_id, self.filled_volume, self.volume))
-            elif (self.filled_volume == self.volume) and (self.volume>0):
-                self.status = OrderStatus.Done
+        if self.status == OrderStatus.Done:
+            return True
+        self.filled_volume = volume
+        self.filled_price = price
+        logging.info(u'成交纪录:price=%s,volume=%s,filled_vol=%s, is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
+        if self.filled_volume > self.volume:
+            self.filled_volume = self.volume
+            logging.warning(u'a new trade confirm exceeds the order volume price=%s, filled_vol=%s, order_vol =%s' % \
+                                (price, volume, self.volume))
+        self.status = OrderStatus.Done
+        self.position.re_calc()
+        return self.filled_volume == self.volume
+    
+    def on_order(self, sys_id, price, volume):
+        self.sys_id = sys_id
+        self.filled_price = price   
+        self.filled_volume = volume
+        if self.filled_volume == self.volume:
+            self.status = OrderStatus.Done
             self.position.re_calc()
         return self.filled_volume == self.volume
-        
-#     def on_close(self,price,volume,trade_id):
-#         self.filled_volume = min(self.filled_volume + volume, self.volume)
-#         #if self.volume < self.filled_volume:    #因为cancel和成交的时间差导致的
-#         #    self.volume = self.filled_volume
-#         logging.info(u'O_CLS:on close,opened_volume=%s,volume=%s,trade_id=%s' % (self.filled_volume,volume,trade_id))
-#         #self.position.re_calc()
 
     def on_cancel(self):    #已经撤单
         if self.status != OrderStatus.Cancelled:
@@ -269,11 +274,11 @@ class Order(object):
         self.position.re_calc()
 
     def is_closed(self): #是否已经完全平仓
-        return (self.status in [OrderStatus.Cancelled,OrderStatus.Done]) and self.filled_volume == self.volume
+        return (self.status in [OrderStatus.Cancelled,OrderStatus.Done]) and (self.filled_volume == self.volume)
 
-    def release_close_lock(self):
-        logging.info(u'释放平仓锁,order=%s' % self.__str__())
-        self.close_lock = False
+    #def release_close_lock(self):
+    #    logging.info(u'释放平仓锁,order=%s' % self.__str__())
+    #    self.close_lock = False
 
     def __unicode__(self):
         return u'Order_A: 合约=%s,方向=%s,目标数=%s,开仓数=%s,状态=%s' % (self.instrument.name,
