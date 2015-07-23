@@ -793,7 +793,7 @@ class Agent(object):
                     self.instruments[inst].price = df['close'][-1]
                     self.instruments[inst].last_update = 0
                     self.instruments[inst].prev_close = df['close'][-1]
-                    for fobj in self.day_data_func:
+                    for fobj in self.day_data_func[inst]:
                         ts = fobj.sfunc(df)
                         df[ts.name]= pd.Series(ts, index=df.index)  
 
@@ -854,7 +854,7 @@ class Agent(object):
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
             etrade.update()
         
-        for strat in self.strategies:
+        for strat in self.strategies.values():
             strat.initialize()
             strat_trades = [ etrade for etrade in self.ref2trade.values() if etrade.strategy == strat.name ]
             for trade in strat_trades:
@@ -1091,8 +1091,10 @@ class Agent(object):
         if self.save_flag:
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
             mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)        
-        for strat in self.inst2strat:
-            self.strategies[strat].run_min():
+        for strat_name in self.inst2strat[inst]:
+			for m in self.inst2strat[inst][strat_name]:
+				if min_sn % m == 0:
+					self.strategies[strat_name].run_min(inst, m)
         return
         
     def day_finalize(self, insts):        
@@ -1137,7 +1139,7 @@ class Agent(object):
         if len(pfilled_dict)>0:
             file_prefix = self.folder + 'PFILLED_'
             order.save_trade_list(self.scur_day, pfilled_dict, file_prefix)    
-        for strat in self.strategies:
+        for strat in self.strategies.values():
             strat.day_finalize()
             strat.initialize()
         self.calc_margin()
@@ -1274,6 +1276,7 @@ class Agent(object):
     
     def process_trade(self, exec_trade):
         all_orders = {}
+		pending_orders = []
         order_prices = []
         for inst, v, tick in zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.slip_ticks):
             if v>0:
@@ -1359,85 +1362,59 @@ class Agent(object):
                 for iorder in all_orders[inst]:
                     pos.add_order(iorder)
                     self.ref2order[iorder.order_ref] = iorder
+					if iorder.status == order.OrderStatus.Ready:
+						pending_orders.append(iorder.order_ref)
             exec_trade.status = order.ETradeStatus.Processed
-            self.save_state()
-            return True
+            return pending_orders
         else:
             self.logger.info("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
-            return False    
+            return pending_orders    
         
-    def process_trade_list(self):
-        Is_Set = False
-        confirmed = [ (etrade.id, etrade.instIDs, etrade.volumes, etrade.filled_price, etrade.filled_vol, etrade.valid_time) for etrade in self.ref2trade.values() if etrade.status == order.ETradeStatus.StratConfirm ] 
-        if len(confirmed)>0:
-            Is_Set = True
-            print confirmed
-            self.logger.info('(%s) trades are confirmed by the strategies and are excluded in the trade list.' % confirmed)
-        #self.ref2trade = [ etrade for etrade in self.ref2trade if etrade.status != order.ETradeStatus.StratConfirm ]
-        for exec_trade in self.ref2trade.values():
-            if exec_trade.status == order.ETradeStatus.Pending:
-                if (exec_trade.valid_time < self.tick_id):
-                    exec_trade.status = order.ETradeStatus.Cancelled
-                    Is_Set = True
-                    continue
-                else:
-                    if self.process_trade(exec_trade):
-                        Is_Set = True
-            elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
-                prev_update = exec_trade.status
-                exec_trade.update()
-                if exec_trade.status != prev_update:
-                    Is_Set = True
-                if (exec_trade.valid_time < self.tick_id): 
-                    if exec_trade.status == order.ETradeStatus.Done:
-                        continue
-                    else:
-                        # cancel first, if PFilled, market order the unfilled.
-                        Is_Set= True
-                        exec_trade.valid_time = self.tick_id + self.cancel_protect_period
-                        new_orders = {}
-                        for inst in exec_trade.instIDs:
-                            orders = []
-                            for iorder in exec_trade.order_dict[inst]:
-                                if (iorder.volume > iorder.filled_volume):
-                                    if ( iorder.status == order.OrderStatus.Waiting) \
-                                            or (iorder.status == order.OrderStatus.Ready):
-                                        iorder.on_cancel()
-                                    else:
-                                        self.cancel_order(iorder)
-                                    if exec_trade.status == order.ETradeStatus.PFilled:                                        
-                                        cond = {iorder:order.OrderStatus.Cancelled}
-                                        norder =   order.Order(iorder.position, 
-                                                     0, 
-                                                     0, # fill in the volume when the dependent order is cancelled 
-                                                     self.tick_id, 
-                                                     iorder.action_type, 
-                                                     iorder.direction, 
-                                                     OPT_MARKET_ORDER, 
-                                                     cond )
-                                        orders.append(norder)
-                            if len(orders)>0:
-                                new_orders[inst] = orders
-                        for inst in new_orders:
-                            pos = self.positions[inst]
-                            for iorder in new_orders[inst]:
-                                exec_trade.order_dict[inst].append(iorder)
-                                pos.add_order(iorder)
-                                self.ref2order[iorder.order_ref] = iorder
-        Is_Set = (self.check_order_list()) or Is_Set
-        if Is_Set:
-            self.save_state()
-        
-    def check_order_list(self):
-        order_ids = self.ref2order.keys()
-        order_ids.sort()
-        Is_Set = False
-        for order_id in order_ids:
-            iorder = self.ref2order[order_id]                                                        
-            if iorder.status == order.OrderStatus.Ready:
-                self.send_order(iorder)
-                Is_Set = True        
-        return Is_Set
+    def check_trade(self, exec_trade):
+		pending_orders = []
+		if exec_trade.status == order.ETradeStatus.Pending:
+			if (exec_trade.valid_time < self.tick_id):
+				exec_trade.status = order.ETradeStatus.Cancelled
+			else:
+				pending_orders = self.process_trade(exec_trade)
+		elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
+			exec_trade.update()
+			if (exec_trade.valid_time < self.tick_id): 
+				if exec_trade.status != order.ETradeStatus.Done:
+					exec_trade.valid_time = self.tick_id + self.cancel_protect_period
+					new_orders = {}
+					for inst in exec_trade.instIDs:
+						orders = []
+						for iorder in exec_trade.order_dict[inst]:
+							if (iorder.volume > iorder.filled_volume):
+								if ( iorder.status == order.OrderStatus.Waiting) \
+										or (iorder.status == order.OrderStatus.Ready):
+									iorder.on_cancel()
+									self.trade_update(iorder)
+								else:
+									self.cancel_order(iorder)
+								if exec_trade.status == order.ETradeStatus.PFilled:                                        
+									cond = {iorder:order.OrderStatus.Cancelled}
+									norder =   order.Order(iorder.position, 
+												 0, 
+												 0, # fill in the volume when the dependent order is cancelled 
+												 self.tick_id, 
+												 iorder.action_type, 
+												 iorder.direction, 
+												 OPT_MARKET_ORDER, 
+												 cond )
+									orders.append(norder)
+						if len(orders)>0:
+							new_orders[inst] = orders
+					for inst in new_orders:
+						pos = self.positions[inst]
+						for iorder in new_orders[inst]:
+							exec_trade.order_dict[inst].append(iorder)
+							pos.add_order(iorder)
+							self.ref2order[iorder.order_ref] = iorder
+							if iorder.status == order.OrderStatus.Ready:
+								pending_orders.append(iorder.order_ref)
+		return pending_orders
     
     def send_order(self,iorder):
         ''' 发出下单指令
@@ -1467,6 +1444,11 @@ class Agent(object):
     
     def submit_trade(self, etrade):
         self.ref2trade[etrade.id] = etrade
+		pending_orders = self.process_trade(etrade)
+		if len(pending_orders) > 0:
+			for order_ref in pending_orders:
+				self.send_order(self.ref2order[order_ref])
+			self.save_state()
          
     ###回应
     def rtn_trade(self, event):
@@ -1476,15 +1458,14 @@ class Agent(object):
         '''        
         ptrade = event.dict['data']
         order_ref = int(ptrade.OrderRef)
-        if (order_ref in self.ref2order) and (ptrade.InstrumentID in self.instruments):
+        if (order_ref in self.ref2order):
             myorder = self.ref2order[order_ref]
-            if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
-                myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume, trade_id = ptrade.TradeID)
+            myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume, trade_id = ptrade.TradeID)
+			self.trade_update(myorder)  
+			if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
                 self.logger.info(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
             else:
-                myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume, trade_id = ptrade.TradeID)
                 self.logger.info(u'A_RT32,平仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
-            self.process_trade_list()
         else:
             self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))        
 
@@ -1493,15 +1474,29 @@ class Agent(object):
         '''
         porder = event.dict['data']
         order_ref = int(porder.OrderRef)
-        if (order_ref in self.agent.ref2order):
+        if (order_ref in self.ref2order):
             myorder = self.ref2order[order_ref]
             myorder.sys_id = porder.OrderSysID
             if porder.OrderStatus in [ self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
                 self.logger.info(u'撤单, 撤销开/平仓单')
                 myorder.on_cancel()                
+				self.trade_update(myorder) 
         else:
             self.logger.info('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)        
-            
+
+	def trade_update(self, myorder):
+		trade_ref = myorder.trade_id
+		mytrade = self.ref2trade[trade_ref]
+		pending_orders = mytrade.update()
+		if (mytrade.status == order.ETradeStatus.Done) or (mytrade.status == order.ETradeStatus.Cancelled):			
+			strat = self.strategies[mytrade.strategy]
+			strat.on_trade(trade_ref)
+		else:
+			if len(pending_orders) > 0:
+				for order_ref in pending_orders:
+					self.send_order(self.ref2order[order_ref])
+				self.save_state()
+			
     def err_order_insert(self, event):
         '''
             ctp/交易所下单错误回报，不区分ctp和交易所正常情况下不应当出现
@@ -1514,6 +1509,7 @@ class Agent(object):
             self.logger.warning(u'报单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
             myorder = self.ref2order[order_ref]
             myorder.on_cancel()
+			self.trade_update(myorder) 
         else:
             self.logger.warning(u'非本程序保单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))        
 
@@ -1529,6 +1525,7 @@ class Agent(object):
             if int(error.ErrorID) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
                 self.logger.info(u'撤销开仓单')
                 myorder.on_cancel()
+				self.trade_update(myorder) 
         else:
             self.qry_commands.append(self.fetch_order)
     
