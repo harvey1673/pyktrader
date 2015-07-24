@@ -667,7 +667,6 @@ class Agent(object):
         self.curr_capital = 1000000.0
         self.prev_capital = 1000000.0        
 
-        
         self.eventEngine = EventEngine()
         self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
         self.eventEngine.register(EVENT_LOG, self.log_handler)
@@ -685,10 +684,6 @@ class Agent(object):
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
         self.eventEngine.register(EVENT_TDDISCONNECTED, self.td_disconnected)
         self.eventEngine.start()      
-
-        self.prepare_data_env(mid_day = True)
-        self.get_eod_positions()
-        
         self.cancel_protect_period = 200
         self.market_order_tick_multiple = 5
         
@@ -835,7 +830,10 @@ class Agent(object):
     def resume(self):
         if self.initialized:
             return 
-        self.logger.info('Starting: prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
+        self.logger.info('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
+		self.prepare_data_env(mid_day = True)
+        self.get_eod_positions()			
+        self.logger.info('Prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
@@ -1122,10 +1120,11 @@ class Agent(object):
         return
     
     def run_eod(self):
+		print 'run EOD process'
         self.eod_flag = True
+		self.day_finalize(self.instruments.keys())
         if self.trader == None:
             return 
-        print 'run EOD process'
         pfilled_dict = {}
         for trade_id in self.ref2trade:
             etrade = self.ref2trade[trade_id]
@@ -1280,8 +1279,7 @@ class Agent(object):
             if v>0:
                 order_prices.append(self.instruments[inst].bid_price1+self.instruments[inst].tick_base*tick)
             else:
-                order_prices.append(self.instruments[inst].ask_price1-self.instruments[inst].tick_base*tick)
-    
+                order_prices.append(self.instruments[inst].ask_price1-self.instruments[inst].tick_base*tick)    
         curr_price = sum([p*v*cf for p, v, cf in zip(order_prices, exec_trade.volumes, exec_trade.conv_f)])/exec_trade.price_unit
         if curr_price <= exec_trade.limit_price: 
             required_margin = 0
@@ -1614,9 +1612,9 @@ class Agent(object):
 
 class SaveAgent(Agent):
     def init_init(self):
-        Agent.init_init(self)
         self.save_flag = True 
         self.live_trading = False
+		self.prepare_data_env(mid_day = True)
 
 if __name__=="__main__":
     pass
