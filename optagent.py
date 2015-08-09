@@ -5,7 +5,7 @@ import os
 import csv
 import numpy as np
 import datetime
-import agent
+import tradeagent as agent
 from misc import *
 
 def discount(irate, dtoday, dexp):

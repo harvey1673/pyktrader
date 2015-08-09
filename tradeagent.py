@@ -601,12 +601,13 @@ class CTPTraderRspMixin(object):
 
 class Agent(object):
  
-    def __init__(self, name, trader,cuser,instruments, strategies = [], tday=datetime.date.today(), config = {}):
+    def __init__(self, name, trader, cuser, instruments, strategies = [], tday=datetime.date.today(), config = {}):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
         '''
         self.tick_id = 0
+        self.timer_count = 0
         self.request_id = 1
         folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\'
         if 'folder' in config:
@@ -624,7 +625,7 @@ class Agent(object):
         self.mdapis = []
         self.trader = trader
         self.name = name
-        self.folder = folder + self.name + '\\'
+        self.folder = folder + self.name + os.path.sep
         self.cuser = cuser
         self.initialized = False
         self.scur_day = tday
@@ -650,9 +651,10 @@ class Agent(object):
         self.min_data_func = {}
         self.inst2strat = {}            
         self.add_instruments(instruments, self.scur_day)
-        self.strategies = {}    
+        self.strategies = {}
+        self.strat_list = []
         for strat in strategies:
-            self.add_strategy(strat)        
+            self.add_strategy(strat)
         ###交易
         self.ref2order = {}    #orderref==>order
         self.ref2trade = {}
@@ -665,46 +667,36 @@ class Agent(object):
         self.margin_cap = 1500000
         self.pnl_total = 0.0
         self.curr_capital = 1000000.0
-        self.prev_capital = 1000000.0        
-
-        self.eventEngine = EventEngine()
-        self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
+        self.prev_capital = 1000000.0
+        self.eventEngine = EventEngine(1)
         self.eventEngine.register(EVENT_LOG, self.log_handler)
-        self.eventEngine.register(EVENT_ORDER, self.rtn_order)
-        self.eventEngine.register(EVENT_TRADE, self.rtn_trade)
         self.eventEngine.register(EVENT_MARKETDATA, self.rtn_tick)
-        self.eventEngine.register(EVENT_ERRORDERINSERT, self.err_order_insert)
-        self.eventEngine.register(EVENT_ERRORDERCANCEL, self.err_order_action)
-        self.eventEngine.register(EVENT_MARGINRATE, self.rsp_qry_instrument_marginrate)
-        self.eventEngine.register(EVENT_ACCOUNT, self.rsp_qry_trading_account)
-        self.eventEngine.register(EVENT_INSTRUMENT, self.rsp_qry_instrument)
-        self.eventEngine.register(EVENT_POSITION, self.rsp_qry_position)
-        self.eventEngine.register(EVENT_QRYORDER, self.rsp_qry_order)
-        self.eventEngine.register(EVENT_QRYTRADE, self.rsp_qry_trade)
+        self.eventEngine.register(EVENT_TIMER, self.check_qry_commands)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
-        self.eventEngine.register(EVENT_TDDISCONNECTED, self.td_disconnected)
-        self.eventEngine.start()      
         self.cancel_protect_period = 200
         self.market_order_tick_multiple = 5
-        
+
         ##查询命令队列
         self.qry_commands = []  #每个元素为查询命令，用于初始化时查询相关数据
         self.init_init()    #init中的init,用于子类的处理
-
         #结算单
         self.isSettlementInfoConfirmed = False  #结算单未确认
-        
+
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
-    
+
     def log_handler(self, event):
         self.logger.info(event.dict['log'])
 
     def td_disconnected(self, event):
-        self.eventEngine.unregister(EVENT_TIMER, self.check_qry_commands)
-    
-    def timer_handler(self, event):
         pass
+
+    def time_scheduler(self, event):
+        if self.timer_count % 1800:
+            if self.tick_id >= 2100000-10:
+                min_id = get_min_id(datetime.datetime.now())
+                if (min_id >= 2116) and (self.eod_flag == False):
+                    self.qry_commands.append(self.run_eod)
 
     def add_instruments(self, names, tday):
         add_names = [ name for name in names if name not in self.instruments]
@@ -731,15 +723,19 @@ class Agent(object):
             self.qry_pos[name]   = {}
             self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
             self.cur_day[name]['date'] = tday
-            self.inst2strat[name] = {}
+            if name not in self.inst2strat:
+                self.inst2strat[name] = {}
         
     def add_strategy(self, strat):
         self.add_instruments(strat.instIDs, self.scur_day)
+        for instID in strat.instIDs:
+            self.inst2strat[instID][strat.name] = []
         self.strategies[strat.name] = strat
+        self.strat_list.append(strat.name)
         strat.agent = self
         strat.reset()
                  
-    def initialize(self):
+    def initialize(self, event):
         '''
             初始化，如保证金率，账户资金等
         '''
@@ -747,12 +743,11 @@ class Agent(object):
         if not self.initialized:
             for inst in self.instruments:
                 self.instruments[inst].update_param(self.scur_day)
-            self.resume()
+            #self.resume()
         self.qry_commands = []
         self.qry_commands.append(self.fetch_trading_account)
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
-        self.eventEngine.register(EVENT_TIMER, self.check_qry_commands)
    
     def register_data_func(self, inst, freq, fobj):
         if inst not in self.day_data_func:
@@ -771,7 +766,8 @@ class Agent(object):
             for func in self.min_data_func[inst][mins]:
                 if fobj.name == func.name:
                     return False            
-            self.min_data_func[inst][mins].append(fobj)
+            if fobj != None:
+                self.min_data_func[inst][mins].append(fobj)
             return True
         
     def prepare_data_env(self, mid_day = True): 
@@ -818,11 +814,11 @@ class Agent(object):
                         self.instruments[inst].price = float(mindata.ix[-1,'close'])
                         self.instruments[inst].last_update = 0
                         self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))                        
-                    for m in self.min_data_func:
+                    for m in self.min_data_func[inst]:
                         if m != 1:
                             self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
                         df = self.min_data[inst][m]
-                        for fobj in self.min_data_func[m]:
+                        for fobj in self.min_data_func[inst][m]:
                             ts = fobj.sfunc(df)
                             df[ts.name]= pd.Series(ts, index=df.index)
         return
@@ -831,8 +827,8 @@ class Agent(object):
         if self.initialized:
             return 
         self.logger.info('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
-		self.prepare_data_env(mid_day = True)
-        self.get_eod_positions()			
+        self.prepare_data_env(mid_day = True)
+        self.get_eod_positions()            
         self.logger.info('Prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
@@ -852,21 +848,35 @@ class Agent(object):
                 etrade.order_dict[inst] = [ self.ref2order[order_ref] for order_ref in orderdict[inst] ]
             etrade.update()
         
-        for strat in self.strategies.values():
+        for strat_name in self.strat_list:
+            strat = self.strategies[strat_name]
             strat.initialize()
-            strat_trades = [ etrade for etrade in self.ref2trade.values() if etrade.strategy == strat.name ]
+            strat_trades = [etrade for etrade in self.ref2trade.values() if (etrade.strategy == strat.name) \
+                            and (etrade.status != order.ETradeStatus.StratConfirm)]
             for trade in strat_trades:
-                strat.add_submitted_pos(trade)
+                strat.add_live_trades(trade)
             
         for inst in self.positions:
             self.positions[inst].re_calc()        
         self.calc_margin()
         self.initialized = True
+        self.eventEngine.start()
                 
     def check_qry_commands(self, event):
+        self.timer_count += 1
         if len(self.qry_commands)>0:
             self.qry_commands[0]()
-        
+            del self.qry_commands[0]
+            self.logger.debug(u'查询命令序列长度:%s' % (len(self.qry_commands),))
+
+    def check_price_limit(self, inst, num_tick):
+        inst_obj = self.instruments[inst]
+        tick_base = inst_obj.tick_base
+        if (inst_obj.ask_price1 >= inst_obj.up_limit - num_tick * tick_base) or (inst_obj.bid_price1 <= inst_obj.down_limit + num_tick * tick_base):
+            return True
+        else:
+            return False
+
     def get_eod_positions(self):
         file_prefix = self.folder
         pos_date = self.scur_day
@@ -1032,7 +1042,7 @@ class Agent(object):
         self.cur_day[inst]['openInterest'] = tick.openInterest
         self.cur_day[inst]['volume'] = tick.volume
         self.cur_day[inst]['date'] = tick.timestamp.date()
-        
+
         for strat_name in self.inst2strat[inst]:
             self.strategies[strat_name].run_tick(tick)
                 
@@ -1063,9 +1073,7 @@ class Agent(object):
             self.cur_min[inst]['openInterest'] = tick.openInterest
             self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
             if ((tick_min>0) and (tick.price>0)): 
-                self.tick_data[inst].append(tick)        
-        #if tick_id >= self.instruments[inst].last_tick_id:
-        #    self.day_finalize([inst])      
+                self.tick_data[inst].append(tick)
         return True  
     
     def min_switch(self, inst):
@@ -1082,7 +1090,7 @@ class Agent(object):
                             'low': min(slices['low']),'close': slices['close'][-1],\
                             'volume': sum(slices['volume']), 'min_id':slices['min_id'][0]}
                 df_m.loc[s_start] = pd.Series(new_data)
-                print df_m.loc[s_start]
+                #print df_m.loc[s_start]
             if min_sn % m == 0:
                 for fobj in self.min_data_func[inst][m]:
                     fobj.rfunc(df_m)
@@ -1120,9 +1128,9 @@ class Agent(object):
         return
     
     def run_eod(self):
-		print 'run EOD process'
+        print 'run EOD process'
         self.eod_flag = True
-		self.day_finalize(self.instruments.keys())
+        self.day_finalize(self.instruments.keys())
         if self.trader == None:
             return 
         pfilled_dict = {}
@@ -1138,7 +1146,8 @@ class Agent(object):
         if len(pfilled_dict)>0:
             file_prefix = self.folder + 'PFILLED_'
             order.save_trade_list(self.scur_day, pfilled_dict, file_prefix)    
-        for strat in self.strategies.values():
+        for strat_name in self.strat_list:
+            strat = self.strategies[strat_name]
             strat.day_finalize()
             strat.initialize()
         self.calc_margin()
@@ -1171,6 +1180,7 @@ class Agent(object):
         self.scur_day = newday
         print "scur_day = %s, reset tick_id= %s to 0" % (self.scur_day, self.tick_id)
         self.tick_id = 0
+        self.timer_count = 0
         for inst in self.instruments:
             self.tick_data[inst] = []
             self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
@@ -1181,7 +1191,19 @@ class Agent(object):
         self.eod_flag = False
                 
     def init_init(self):    #init中的init,用于子类的处理
-        pass
+        self.eventEngine.register(EVENT_ORDER, self.rtn_order)
+        self.eventEngine.register(EVENT_TRADE, self.rtn_trade)
+        self.eventEngine.register(EVENT_ERRORDERINSERT, self.err_order_insert)
+        self.eventEngine.register(EVENT_ERRORDERCANCEL, self.err_order_action)
+        self.eventEngine.register(EVENT_MARGINRATE, self.rsp_qry_instrument_marginrate)
+        self.eventEngine.register(EVENT_ACCOUNT, self.rsp_qry_trading_account)
+        self.eventEngine.register(EVENT_INSTRUMENT, self.rsp_qry_instrument)
+        self.eventEngine.register(EVENT_POSITION, self.rsp_qry_position)
+        self.eventEngine.register(EVENT_QRYORDER, self.rsp_qry_order)
+        self.eventEngine.register(EVENT_QRYTRADE, self.rsp_qry_trade)
+        self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
+        #self.eventEngine.register(EVENT_TDDISCONNECTED, self.td_disconnected)
+        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
 
     def add_mdapi(self, api):
         self.mdapis.append(api)
@@ -1200,7 +1222,7 @@ class Agent(object):
     ##内务处理
     def fetch_trading_account(self):
         #获取资金帐户
-        self.logger.info(u'A:获取资金帐户..')
+        self.logger.info('A:getting trading account info..')
         r = self.trader.query_trading_account()
         return r
 
@@ -1234,8 +1256,8 @@ class Agent(object):
         '''
         r = self.trader.query_instruments_by_exch(exchange_id)
         self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
-        return r 
-                    
+        return r
+
     def fetch_order(self, start_time='', end_time=''):
         r = self.trader.query_order( start_time, end_time )
         self.logger.info(u'A:查询报单, 函数发出返回值:%s' % r)
@@ -1267,7 +1289,7 @@ class Agent(object):
      
         if( not self.update_min_bar(ctick)):
             #print ctick.instID, ctick.timestamp, ctick.tick_id
-            #print "stop at hist data update"            
+            #print "stop at hist data update"
             return 0
         return 1
     
@@ -1275,6 +1297,7 @@ class Agent(object):
         all_orders = {}
         pending_orders = []
         order_prices = []
+        trade_ref = exec_trade.id
         for inst, v, tick in zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.slip_ticks):
             if v>0:
                 order_prices.append(self.instruments[inst].bid_price1+self.instruments[inst].tick_base*tick)
@@ -1310,7 +1333,7 @@ class Agent(object):
                     order_type = OF_CLOSE
                     if (self.instruments[inst].exchange == "SHFE"):
                         order_type = OF_CLOSE_TDAY                        
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond, trade_ref )
                     orders.append(iorder)
                   
                 if (self.instruments[inst].exchange == "SHFE") and (abs(remained)>0) and (pos.can_yclose.short+pos.can_yclose.long>0):
@@ -1327,7 +1350,7 @@ class Agent(object):
                         cond = {}
                         if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                             cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond )
+                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond, trade_ref )
                         orders.append(iorder)
                 
                 vol = abs(remained)
@@ -1343,7 +1366,7 @@ class Agent(object):
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond, trade_ref )
                     orders.append(iorder)
                 all_orders[inst] = orders
                 
@@ -1363,19 +1386,23 @@ class Agent(object):
             exec_trade.status = order.ETradeStatus.Processed
             return pending_orders
         else:
-            self.logger.info("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
+            self.logger.info("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % \
+                             (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
             return pending_orders    
         
     def check_trade(self, exec_trade):
         pending_orders = []
+        trade_ref = exec_trade.id
+        if exec_trade.id not in self.ref2trade:
+            self.ref2trade[exec_trade.id] = exec_trade
         if exec_trade.status == order.ETradeStatus.Pending:
-            if (exec_trade.valid_time < self.tick_id):
+            if exec_trade.valid_time < self.tick_id:
                 exec_trade.status = order.ETradeStatus.Cancelled
             else:
                 pending_orders = self.process_trade(exec_trade)
         elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
-            exec_trade.update()
-            if (exec_trade.valid_time < self.tick_id): 
+            #exec_trade.update()
+            if exec_trade.valid_time < self.tick_id:
                 if exec_trade.status != order.ETradeStatus.Done:
                     exec_trade.valid_time = self.tick_id + self.cancel_protect_period
                     new_orders = {}
@@ -1391,14 +1418,15 @@ class Agent(object):
                                     self.cancel_order(iorder)
                                 if exec_trade.status == order.ETradeStatus.PFilled:                                        
                                     cond = {iorder:order.OrderStatus.Cancelled}
-                                    norder =   order.Order(iorder.position, 
-                                                 0, 
-                                                 0, # fill in the volume when the dependent order is cancelled 
-                                                 self.tick_id, 
-                                                 iorder.action_type, 
-                                                 iorder.direction, 
-                                                 OPT_MARKET_ORDER, 
-                                                 cond )
+                                    norder = order.Order(iorder.position,
+                                                0,
+                                                0, # fill in the volume when the dependent order is cancelled
+                                                self.tick_id,
+                                                iorder.action_type,
+                                                iorder.direction,
+                                                OPT_MARKET_ORDER,
+                                                cond,
+                                                trade_ref)
                                     orders.append(norder)
                         if len(orders)>0:
                             new_orders[inst] = orders
@@ -1410,7 +1438,11 @@ class Agent(object):
                             self.ref2order[iorder.order_ref] = iorder
                             if iorder.status == order.OrderStatus.Ready:
                                 pending_orders.append(iorder.order_ref)
-        return pending_orders
+        #print pending_orders
+        if (len(pending_orders) > 0):
+            for order_ref in pending_orders:
+                self.send_order(self.ref2order[order_ref])
+            self.save_state()
     
     def send_order(self,iorder):
         ''' 发出下单指令
@@ -1437,14 +1469,6 @@ class Agent(object):
         '''发出撤单指令  
         '''
         self.trader.cancel_order(iorder)
-    
-    def submit_trade(self, etrade):
-        self.ref2trade[etrade.id] = etrade
-        pending_orders = self.process_trade(etrade)
-        if len(pending_orders) > 0:
-            for order_ref in pending_orders:
-                self.send_order(self.ref2order[order_ref])
-            self.save_state()
          
     ###回应
     def rtn_trade(self, event):
@@ -1453,11 +1477,13 @@ class Agent(object):
         #TODO: 必须处理策略分类持仓汇总和持仓总数不匹配时的问题
         '''        
         ptrade = event.dict['data']
+        if not ptrade.OrderRef.isdigit():
+            return
         order_ref = int(ptrade.OrderRef)
-        if (order_ref in self.ref2order):
+        if order_ref in self.ref2order:
             myorder = self.ref2order[order_ref]
-            myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume, trade_id = ptrade.TradeID)
-            self.trade_update(myorder)  
+            myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume)
+            self.trade_update(myorder)
             if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
                 self.logger.info(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
             else:
@@ -1469,6 +1495,8 @@ class Agent(object):
         '''交易所接受下单回报(CTP接受的已经被过滤)暂时只处理撤单的回报. 
         '''
         porder = event.dict['data']
+        if not porder.OrderRef.isdigit():
+            return
         order_ref = int(porder.OrderRef)
         if (order_ref in self.ref2order):
             myorder = self.ref2order[order_ref]
@@ -1480,7 +1508,8 @@ class Agent(object):
                 myorder.on_cancel()                
                 self.trade_update(myorder) 
         else:
-            self.logger.info('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)        
+            self.logger.info('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)
+            print porder
 
     def trade_update(self, myorder):
         trade_ref = myorder.trade_ref
@@ -1488,7 +1517,7 @@ class Agent(object):
         pending_orders = mytrade.update()
         if (mytrade.status == order.ETradeStatus.Done) or (mytrade.status == order.ETradeStatus.Cancelled):            
             strat = self.strategies[mytrade.strategy]
-            strat.on_trade(trade_ref)
+            strat.on_trade(mytrade)
         else:
             if len(pending_orders) > 0:
                 for order_ref in pending_orders:
@@ -1500,6 +1529,8 @@ class Agent(object):
             ctp/交易所下单错误回报，不区分ctp和交易所正常情况下不应当出现
         '''
         porder = event.dict['data']
+        if not porder.OrderRef.isdigit():
+            return
         order_ref = int(porder.OrderRef)
         instrument_id = porder.InstrumentID
         error = event.dict['error']
@@ -1517,7 +1548,7 @@ class Agent(object):
         '''
         porder = event.dict['data']
         error = event.dict['error']
-        if len(porder.OrderRef) > 0:
+        if porder.OrderRef.isdigit():
             order_ref = int(porder.OrderRef)
             myorder = self.ref2order[order_ref]
             if int(error.ErrorID) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
@@ -1569,8 +1600,10 @@ class Agent(object):
         sorder = event.dict['data']
         if (sorder == None) or (sorder.InstrumentID not in self.instruments) or (len(sorder.OrderRef) == 0):
             return
+        if not sorder.OrderRef.isdigit():
+            return
         order_ref = int(sorder.OrderRef) 
-        if (order_ref in self.agent.ref2order):
+        if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
             status = iorder.on_order(sorder.OrderSysID, sorder.LimitPrice, sorder.VolumeTraded)
             if status:
@@ -1592,8 +1625,10 @@ class Agent(object):
         strade = event.dict['data']
         if (strade == None) or (strade.InstrumentID not in self.instruments) or (len(strade.OrderRef) == 0):
             return
+        if not strade.OrderRef.isdigit():
+            return
         order_ref = int(strade.OrderRef) 
-        if (order_ref in self.agent.ref2order):
+        if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
             if (iorder.status not in [order.OrderStatus.Done, order.OrderStatus.Cancelled]) or (iorder.filled_volume != strade.Volume):
                 status = iorder.on_order(strade.OrderSysID, strade.Price, strade.Volume)
@@ -1603,18 +1638,23 @@ class Agent(object):
 
     def exit(self):
         """退出"""
+        # 停止事件驱动引擎
+        self.eventEngine.stop()
+        print "exiting ..."
+        self.save_state()
+        for strat_name in self.strat_list:
+            strat = self.strategies[strat_name]
+            strat.save_state()
         # 销毁API对象
         self.trader = None
         self.mdapis = []
-        # 停止事件驱动引擎
-        self.eventEngine.stop()
-        self.eventEngine = None        
+        #self.eventEngine = None
 
 class SaveAgent(Agent):
     def init_init(self):
         self.save_flag = True 
         self.live_trading = False
-		self.prepare_data_env(mid_day = True)
+        self.prepare_data_env(mid_day = True)
 
 if __name__=="__main__":
     pass

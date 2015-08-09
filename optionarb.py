@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import instrument
 from misc import *
-import agent
+import tradeagent as agent
 import strategy
 
 def get_option_map(underliers, cont_mths, strikes):
@@ -27,11 +27,7 @@ class OptionArbStrat(strategy.Strategy):
         self.future_conts = future_conts 
         self.cont_mths = cont_mths
         self.strikes = strikes
-        self.cp_parity = {}
-        self.call_spread = {}
-        self.put_spread = {}
-        self.call_bfly = {}
-        self.put_bfly = {}
+        self.value_range = []
         idx = 0
         for fut, strike_list in zip(future_conts, strikes):
             slen = len(strike_list)
@@ -41,36 +37,41 @@ class OptionArbStrat(strategy.Strategy):
                 underliers.append([self.option_map[call_key], self.option_map[put_key], fut])
                 volumes.append([3, -3, -1])
                 trade_units.append(1)
-                self.cp_parity[(fut, strike)] = {'idx':idx, 'lower': -strike, 'upper':-strike, 'scaler': 300.0 }
+                v_range = {'lower': -strike, 'upper':-strike, 'scaler': 300.0 }
+                self.value_range.append(v_range)
                 idx += 1
                 if (i < slen - 1):
                     next_call = (fut, 'C', strike_list[i+1])
                     underliers.append([self.option_map[call_key], self.option_map[next_call]])
                     volumes.append([1, -1])
                     trade_units.append(1)
-                    self.call_spread[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': strike_list[i+1] - strike, 'scaler': 100.0 }
+                    v_range = {'lower':0, 'upper': strike_list[i+1] - strike, 'scaler': 100.0 }
+                    self.value_range.append(v_range)
                     idx += 1
                     next_put = (fut, 'P', strike_list[i+1])
                     underliers.append([self.option_map[next_put], self.option_map[put_key]])
                     volumes.append([1, -1])
                     trade_units.append(1)
-                    self.put_spread[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': strike_list[i+1] - strike, 'scaler': 100.0  }
+                    v_range = {'lower':0, 'upper': strike_list[i+1] - strike, 'scaler': 100.0  }
+                    self.value_range.append(v_range)
                     idx += 1
                     if i > 0:
                         prev_call = (fut, 'C', strike_list[i-1])
                         underliers.append([self.option_map[prev_call], self.option_map[call_key], self.option_map[next_call]])
                         volumes.append([1, -2, 1])
                         trade_units.append(1)
-                        self.call_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None, 'scaler': 100.0}
+                        v_range = {'lower':0, 'upper': None, 'scaler': 100.0}
+                        self.value_range.append(v_range)
                         idx += 1
                         prev_put = (fut, 'P', strike_list[i-1])
                         underliers.append([self.option_map[prev_put], self.option_map[put_key], self.option_map[next_put]])
                         volumes.append([1, -2, 1])
                         trade_units.append(1)
-                        self.put_bfly[(fut, strike)] = {'idx':idx, 'lower':0, 'upper': None, 'scaler': 100.0}
+                        v_range = {'lower':0, 'upper': None, 'scaler': 100.0}
+                        self.value_range.append(v_range)
                         idx += 1
         strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, email_notify)
-        self.order_type = OPT_MARKET_ORDER
+        self.order_type = OPT_LIMIT_ORDER
         self.profit_ratio = 0.1
         self.exit_ratio = 0.01
         self.bid_prices = [0.0] * len(underliers)
@@ -83,32 +84,10 @@ class OptionArbStrat(strategy.Strategy):
     def initialize(self):
         self.load_state()
         self.update_margin()
-        for fut, strike_list in zip(self.future_conts, self.strikes):
-            slen = len(strike_list)
-            for i, strike in enumerate(strike_list):
-                key = (fut, strike)
-                idx = self.cp_parity[key]['idx']
-                insts = self.underliers[idx]
-                conv_f = self.agent.instruments[insts[-1]].multiple
-                self.cp_parity[key]['scaler'] = conv_f
-                if (i < slen - 1):
-                    idx = self.call_spread[key]['idx']
-                    insts = self.underliers[idx]
-                    conv_f = self.agent.instruments[insts[-1]].multiple
-                    self.call_spread[key]['scaler'] = conv_f
-                    idx = self.put_spread[key]['idx']
-                    insts = self.underliers[idx]
-                    conv_f = self.agent.instruments[insts[-1]].multiple
-                    self.put_spread[key]['scaler'] = conv_f
-                    if i > 0:
-                        idx = self.call_bfly[key]['idx']
-                        insts = self.underliers[idx]
-                        conv_f = self.agent.instruments[insts[-1]].multiple
-                        self.call_bfly[key]['scaler'] = conv_f
-                        idx = self.put_bfly[key]['idx']
-                        insts = self.underliers[idx]
-                        conv_f = self.agent.instruments[insts[-1]].multiple
-                        self.put_bfly[key]['scaler'] = conv_f                        
+        for idx, under in enumerate(self.underliers):
+            inst = under[-1]
+            conv_f = self.agent.instruments[inst].multiple
+            self.value_range[idx]['scaler'] = conv_f
         return
     
     def update_margin(self):
@@ -146,65 +125,14 @@ class OptionArbStrat(strategy.Strategy):
         ask_p += sum([p*v*cf for p, v, cf in zip(ask1, volumes, conv_f) if v > 0])
         self.ask_prices[idx] = ask_p/conv_f[-1]
         return
-    
-    def tick_run(self, ctick):
-        need_save = False
-        instID = ctick.instID
-        inst = self.agent.instruments[instID]
-        if (inst.ptype == instrument.ProductType.Future):
-            for i, fut in enumerate(self.future_conts):
-                if fut == inst.name:
-                    strike_list = self.strikes[i]
-                    for strike in strike_list:
-                        key = (instID, strike)
-                        idx = self.cp_parity[key]['idx']
-                        if self.update_positions(idx):
-                            need_save = True
-                        if self.check_open_arb_pos(idx, self.cp_parity[key]):
-                            need_save = True
-                    break
-        else:
-            underlying = inst.underlying
-            for i, fut in enumerate(self.future_conts):
-                if fut == underlying:
-                    strike = inst.strike
-                    stk_list = self.strikes[i]
-                    s_idx = stk_list.index(strike)
-                    key = (fut, strike)
-                    idx = self.cp_parity[key]['idx']
-                    if self.update_positions(idx):
-                        need_save = True
-                    if self.check_open_arb_pos(idx, self.cp_parity[key]):
-                        need_save = True
-                    if inst.otype == 'C':
-                        spd_dict = self.call_spread
-                        fly_dict = self.call_bfly
-                    else:
-                        spd_dict = self.put_spread
-                        fly_dict = self.put_bfly                        
-                    for j in range(max(0,s_idx-1), min(s_idx+1, len(stk_list)-1)):
-                        key = (fut, stk_list[j])
-                        idx = spd_dict[key]['idx']
-                        if self.update_positions(idx):
-                            need_save = True
-                        if self.check_open_arb_pos(idx, spd_dict[key]):
-                            need_save = True                        
-                    for j in range(max(1,s_idx-1), min(s_idx+2, len(stk_list)-1)):
-                        key = (fut, stk_list[j])
-                        idx = fly_dict[key]['idx']
-                        if self.update_positions(idx):
-                            need_save = True
-                        if self.check_open_arb_pos(idx, fly_dict[key]):
-                            need_save = True                          
-        if need_save:
-            self.save_state()
-        return                
             
-    def check_open_arb_pos(self, idx, bound):
+    def on_tick(self, idx, ctick):
         need_save = False
-        if len(self.submitted_pos[idx]) > 0:
-            return False
-        self.calc_curr_price(idx)
+        if len(self.submitted_trades[idx]) > 0:
+            return
+        if len(self.positions[idx]) > 0:
+            return
+        bound = self.value_range[idx]
         b_scaler = self.trade_margin[idx][0]*self.days_to_expiry[idx]/bound['scaler']
         s_scaler = self.trade_margin[idx][1]*self.days_to_expiry[idx]/bound['scaler']
         for tradepos in self.positions[idx]:
@@ -226,4 +154,6 @@ class OptionArbStrat(strategy.Strategy):
         elif (bound['upper']!= None) and (bound['upper'] < self.bid_prices[idx] - self.profit_ratio * s_scaler): 
             self.open_tradepos(idx, -1, self.bid_prices[idx])
             need_save = True                
-        return need_save
+        if need_save:
+            self.save_state()
+        return

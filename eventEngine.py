@@ -24,6 +24,17 @@ class RepeatTimer():
     def cancel(self):
         self.thread.cancel()
 
+class RepeatTimer2(Thread):
+    def __init__(self, event, hfunc):
+        Thread.__init__(self)
+        self.hfunc = hfunc
+        self.stopped = event
+
+    def run(self):
+        while not self.stopped.wait(0.5):
+            self.hfunc()
+            # call a function
+
 ########################################################################
 class EventEngine:
     def __init__(self, timerFreq = 1.0):
@@ -53,7 +64,6 @@ class EventEngine:
                 self.process(event)
             except Queue.Empty:
                 pass
-        print "exit the run"
             
     #----------------------------------------------------------------------
     def process(self, event):
@@ -70,7 +80,7 @@ class EventEngine:
         if self.is_active:
             event = Event(type=EVENT_TIMER)
             # 向队列中存入计时器事件
-            self.put(event)    
+            self.put(event)
 
     #----------------------------------------------------------------------
     def start(self):
@@ -89,7 +99,7 @@ class EventEngine:
         """停止引擎"""
         # 将引擎设为停止
         self.is_active = False
-        
+
         # 停止计时器
         self.timer.cancel()
         self.timer = None

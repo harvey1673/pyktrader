@@ -1,16 +1,16 @@
 #-*- coding:utf-8 -*-
-import fut_api
+import ctp_api
 import Tkinter as tk
 import ttk
-#import ScrolledText
 import datetime
 import re
 import pyktlib
-import copy
+import instrument
+import math
 
 vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
 
-def keepdigit(x, p=5): 
+def keepdigit(x, p=5):
     out = x
     if isinstance(x, float):
         if x >= 10**p:
@@ -18,6 +18,8 @@ def keepdigit(x, p=5):
         elif x>=1:
             n = p + 1 - len(str(int(x)))
             out = int(x*(10**n)+0.5)/float(10**n)
+        elif math.isnan(x):
+            out = 0
         else:
             out = int(x*10**p+0.5)/1.0/10**p
     return out    
@@ -319,18 +321,9 @@ class OptVolgridGui(object):
         self.pos_frame = None
 
         #vol_labels = ['Expiry', 'Under', 'Df', 'Fwd', 'Atm', 'V90', 'V75', 'V25', 'V10', 'Updated']
-        self.volgrid = copy.deepcopy(vg)
+        self.volgrid = instrument.copy_volgrid(vg)
         self.curr_insts = {} 
         self.rf = app.agent.irate
-        for expiry in self.expiries:
-            self.volgrid.volnode[expiry] = pyktlib.Delta5VolNode(vg.dtoday, vg.dexp[expiry], 
-                                                          vg.fwd[expiry], 
-                                                          vg.volparam[expiry][0], 
-                                                          vg.volparam[expiry][1],
-                                                          vg.volparam[expiry][2],
-                                                          vg.volparam[expiry][3],
-                                                          vg.volparam[expiry][4],
-                                                          vg.accrual)
         self.entries = {}
         self.option_map = {}
         self.group_risk = {}
@@ -566,15 +559,16 @@ class Gui(tk.Tk):
                             'Initialized': 'bool',
                             'QryInst': 'string'}
     
-        for strat in self.app.agent.strategies:
+        for strat_name in self.app.agent.strategies:
+            strat = self.app.agent.strategies[strat_name]
             if strat.__class__.__name__ == 'DTTrader':
-                self.strat_gui[strat.name] = DTStratGui(strat, app, self)
+                self.strat_gui[strat_name] = DTStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
-                self.strat_gui[strat.name] = RBStratGui(strat, app, self)
+                self.strat_gui[strat_name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
-                self.strat_gui[strat.name] = TLStratGui(strat, app, self)
+                self.strat_gui[strat_name] = TLStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'OptionArbStrat':
-                self.strat_gui[strat.name] = OptionArbStratGui(strat, app, self)                                
+                self.strat_gui[strat_name] = OptionArbStratGui(strat, app, self)
                         
         if ('Option' in app.agent.__class__.__name__) and (len(app.agent.volgrids)>0):
             for prod in app.agent.volgrids:
@@ -600,11 +594,10 @@ class Gui(tk.Tk):
             self.volgrid_gui[prod].set_frame(self.volgrid_frame[prod])
             self.notebook.add(self.volgrid_frame[prod], text = 'VG_' + prod)
                     
-        for strat in self.app.agent.strategies:
-            name = strat.name
-            self.strat_frame[name] = ttk.Frame(self)
-            self.strat_gui[name].set_frame(self.strat_frame[name])
-            self.notebook.add(self.strat_frame[name], text = name)
+        for strat_name in self.app.agent.strategies:
+            self.strat_frame[strat_name] = ttk.Frame(self)
+            self.strat_gui[strat_name].set_frame(self.strat_frame[strat_name])
+            self.notebook.add(self.strat_frame[strat_name], text = strat_name)
         self.notebook.pack(side="top", fill="both", expand=True, padx=10, pady=10)
 
     def market_view(self):
@@ -770,6 +763,7 @@ class Gui(tk.Tk):
     def onExit(self):
         self.app.exit_agent()
         self.destroy()
+        #self.quit()
         return
         
 class MainApp(object):
@@ -790,9 +784,9 @@ class MainApp(object):
         all_insts= []
         for strat in self.strat_cfg['strategies']:
             all_insts = list(set(all_insts).union(set(strat.instIDs)))
-        self.agent = fut_api.create_agent(self.name, self.user_cfg, self.trader_cfg, all_insts, self.strat_cfg, self.scur_day)
+        self.agent = ctp_api.create_agent(self.name, self.user_cfg, self.trader_cfg, all_insts, self.strat_cfg, self.scur_day)
         #self.agent.logger.addHandler(self.text_handler)
-        #fut_api.make_user(self.agent, self.user_cfg)
+        #ctp_api.make_user(self.agent, self.user_cfg)
         if save_test:
             self.agent.tick_db_table = 'test_fut_tick'
             self.agent.min_db_table  = 'test_fut_min'
@@ -891,30 +885,22 @@ class MainApp(object):
     
     def get_strat_params(self, strat_name, fields):
         params = {}
-        for strat in self.agent.strategies:
-            if strat.name == strat_name:
-                for field in fields:
-                    var = field2variable(field)
-                    params[field] = getattr(strat, var)
-                break 
+        strat = self.agent.strategies[strat_name]
+        for field in fields:
+            var = field2variable(field)
+            params[field] = getattr(strat, var)
         return params
     
     def set_strat_params(self, strat_name, params):
-        for strat in self.agent.strategies:
-            if strat.name == strat_name:
-                for field in params:
-                    var = field2variable(field)
-                    value = params[field]
-                    setattr(strat, var, value)
-                break 
-        return
+        strat = self.agent.strategies[strat_name]
+        for field in params:
+            var = field2variable(field)
+            value = params[field]
+            setattr(strat, var, value)
     
     def run_strat_func(self, strat_name, func_name):
-        for strat in self.agent.strategies:
-            if strat.name == strat_name:
-                getattr(strat, func_name)()
-                break 
-        return 
+        strat = self.agent.strategies[strat_name]
+        getattr(strat, func_name)()
 
     def run_agent_func(self, func_name, params):
         getattr(self.agent, func_name)(*params)
@@ -922,6 +908,4 @@ class MainApp(object):
         
     def exit_agent(self):
         if self.agent != None:
-            self.agent.mdapis = []
-            self.agent.trader = None
-        return
+            self.agent.exit()

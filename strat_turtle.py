@@ -21,6 +21,7 @@ class TurtleTrader(Strategy):
         self.entry_low  = [0.0] * len(underliers)
         self.exit_high  = [0.0] * len(underliers)
         self.exit_low   = [0.0] * len(underliers)
+        self.tick_base  = [0.0] * len(underliers)
         self.trail_loss   = [2.0] * len(underliers)
         self.channels = windows
         self.freq = freq
@@ -34,6 +35,7 @@ class TurtleTrader(Strategy):
         ss_str = 'DONCH_L' + str(self.channels[0])        
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
+            self.tick_base[idx] = self.agent.instruments[inst].tick_base
             df = self.agent.day_data[inst]
             self.entry_high[idx] = df.ix[-1, bb_str]
             self.entry_low[idx]  = df.ix[-1, sb_str]
@@ -42,6 +44,10 @@ class TurtleTrader(Strategy):
             if len(self.positions[idx]) == 0:
                 self.curr_atr[idx] = df.ix[-1, atr_str]
         pass       
+
+    def register_bar_freq(self):
+        for instID in self.instIDs:
+            self.agent.inst2strat[instID][self.name].append(self.freq)
 
     def save_local_variables(self, file_writer):
         for idx, underlier in enumerate(self.underliers):
@@ -53,33 +59,27 @@ class TurtleTrader(Strategy):
     def load_local_variables(self, row):
         if row[0] == 'ATR':
             inst = str(row[1])
-            idx = self.get_index([inst])
+            idx = self.under2idx[inst]
             if idx >=0:
                 self.curr_atr[idx] = float(row[2])
         return
             
-    def run_min(self, inst):
-        min_id = self.agent.cur_min[inst]['min_id']
-        curr_min = int(min_id/100)*60+ min_id % 100
-        if (curr_min % self.freq != 0):
-            return        
-        inst_obj = self.agent.instruments[inst]
-        tick_base = inst_obj.tick_base
-        idx = self.get_index([inst])
-        if idx < 0:
-            self.logger.warning('the inst=%s is not in this strategy = %s' % (inst, self.name))
-            return 
-        self.update_positions(idx)
+    def on_bar(self, idx, freq):
+        if (freq != self.freq):
+            return
         if self.curr_prices[idx] < 0.01 or self.curr_prices[idx] > 100000:
             self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bidPrice1,  inst_obj.askPrice1))
             return 
-        if len(self.submitted_pos[idx]) > 0:
+        if len(self.submitted_trades[idx]) > 0:
             return
-        if len(self.positions[idx]) == 0: 
+        inst = self.underliers[idx][0]
+        tick_base = self.tick_base[idx]
+        buysell = 0
+        if len(self.positions[idx]) == 0:
             buysell = 0
-            if (self.curr_prices[idx] > self.entry_high[idx]):
+            if self.curr_prices[idx] > self.entry_high[idx]:
                 buysell = 1
-            elif (self.curr_prices[idx] < self.entry_low[idx]):
+            elif self.curr_prices[idx] < self.entry_low[idx]:
                 buysell = -1                 
             if buysell !=0:
                 msg = 'Turtle to open a new position for inst = %s, curr_price=%s, chanhigh=%s, chanlow=%s, direction=%s, vol=%s is sent for processing' \

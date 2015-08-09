@@ -20,6 +20,7 @@ class DTTrader(Strategy):
         self.cur_rng = [0.0] * numAssets
         self.cur_ma  = [0.0] * numAssets
         self.tday_open = [0.0] * numAssets
+        self.tick_base = [0.0] * numAssets
         self.order_type = OPT_LIMIT_ORDER
         self.daily_close_buffer = 3
         self.close_tday = [False] * numAssets
@@ -35,6 +36,7 @@ class DTTrader(Strategy):
         self.load_state()
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
+            self.tick_base[idx] = self.agent.instruments[inst].tick_base
             ddf = self.agent.day_data[inst]
             win = self.lookbacks[idx]
             if win > 0:
@@ -62,30 +64,28 @@ class DTTrader(Strategy):
     def load_local_variables(self, row):
         if row[0] == 'CurrRange':
             inst = str(row[1])
-            idx = self.get_index([inst])
+            idx = self.under2idx[inst]
             if idx >= 0:
                 self.cur_rng[idx] = float(row[2])
         return
         
-    def run_tick(self, idx, ctick):
+    def on_tick(self, idx, ctick):
+        if len(self.submitted_trades[idx]) > 0:
+            return
         inst = self.underliers[idx][0]
-        min_id = self.agent.tick_id/1000.0
         self.tday_open[idx] = self.agent.cur_day[inst]['open']
+        if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0) or (self.curr_prices[idx] <= 0.001):
+            self.logger.warning("warning: open price =0.0 or range = 0.0 or curr_price=0 for inst=%s for stat = %s" % (inst, self.name))
+            return
+        min_id = self.agent.tick_id/1000.0
         num_pos = len(self.positions[idx])
         buysell = 0
         if num_pos > 1:
-            if len(self.submitted_pos[idx]) == 0:
-                self.logger.warning('something wrong with position management - submitted trade is empty but trade position is more than 1')
-            elif (min_id >= self.last_min_id[idx]):
-                for etrade in self.submitted_pos[idx]:
-                    self.speedup(etrade)                
+            self.logger.warning('something wrong with position management - submitted trade is empty but trade position is more than 1')
             return
         elif num_pos == 1:
             buysell = self.positions[idx][0].direction
-        if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0):
-            self.logger.warning("warning: open price =0.0 or range = 0.0 for inst=%s for stat = %s" % (inst, self.name))
-            return
-        tick_base = self.agent.instruments[inst].tick_base
+        tick_base = self.tick_base[idx]
         buy_trig  = self.tday_open[idx] + self.ratios[idx][0] * self.cur_rng[idx]
         sell_trig = self.tday_open[idx] - self.ratios[idx][0] * self.cur_rng[idx]
         if self.cur_ma[idx] > self.tday_open[idx]:
@@ -93,24 +93,15 @@ class DTTrader(Strategy):
         elif self.cur_ma[idx] < self.tday_open[idx]:
             sell_trig -= self.ratios[idx][1] * self.ratios[idx][0] * self.cur_rng[idx]
 
-        if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0) or (self.curr_prices[idx] <= 0.001):
-            self.logger.warning("warning: open price =0.0 or range = 0.0 or curr_price=0 for inst=%s for stat = %s" % (inst, self.name))
-            return
         if (min_id >= self.last_min_id[idx]):
             if (buysell!=0) and (self.close_tday[idx]):
-                if (len(self.submitted_pos[idx]) <= 0):
-                    msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \
-                                    % (inst, buysell, self.trade_unit[idx], min_id)
-                    self.close_tradepos(idx, self.positions[idx][0], self.curr_prices[idx] - buysell * self.num_tick * tick_base)
-                    self.status_notifier(msg)
-                    self.save_state()
-                else:
-                    for etrade in self.submitted_pos[idx]:
-                        print "need to speed up"
-                        self.speedup(etrade)
+                msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \
+                        % (inst, buysell, self.trade_unit[idx], min_id)
+                self.close_tradepos(idx, self.positions[idx][0], self.curr_prices[idx] - buysell * self.num_tick * tick_base)
+                self.status_notifier(msg)
+                self.save_state()
             return
-        if len(self.submitted_pos[idx]) > 0:
-            return
+
         if ((self.curr_prices[idx] >= buy_trig) and (buysell <=0)) or ((self.curr_prices[idx] <= sell_trig) and (buysell >=0)):
             if buysell!=0:
                 msg = 'DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \

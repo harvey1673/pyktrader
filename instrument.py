@@ -2,6 +2,7 @@
 import datetime
 import pyktlib
 import mysqlaccess
+import copy
 from misc import * 
 
 class ProductType:
@@ -21,7 +22,28 @@ class VolGrid(object):
         self.main_cont = ''
         self.option_insts = {}
         self.spot_model = is_spot
-        
+
+def copy_volgrid(vg):
+    volgrid = VolGrid(vg.name, accrual = vg.accrual, is_spot = vg.spot_model)
+    volgrid.main_cont = vg.main_cont
+    volgrid.dtoday = vg.dtoday
+    for expiry in vg.option_insts:
+        volgrid.df[expiry] = vg.df[expiry]
+        volgrid.fwd[expiry] = vg.fwd[expiry]
+        volgrid.volnode[expiry] = pyktlib.Delta5VolNode(vg.dtoday, vg.dexp[expiry],
+                                                          vg.fwd[expiry],
+                                                          vg.volparam[expiry][0],
+                                                          vg.volparam[expiry][1],
+                                                          vg.volparam[expiry][2],
+                                                          vg.volparam[expiry][3],
+                                                          vg.volparam[expiry][4],
+                                                          vg.accrual)
+        volgrid.volparam[expiry] = copy.copy(vg.volparam[expiry])
+        volgrid.underlier[expiry] = copy.copy(vg.underlier[expiry])
+        volgrid.dexp[expiry] = vg.dexp[expiry]
+        volgrid.option_insts[expiry] = copy.copy(vg.option_insts[expiry])
+    return volgrid
+
 class Instrument(object):
     def __init__(self,name):
         self.name = name
@@ -65,7 +87,6 @@ class Instrument(object):
         self.last_traded = datetime.datetime.now()
         self.max_holding = (100, 100)
         self.mid_price = 0.0
-        self.is_busy = False
         self.cont_mth = 205012 # only used by option and future
         self.expiry = datetime.date(2050,12,31)
         self.day_finalized = False

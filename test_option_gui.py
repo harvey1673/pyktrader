@@ -1,5 +1,4 @@
-from agent_gui import * 
-import agent
+from agent_gui import *
 import datetime
 import misc
 import logging
@@ -28,11 +27,11 @@ def main(tday, name='option_test'):
     logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
     trader_cfg = misc.TEST_TRADER
     user_cfg = misc.TEST_USER
-    #opt_strat = optionarb.OptionArbStrat(name, 
-    #                                ['IF1507', 'IF1508', 'IF1509'], 
-    #                                [201507, 201508, 201509],
-    #                                [[4100, 4200, 4250, 4300, 4350, 4400, 4450, 4500, 4600]]*3)
-    ins_setup = {'IF1507':1}
+    opt_strat = optionarb.OptionArbStrat(name,
+                                    ['IF1508', 'IF1509'],
+                                    [201508, 201509],
+                                    [[3400, 3500, 3600, 3650, 3700, 3750, 3800, 3850, 3900, 4000, 4100]]*2)
+    ins_setup = {'IF1509':1}
     insts = ins_setup.keys()
     units_tl = [ins_setup[inst] for inst in insts]
     under_tl = [[inst] for inst in insts]
@@ -40,7 +39,7 @@ def main(tday, name='option_test'):
     tl_strat = strat_tl.TurtleTrader('ProdTL', under_tl, vol_tl, trade_unit = units_tl,
                                  agent = None, email_notify = [])
     
-    ins_setup = {'IF1507':(0, 0.7, 0.0, 1, False)}
+    ins_setup = {'IF1509':(0, 0.7, 0.0, 1, False)}
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
     under_dt = [[inst] for inst in insts]
@@ -52,7 +51,7 @@ def main(tday, name='option_test'):
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, 
                                  email_notify = [])
-    ins_setup = {'IF1507': [[0.3, 0.07, 0.2], 1, 30, 1]}
+    ins_setup = {'IF1509': [[0.3, 0.07, 0.2], 1, 30, 1]}
     insts = ins_setup.keys()
     units_rb = [ins_setup[inst][1] for inst in insts]
     under_rb = [[inst] for inst in insts]
@@ -64,9 +63,9 @@ def main(tday, name='option_test'):
     rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = freq, 
                                  agent = None, email_notify = [])
-    strategies = [tl_strat, dt_strat, rb_strat]
+    strategies = [opt_strat, tl_strat, dt_strat, rb_strat]
     strat_cfg = {'strategies': strategies, \
-                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'folder': '/home/harvey/dev/pyctp2/', \
                  'daily_data_days':21, \
                  'min_data_days':1,
                  'enable_option': True }
@@ -106,7 +105,7 @@ def m_opt_sim(tday, name='Soymeal_Opt'):
                                  agent = None, email_notify = [])
     strategies = [opt_strat, dt_strat, rb_strat]
     strat_cfg = {'strategies': strategies, \
-                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
+                 'folder': '/home/harvey/dev/pyctp2/', \
                  'daily_data_days':5, \
                  'min_data_days':1 }
     

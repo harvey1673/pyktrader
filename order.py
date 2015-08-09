@@ -161,10 +161,12 @@ class ETrade(object):
         return sum([ v*p*cf for (v,p,cf) in zip(self.filled_vol, self.filled_price, self.conv_f)])/self.price_unit
     
     def update(self):
+        pending_orders = []
+        if self.status in [ETradeStatus.Done, ETradeStatus.Cancelled, ETradeStatus.StratConfirm]:
+            return pending_orders
         Done_status = True
         PFill_status = False
         Zero_Volume = True
-        pending_orders = []
         volumes = [0] * len(self.instIDs)
         for idx, inst in enumerate(self.instIDs):
             for iorder in self.order_dict[inst]:

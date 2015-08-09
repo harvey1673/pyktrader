@@ -23,6 +23,7 @@ class RBreakerTrader(Strategy):
         self.benter = [0.0]*num_assets
         self.sbreak = [0.0]*num_assets
         self.bbreak = [0.0]*num_assets
+        self.tick_base = [0.0]*num_assets
         self.start_min_id = [303] * num_assets
         if len(freq) > 1:
             self.freq = freq
@@ -37,6 +38,7 @@ class RBreakerTrader(Strategy):
         self.load_state()
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
+            self.tick_base[idx] = self.agent.instruments[inst].tick_base
             ddf = self.agent.day_data[inst]
             (a, b, c) = self.ratios[idx]
             dhigh = ddf.ix[-1,'high']
@@ -57,6 +59,17 @@ class RBreakerTrader(Strategy):
         self.save_state()
         return         
 
+    def register_func_freq(self):
+        for idx, under in enumerate(self.underliers):
+            inst = under[0]
+            freq = str(self.freq[idx]) + 'm'
+            self.agent.register_data_func(inst, freq, None)
+
+    def register_bar_freq(self):
+        for idx, under in enumerate(self.underliers):
+            inst = under[0]
+            self.agent.inst2strat[inst][self.name].append(self.freq[idx])
+
     def save_local_variables(self, file_writer):
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
@@ -71,67 +84,55 @@ class RBreakerTrader(Strategy):
     def load_local_variables(self, row):
         if row[0] == 'NumTrade':
             inst = str(row[1])
-            idx = self.get_index([inst])
+            idx = self.under2idx[inst]
             if idx >=0:
                 self.num_entries[idx] = int(row[2])
                 self.num_exits[idx] =int(row[3]) 
         return
     
-    def run_min(self, inst):
+    def on_bar(self, idx, freq):
+        inst = self.underliers[idx][0]
         min_id = self.agent.cur_min[inst]['min_id']
-        if min_id <= 300 or min_id >= 2115:
-            return
-        idx = self.get_index([inst])
-        if (idx < 0) or (min_id < self.start_min_id[idx]):
+        if (min_id < self.start_min_id[idx]):
             self.logger.warning('inst=%s has not started in this strategy = %s' % (inst, self.name))
             return
-        save_status = self.update_positions(idx)
+        if (freq != self.freq[idx]) or (len(self.submitted_trades[idx]) > 0):
+            if (min_id >= self.last_min_id[idx]):
+                for etrade in self.submitted_trades[idx]:
+                    self.speedup(etrade)
+            return
         num_pos = len(self.positions[idx])
         curr_pos = None
-        curr_min = int(min_id/100)*60+ min_id % 100 + 1        
-        if (curr_min % self.freq[idx] != 0):
-            if save_status:
-                self.save_state()
-            return
-        inst_obj = self.agent.instruments[inst] 
-        tick_base = inst_obj.tick_base
+        tick_base = self.tick_base[idx]
         dhigh = self.agent.cur_day[inst]['high']
         dlow  = self.agent.cur_day[inst]['low']
-        mhigh = self.agent.cur_min[inst]['high']
-        mlow  = self.agent.cur_min[inst]['low']                
+        mhigh = self.agent.min_data[inst][freq]['high'][-1]
+        mlow  = self.agent.min_data[inst][freq]['low'][-1]
         if num_pos > 1:
-            if len(self.submitted_pos[idx]) == 0:
-                self.logger.warning('something wrong with position management - submitted trade is empty but trade position is more than 1')
-            elif (min_id >= self.last_min_id[idx]):
-                for etrade in self.submitted_pos[idx]:
-                    self.speedup(etrade)                
+            self.logger.warning('something wrong with position management - submitted trade is empty but trade position is more than 1')
             return
         elif num_pos == 1:
             curr_pos = self.positions[idx][0]
+        save_status = False
         buysell = 0 if curr_pos == None else curr_pos.direction
-        if ((min_id >= self.last_min_id[idx]) or self.check_price_limit(inst, self.curr_prices[idx], 5)): 
-            if (buysell != 0) and (len(self.submitted_pos[idx]) == 0):
+        if ((min_id >= self.last_min_id[idx]) or self.agent.check_price_limit(inst, 5)):
+            if buysell != 0:
                 msg = 'R-Breaker to close position before EOD or hitting price limit for inst = %s, direction=%s, volume=%s, current min_id = %s, current price = %s' \
-                                    % (inst, buysell, self.trade_unit[idx], min_id, self.curr_prices[idx])
+                        % (inst, buysell, self.trade_unit[idx], min_id, self.curr_prices[idx])
                 self.close_tradepos(idx, curr_pos, self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                 self.num_entries[idx] = self.entry_limit
                 self.save_state()
                 self.status_notifier(msg)
-            elif (len(self.submitted_pos[idx]) > 0):
-                for etrade in self.submitted_pos[idx]:
-                    self.speedup(etrade)
-            return 
-        if len(self.submitted_pos[idx]) > 0:
-            return         
+            return
         if ((self.curr_prices[idx] >= self.bbreak[idx]) and (buysell <=0)) or ((self.curr_prices[idx] <= self.sbreak[idx]) and (buysell >= 0)):
             if curr_pos != None:
                 self.close_tradepos(idx, curr_pos, self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                 save_status = True
                 msg = 'R-Breaker to close position for inst = %s, direction=%s, volume=%s, current min_id = %s' \
-                                    % (inst, buysell, self.trade_unit[idx], min_id)
+                        % (inst, buysell, self.trade_unit[idx], min_id)
                 self.status_notifier(msg)     
             if self.num_entries[idx] < self.entry_limit:   
-                if  (self.curr_prices[idx] >= self.bbreak[idx]):
+                if  self.curr_prices[idx] >= self.bbreak[idx]:
                     buysell = 1
                 else:
                     buysell = -1
