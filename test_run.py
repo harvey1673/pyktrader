@@ -1,5 +1,5 @@
-import agent as agent
-import fut_api
+import tradeagent as agent
+import ctp_api
 import lts_api
 import base
 import time
@@ -36,7 +36,7 @@ def save_all(tday, prod_md = misc.PROD_USER):
     app_name = 'SaveAgent'
     config = {'daily_data_days': 0, 'min_data_days': 0}
     my_agent = agent.SaveAgent(name = app_name, trader = None, cuser = None, instruments=save_insts,tday = tday, config = config)
-    fut_api.make_user(my_agent, prod_md)
+    ctp_api.make_user(my_agent, prod_md)
     try:
         while 1:
             time.sleep(1)

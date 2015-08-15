@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import instrument
 from misc import *
-import tradeagent as agent
+import agent
 import strategy
 
 def get_option_map(underliers, cont_mths, strikes):

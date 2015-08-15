@@ -64,8 +64,8 @@ def dual_thrust_sim( ddf, mdf, config):
                        pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
                        join='outer', axis=1).max(axis=1).shift(1)
     ddf['TR'] = tr
-    ddf['prev_high'] = ddf.high.shift(1)
-    ddf['prev_low'] = ddf.low.shift(1)    
+    #ddf['prev_high'] = ddf.high.shift(1)
+    #ddf['prev_low'] = ddf.low.shift(1)    
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -90,17 +90,17 @@ def dual_thrust_sim( ddf, mdf, config):
         d_open = dslice.open
         if (prev_d < d):
             d_open = mslice.open
-            d_high = mslice.high
-            d_low =  mslice.low
+            #d_high = mslice.high
+            #d_low =  mslice.low
         else:
             d_open = dslice.open
-            d_high = max(d_high, mslice.high)
-            d_low  = min(d_low, mslice.low)
+            #d_high = max(d_high, mslice.high)
+            #d_low  = min(d_low, mslice.low)
         if (d_open <= 0):
             continue
         prev_d = d
-        buytrig  = max(d_open + max(min_rng, dslice.TR * k), d_high)
-        selltrig = min(d_open - max(min_rng, dslice.TR * k), d_low)
+        buytrig  = d_open + max(min_rng, dslice.TR * k)
+        selltrig = d_open - max(min_rng, dslice.TR * k)
         #d_high = max(d_high, dslice.prev_high)
         #d_low  = min(d_low, dslice.prev_low)
         if (min_id >= config['exit_min']):
@@ -123,7 +123,7 @@ def dual_thrust_sim( ddf, mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-            if ((mslice.close >= buytrig) or (mslice.close >= d_high)) and (pos <=0 ):
+            if (mslice.high >= buytrig) and (pos <=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close+offset, dd)
                     tradeid += 1
@@ -131,15 +131,14 @@ def dual_thrust_sim( ddf, mdf, config):
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                if (mslice.close >= buytrig) and (mslice.close >= d_high):
-                    new_pos = strat.TradePos([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset)
-                    tradeid += 1
-                    new_pos.entry_tradeid = tradeid
-                    new_pos.open(mslice.close + offset, dd)
-                    curr_pos.append(new_pos)
-                    pos = unit
-                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif ((mslice.close <= selltrig) or (mslice.close <= d_low)) and (pos >=0 ):
+                new_pos = strat.TradePos([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset)
+                tradeid += 1
+                new_pos.entry_tradeid = tradeid
+                new_pos.open(mslice.close + offset, dd)
+                curr_pos.append(new_pos)
+                pos = unit
+                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
+            elif (mslice.low <= selltrig) and (pos >=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close-offset, dd)
                     tradeid += 1
@@ -147,14 +146,13 @@ def dual_thrust_sim( ddf, mdf, config):
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                if (mslice.close <= selltrig) and (mslice.close <= d_low):
-                    new_pos = strat.TradePos([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset)
-                    tradeid += 1
-                    new_pos.entry_tradeid = tradeid
-                    new_pos.open(mslice.close - offset, dd)
-                    curr_pos.append(new_pos)
-                    pos = -unit
-                    mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+                new_pos = strat.TradePos([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset)
+                tradeid += 1
+                new_pos.entry_tradeid = tradeid
+                new_pos.open(mslice.close - offset, dd)
+                curr_pos.append(new_pos)
+                pos = -unit
+                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
         mdf.ix[dd, 'pos'] = pos
             
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
@@ -172,13 +170,13 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'RM', 'y', 'p', 'l', 'pp', 'rb', 'ru', 'TA']
+    sim_list = ['m', 'RM', 'y', 'p', 'l', 'pp', 'rb', 'ru', 'TA', 'jd', 'SR', 'a', 'i', 'TF', 'j']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'newDT_'
+    file_prefix = test_folder + 'DT14_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -191,7 +189,7 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.0,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.3, -1, 0), (0.4, -1, 0), (0.5, -1, 0), (0.7, 0, 0.5), (0.5, 0, 0.5), (0.5, 1, 0), (0.7, 1, 0), (0.9, 1, 0), (0.3, 2, 0), (0.4, 2, 0), (0.5, 2, 0)]
+    scenarios = [(0.4, -1, 0), (0.6, -1, 0), (0.5, 0, 0.5), (0.7, 0, 0.5), (0.5, 1, 0), (0.7, 1, 0), (0.9, 1, 0), (0.3, 2, 0), (0.4, 2, 0)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1

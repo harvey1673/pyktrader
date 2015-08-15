@@ -102,9 +102,9 @@ def dual_thrust_sim( ddf, mdf, config):
         #prev_d = d
         buytrig  = d_open + k * rng
         selltrig = d_open - k * rng
-        if dslice.MA > d_open:
+        if dslice.MA > mslice.close:
             buytrig  += f * k * rng
-        elif dslice.MA < d_open:
+        elif dslice.MA < mslice.close:
             selltrig -= f * k * rng      
         if (min_id >= config['exit_min']) and (close_daily or (d == end_d)):
             if (pos != 0):
@@ -126,7 +126,7 @@ def dual_thrust_sim( ddf, mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-            if (mslice.close >= buytrig) and (pos <=0 ):
+            if (mslice.high >= buytrig) and (pos <=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close+offset, dd)
                     tradeid += 1
@@ -141,7 +141,7 @@ def dual_thrust_sim( ddf, mdf, config):
                 curr_pos.append(new_pos)
                 pos = unit
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif (mslice.close <= selltrig) and (pos >=0 ):
+            elif (mslice.low <= selltrig) and (pos >=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close-offset, dd)
                     tradeid += 1
@@ -173,19 +173,19 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['IF']
+    sim_list = ['m', 'RM', 'y', 'p', 'l', 'pp', 'TA', 'rb', 'ru']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'DTsymMA5_'
+    file_prefix = test_folder + 'DT_MA10_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
     config = {'capital': 10000,
               'offset': 0,
-              'MA_fast': 5,
+              'MA_fast': 10,
               'MA_slow': 20,
               'trans_cost': 0.0,
               'close_daily': daily_close, 
@@ -194,7 +194,7 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.01,
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.3, -1, 0.5, 1.0), (0.4, -1, 0.5, 0.5), (0.7, 0, 0.5, 0.5), (0.5, 0, 0.5, 0.5), (0.5, 1, 0.5, 0.5)]
+    scenarios = [ (0.3, -1, 0.5, 0.5), (0.4, -1, 0.5, 0.5), (0.5, -1, 0.5, 0.5), (0.5, 0, 0.5, 0.5), (0.7, 0, 0.5, 0.5), (0.5, 1, 0.5, 0.5), (0.7, 1, 0.5, 0.5), (0.3, 2, 0.5, 0.5), (0.4, 2, 0.5, 0.5)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1

@@ -1,11 +1,10 @@
 ﻿# -*- coding: utf-8 -*-
 import ctp.futures
-from tradeagent import *
+from agent import *
 import optagent
 from base import *
 import logging
-import order
-import ctp_emulator as emulator
+import trade_emulator as emulator
 
 class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
     '''

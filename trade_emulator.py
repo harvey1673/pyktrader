@@ -1,5 +1,5 @@
 ﻿# coding=utf-8
-import tradeagent as agent
+import agent
 import optagent
 import ctp_api
 import time
