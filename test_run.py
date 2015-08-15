@@ -1,4 +1,4 @@
-import tradeagent as agent
+import agent
 import ctp_api
 import lts_api
 import base
