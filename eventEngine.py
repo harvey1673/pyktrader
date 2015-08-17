@@ -1,6 +1,7 @@
 ﻿#-*- coding:utf-8 -*-
 # 系统模块
 import Queue
+import sys
 from threading import Timer, Thread
 
 # 自己开发的模块
@@ -63,6 +64,11 @@ class EventEngine:
                 event = self.queue.get(block = True, timeout = 1)  # 获取事件的阻塞时间设为1秒
                 self.process(event)
             except Queue.Empty:
+                pass
+            except:
+                e = sys.exc_info()[0]
+                print 'error msg:', str(e)
+            finally:
                 pass
             
     #----------------------------------------------------------------------

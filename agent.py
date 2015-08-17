@@ -158,11 +158,15 @@ class CTPMdMixin(object):
     def OnRtnDepthMarketData(self, dp):
         try:
             if dp.LastPrice > dp.UpperLimitPrice or dp.LastPrice < dp.LowerLimitPrice:
-                self.logger.warning(u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice))
+                event = Event(type=EVENT_LOG)
+                event.dict['log'] = u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice)
+                self.eventEngine.put(event)
                 return
             if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or \
                     (dp.BidPrice1 < dp.LowerLimitPrice and dp.AskPrice1 >= dp.UpperLimitPrice):
-                self.logger.warning(u'MD:收到的行情数据有误:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1))
+                event = Event(type=EVENT_LOG)
+                event.dict['log'] = u'MD:收到的行情数据有误:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
+                self.eventEngine.put(event)
                 return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
             if len(dp.TradingDay.strip()) > 0:
@@ -295,7 +299,8 @@ class CTPTraderQryMixin(object):
                 TimeCondition = self.ApiStruct.TC_GFD,
                 )
         event = Event(type=EVENT_LOG)
-        event.dict['log'] = u'下单: instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % (iorder.instrument.name, \
+        event.dict['log'] = u'下单: order_ref=%s, instrument=%s,开关=%s,方向=%s,数量=%s,价格=%s ->%s' % (iorder.order_ref, \
+                          iorder.instrument.name,
                           'open' if iorder.action_type == OF_OPEN else 'close',
                           u'多' if iorder.direction==ORDER_BUY else u'空',
                           iorder.volume,
@@ -790,7 +795,7 @@ class Agent(object):
                     self.instruments[inst].prev_close = df['close'][-1]
                     for fobj in self.day_data_func[inst]:
                         ts = fobj.sfunc(df)
-                        df[ts.name]= pd.Series(ts, index=df.index)  
+                        df[ts.name]= pd.Series(ts, index=df.index)
 
         if self.min_data_days > 0 or mid_day:
             self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
@@ -1099,6 +1104,7 @@ class Agent(object):
                 for fobj in self.min_data_func[inst][m]:
                     fobj.rfunc(df_m)
         if self.save_flag:
+            #print 'insert min data inst = %s, min = %s' % (inst, min_id)
             mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
             mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)        
         for strat_name in self.inst2strat[inst]:
@@ -1282,21 +1288,18 @@ class Agent(object):
                 return 0
             
         if (not self.validate_tick(ctick)):
-            #print ctick.instID, ctick.timestamp, ctick.tick_id
-            #print "stop at validating tick"
+            #print "stop at validating tick", ctick.instID, ctick.timestamp, ctick.tick_id
             return 0
         
         if (not self.update_instrument(ctick)):
-            #print ctick.instID, ctick.timestamp, ctick.tick_id
-            #print "stop at update inst"
+            #print "stop at update inst", ctick.instID, ctick.timestamp, ctick.tick_id
             return 0
      
         if( not self.update_min_bar(ctick)):
-            #print ctick.instID, ctick.timestamp, ctick.tick_id
-            #print "stop at hist data update"
+            #print "stop at hist data update", ctick.instID, ctick.timestamp, ctick.tick_id
             return 0
         return 1
-    
+
     def process_trade(self, exec_trade):
         all_orders = {}
         pending_orders = []
@@ -1670,7 +1673,15 @@ class SaveAgent(Agent):
     def init_init(self):
         self.save_flag = True 
         self.live_trading = False
-        self.prepare_data_env(mid_day = True)
+        self.prepare_data_env(mid_day = False)
+
+    def resume(self):
+        self.eventEngine.start()
+
+    def exit(self):
+        self.eventEngine.stop()
+        self.trader = None
+        self.mdapis = []
 
 if __name__=="__main__":
     pass

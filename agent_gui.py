@@ -220,10 +220,11 @@ class StratGui(object):
 class DTStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
-        self.entry_fields = ['NumTick', 'OrderType', 'MinRng', 'MaWin', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'MaWin', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
         self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'CurMa'] 
         self.shared_fields = ['NumTick', 'OrderType', 'MinRng', 'MaWin']
-        self.field_types = {'TradeUnit':'int', 
+        self.field_types = {'RunFlag':'int',
+                            'TradeUnit':'int',
                             'Lookbacks':'int', 
                             'Ratios': 'floatlist', 
                             'CloseTday': 'bool',
@@ -240,10 +241,11 @@ class RBStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['NumTick', 'OrderType', 'EntryLimit', 'DailyCloseBuffer', 'TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId']
+        self.entry_fields = ['RunFlag','NumTick', 'OrderType', 'EntryLimit', 'DailyCloseBuffer', 'TradeUnit', 'MinRng', 'TrailLoss', 'Ratios', 'StartMinId']
         self.status_fields = ['CurrPrices', 'Sbreak', 'Bsetup', 'Benter', 'Senter', 'Ssetup', 'Bbreak']
         self.shared_fields = ['NumTick', 'OrderType', 'EntryLimit', 'DailyCloseBuffer']
-        self.field_types = {'TradeUnit':'int', 
+        self.field_types = {'RunFlag':'int',
+                            'TradeUnit':'int',
                             'MinRng':'float', 
                             'Ratios': 'floatlist', 
                             'StartMinId': 'int',
@@ -264,10 +266,11 @@ class TLStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['NumTick', 'OrderType', 'TradeUnit']
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'TradeUnit']
         self.status_fields = ['CurrPrices', 'TrailLoss', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
         self.shared_fields = ['NumTick', 'OrderType']
-        self.field_types = {'TradeUnit':'int', 
+        self.field_types = {'RunFlag':'int',
+                            'TradeUnit':'int',
                             'TrailLoss': 'float',
                             'CurrPrices': 'float',
                             'CurrAtr':  'float',
@@ -282,10 +285,11 @@ class OptionArbStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['NumTick', 'OrderType', 'ProfitRatio', 'ExitRatio']
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'ProfitRatio', 'ExitRatio']
         self.status_fields = ['TradeUnit', 'BidPrices', 'AskPrices', 'DaysToExpiry', 'TradeMargin'] 
         self.shared_fields = ['NumTick', 'OrderType', 'ProfitRatio', 'ExitRatio']
-        self.field_types = {'TradeUnit':'int', 
+        self.field_types = {'RunFlag':'int',
+                           'TradeUnit':'int',
                             'BidPrices': 'float',
                             'AskPrices': 'float',
                             'DaysToExpiry':'int',

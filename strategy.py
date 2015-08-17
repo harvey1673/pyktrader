@@ -10,6 +10,7 @@ import datetime
 import csv
 import os
 
+NO_ENTRY_TIME = datetime.datetime(1970,1,1,0,0,0)
 sign = lambda x: math.copysign(1, x)
 tradepos_header = ['insts', 'vols', 'pos', 'direction', 'entry_price', 'entry_time', 'entry_target', 'entry_tradeid',
                    'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed', 'price_unit']
@@ -25,11 +26,11 @@ class TradePos(object):
         self.direction = 1 if pos > 0 else -1
         self.entry_target = entry_target
         self.entry_price = 0
-        self.entry_time = ''
+        self.entry_time = NO_ENTRY_TIME
         self.entry_tradeid = 0
         self.exit_target = exit_target
         self.exit_price = 0
-        self.exit_time = ''
+        self.exit_time = NO_ENTRY_TIME
         self.exit_tradeid = 0
         self.is_closed = False
         self.profit = 0.0
@@ -126,7 +127,7 @@ class Strategy(object):
         self.trail_loss = [0] * num_assets
         self.curr_prices = [0.0] * num_assets
         self.order_type = OPT_LIMIT_ORDER
-        self.locked = False
+        self.run_flag = [1] * num_assets
         
     def reset(self):
         self.inst2idx = {}
@@ -226,6 +227,16 @@ class Strategy(object):
                     save_status = save_status or updated
         return save_status
 
+    def liquidate_tradepos(self, idx):
+        save_status = False
+        if len(self.positions[idx]) > 0:
+            for pos in self.positions[idx]:
+                if (pos.entry_time > NO_ENTRY_TIME) and (pos.exit_tradeid == 0):
+                    print 'liquidating', idx
+                    self.close_tradepos(idx, pos, self.curr_prices[idx])
+                    save_status = True
+        return save_status
+
     def check_submitted_trades(self, idx):
         for etrade in self.submitted_trades[idx]:
             self.agent.check_trade(etrade)
@@ -265,8 +276,11 @@ class Strategy(object):
         idx_list = self.inst2idx[inst]
         for idx in idx_list:
             self.calc_curr_price(idx)
-            save_status = save_status or self.check_tradepos(idx)
-            save_status = save_status or self.on_tick(idx, ctick)
+            if self.run_flag[idx] == 1:
+                save_status = save_status or self.check_tradepos(idx)
+                save_status = save_status or self.on_tick(idx, ctick)
+            elif self.run_flag[idx] == 2:
+                save_status = save_status or self.liquidate_tradepos(idx)
             save_status = save_status or self.check_submitted_trades(idx)
         if save_status:
             self.save_state()
@@ -275,8 +289,9 @@ class Strategy(object):
         save_status = False
         idx_list = self.inst2idx[inst]
         for idx in idx_list:
-            save_status = save_status or self.on_bar(idx, freq)
-            save_status = save_status or self.check_submitted_trades(idx)
+            if self.run_flag[idx] == 1:
+                save_status = save_status or self.on_bar(idx, freq)
+                save_status = save_status or self.check_submitted_trades(idx)
         if save_status:
             self.save_state()
     
@@ -371,7 +386,7 @@ class Strategy(object):
                     price_unit = float(row[15])
                     tradepos = TradePos(insts, vols, pos, entry_target, exit_target, price_unit)
                     if row[6] == '':
-                        entry_time = ''
+                        entry_time = NO_ENTRY_TIME
                         entry_price = 0
                     else:
                         entry_time = datetime.datetime.strptime(row[6], '%Y%m%d %H:%M:%S %f')
@@ -382,7 +397,7 @@ class Strategy(object):
                     tradepos.exit_tradeid = int(row[12])    
                     
                     if row[10] == '':
-                        exit_time = ''
+                        exit_time = NO_ENTRY_TIME
                         exit_price = 0
                     else:                    
                         exit_time = datetime.datetime.strptime(row[10], '%Y%m%d %H:%M:%S %f')
