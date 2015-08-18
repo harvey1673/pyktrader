@@ -162,12 +162,12 @@ class CTPMdMixin(object):
                 event.dict['log'] = u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice)
                 self.eventEngine.put(event)
                 return
-            if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or \
-                    (dp.BidPrice1 < dp.LowerLimitPrice and dp.AskPrice1 >= dp.UpperLimitPrice):
-                event = Event(type=EVENT_LOG)
-                event.dict['log'] = u'MD:收到的行情数据有误:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
-                self.eventEngine.put(event)
-                return
+            #if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or \
+            #        (dp.BidPrice1 < dp.LowerLimitPrice and dp.AskPrice1 >= dp.UpperLimitPrice):
+            #    event = Event(type=EVENT_LOG)
+            #    event.dict['log'] = u'MD:收到的行情数据有误:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
+            #    self.eventEngine.put(event)
+            #    return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
             if len(dp.TradingDay.strip()) > 0:
                 timestr = str(dp.TradingDay) + ' ' + timestr
