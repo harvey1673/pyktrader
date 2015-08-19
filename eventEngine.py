@@ -1,7 +1,7 @@
 ﻿#-*- coding:utf-8 -*-
 # 系统模块
 import Queue
-import sys
+import sys, traceback
 from threading import Timer, Thread
 
 # 自己开发的模块
@@ -68,6 +68,7 @@ class EventEngine:
             except:
                 e = sys.exc_info()[0]
                 print 'error msg:', str(e)
+                traceback.print_exc()
             finally:
                 pass
             

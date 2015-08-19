@@ -162,12 +162,12 @@ class CTPMdMixin(object):
                 event.dict['log'] = u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice)
                 self.eventEngine.put(event)
                 return
-            #if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or \
-            #        (dp.BidPrice1 < dp.LowerLimitPrice and dp.AskPrice1 >= dp.UpperLimitPrice):
-            #    event = Event(type=EVENT_LOG)
-            #    event.dict['log'] = u'MD:收到的行情数据有误:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
-            #    self.eventEngine.put(event)
-            #    return
+            if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or \
+                    (dp.BidPrice1 < dp.LowerLimitPrice and dp.AskPrice1 >= dp.UpperLimitPrice):
+                event = Event(type=EVENT_LOG)
+                event.dict['log'] = u'MD:收到的行情数据有误:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
+                self.eventEngine.put(event)
+                return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
             if len(dp.TradingDay.strip()) > 0:
                 timestr = str(dp.TradingDay) + ' ' + timestr
@@ -966,10 +966,11 @@ class Agent(object):
         '''
             保存环境
         '''
-        self.logger.info(u'保存执行状态.....................')
-        file_prefix = self.folder
-        order.save_order_list(self.scur_day, self.ref2order, file_prefix)
-        order.save_trade_list(self.scur_day, self.ref2trade, file_prefix)
+        if not self.eod_flag:
+            self.logger.info(u'保存执行状态.....................')
+            file_prefix = self.folder
+            order.save_order_list(self.scur_day, self.ref2order, file_prefix)
+            order.save_trade_list(self.scur_day, self.ref2trade, file_prefix)
         return
     
     def validate_tick(self, tick):
@@ -1138,11 +1139,12 @@ class Agent(object):
         return
     
     def run_eod(self):
-        print 'run EOD process'
-        self.eod_flag = True
         self.day_finalize(self.instruments.keys())
         if self.trader == None:
-            return 
+            return
+        self.save_state()
+        print 'run EOD process'
+        self.eod_flag = True
         pfilled_dict = {}
         for trade_id in self.ref2trade:
             etrade = self.ref2trade[trade_id]

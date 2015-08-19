@@ -67,7 +67,9 @@ class TurtleTrader(Strategy):
     def on_bar(self, idx, freq):
         if (freq != self.freq):
             return
+        inst = self.underliers[idx][0]
         if self.curr_prices[idx] < 0.01 or self.curr_prices[idx] > 100000:
+            inst_obj = self.agent.instruments[inst]
             self.logger.info('something wrong with the price for inst = %s, bid ask price = %s %s' % (inst, inst_obj.bidPrice1,  inst_obj.askPrice1))
             return 
         if len(self.submitted_trades[idx]) > 0:
