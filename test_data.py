@@ -9,7 +9,7 @@ def save_tick_data(tday, folder = ''):
     all_insts = data_saver.filter_main_cont(tday)
     cnx = mysql.connector.connect(**misc.mysqlaccess.dbconfig)
     for inst in all_insts:
-        stmt = "select * from fut_tick where instID='{prod}' and date='{cdate}'".format(prod=inst, cdate=tday.strftime('%Y-%m-%d'))
+        stmt = "select * from fut_tick where instID='{prod}' and date>='{cdate}'".format(prod=inst, cdate=tday.strftime('%Y-%m-%d'))
         df = pd.io.sql.read_sql(stmt, cnx)
         df.to_csv(folder + inst + '.csv', header=False, index=False)
     return

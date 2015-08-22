@@ -1,17 +1,17 @@
 ﻿# -*- coding: utf-8 -*-
-import ctp.futures
+import ctp.futures as ctp
 from agent import *
 import optagent
 from base import *
 import logging
 import trade_emulator as emulator
 
-class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
+class MdSpiDelegate(CTPMdMixin, ctp.MdApi):
     '''
         将行情信息转发到Agent
         并自行处理杂务
     '''
-    ApiStruct = ctp.futures.ApiStruct
+    ApiStruct = ctp.ApiStruct
     def __init__(self,
             instruments, #合约映射 name ==>c_instrument
             broker_id,   #期货公司ID
@@ -49,12 +49,12 @@ class MdSpiDelegate(CTPMdMixin, ctp.futures.MdApi):
             self.eventEngine.put(event)
         return rev
 
-class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.futures.TraderApi):
+class TraderSpiDelegate(CTPTraderQryMixin, CTPTraderRspMixin, ctp.TraderApi):
     '''
         将服务器回应转发到Agent
         并自行处理杂务
     '''
-    ApiStruct = ctp.futures.ApiStruct
+    ApiStruct = ctp.ApiStruct
     def __init__(self,
             instruments, #合约映射 name ==>c_instrument 
             broker_id,   #期货公司ID

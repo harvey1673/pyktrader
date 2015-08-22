@@ -1,6 +1,7 @@
 #-*- coding:utf-8 -*-
 import workdays
 import time
+import copy
 import datetime
 import logging
 import bisect
@@ -343,7 +344,7 @@ class CTPTraderQryMixin(object):
         return r
 
 class CTPTraderRspMixin(object):
-    def isRspSuccess(self,RspInfo):
+    def isRspSuccess(self, RspInfo):
         return RspInfo == None or RspInfo.ErrorID == 0
 
     def login(self):
@@ -429,8 +430,9 @@ class CTPTraderRspMixin(object):
         '''
         if self.isRspSuccess(pRspInfo):
             event = Event(type = EVENT_MARGINRATE)
-            event.dict['data'] = pInstMarginRate
-            event.dict['error'] = pRspInfo
+            event.dict['data'] = copy.copy(pInstMarginRate)
+            event.dict['error'] = copy.copy(pRspInfo)
+            event.dict['isLast'] = bIsLast
             self.eventEngine.put(event)         
         
     def OnRspQryInstrument(self, pInstrument, pRspInfo, nRequestID, bIsLast):
@@ -443,8 +445,9 @@ class CTPTraderRspMixin(object):
 
         if self.isRspSuccess(pRspInfo):
             event = Event(type = EVENT_INSTRUMENT)
-            event.dict['data'] = pInstrument
-            event.dict['error'] = pRspInfo
+            event.dict['data'] = copy.copy(pInstrument)
+            event.dict['error'] = copy.copy(pRspInfo)
+            event.dict['isLast'] = bIsLast
             self.eventEngine.put(event)     
         else:
             event = Event(type=EVENT_LOG)
@@ -456,8 +459,9 @@ class CTPTraderRspMixin(object):
         """资金账户查询回报"""
         if self.isRspSuccess(pRspInfo):
             event = Event(type = EVENT_ACCOUNT)
-            event.dict['data'] = pTradingAccount
-            event.dict['error'] = pRspInfo
+            event.dict['data'] = copy.copy(pTradingAccount)
+            event.dict['error'] = copy.copy(pRspInfo)
+            event.dict['isLast'] = bIsLast
             self.eventEngine.put(event)
         else:
             event = Event(type=EVENT_LOG)
@@ -469,7 +473,8 @@ class CTPTraderRspMixin(object):
         """投资者查询回报"""
         if self.isRspSuccess(pRspInfo):
             event = Event(type=EVENT_INVESTOR)
-            event.dict['data'] = pInvestorPosition
+            event.dict['data'] = copy.copy(pInvestorPosition)
+            event.dict['isLast'] = bIsLast
             self.eventEngine.put(event)
         else:
             event = Event(type=EVENT_LOG)
@@ -479,10 +484,10 @@ class CTPTraderRspMixin(object):
             
     def OnRspQryInvestorPosition(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
         """持仓查询回报"""
-        if error['ErrorID'] == 0:
+        if self.isRspSuccess(pRspInfo):
             event = Event(type=EVENT_POSITION)
-            event.dict['data'] = pInvestorPosition
-            event.dict['error'] = pRspInfo
+            event.dict['data'] = copy.copy(pInvestorPosition)
+            event.dict['isLast'] = bIsLast
             self.eventEngine.put(event)
         else:
             event = Event(type=EVENT_LOG)
@@ -503,9 +508,11 @@ class CTPTraderRspMixin(object):
 
     def OnRspQryOrder(self, porder, pRspInfo, nRequestID, bIsLast):
         '''请求查询报单响应'''
+        #print porder, pRspInfo, bIsLast
         if self.isRspSuccess(pRspInfo):
             event = Event(type=EVENT_QRYORDER)
-            event.dict['data'] = porder
+            event.dict['data'] = copy.copy(porder)
+            event.dict['isLast'] = bIsLast
             self.eventEngine.put(event)         
         else:
             event = Event(type=EVENT_LOG)
@@ -515,10 +522,12 @@ class CTPTraderRspMixin(object):
         
     def OnRspQryTrade(self, ptrade, pRspInfo, nRequestID, bIsLast):
         '''请求查询成交响应'''
+        #print ptrade, pRspInfo, bIsLast
         if self.isRspSuccess(pRspInfo):
             event = Event(type=EVENT_QRYTRADE)
-            event.dict['data'] = ptrade
-            self.eventEngine.put(event)         
+            event.dict['data'] = copy.copy(ptrade)
+            event.dict['isLast'] = bIsLast
+            self.eventEngine.put(event)
         else:
             event = Event(type=EVENT_LOG)
             log = u'交易错误回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')
@@ -535,8 +544,8 @@ class CTPTraderRspMixin(object):
         event.dict['log'] = log
         self.eventEngine.put(event)
         event2 = Event(type=EVENT_ERRORDERINSERT)
-        event2.dict['data'] = pInputOrder
-        event2.dict['error'] = pRspInfo
+        event2.dict['data'] = copy.copy(pInputOrder)
+        event2.dict['error'] = copy.copy(pRspInfo)
         self.eventEngine.put(event2)        
     
     def OnErrRtnOrderInsert(self, pInputOrder, pRspInfo):
@@ -547,8 +556,8 @@ class CTPTraderRspMixin(object):
         self.eventEngine.put(event)
         
         event2 = Event(type=EVENT_ERRORDERINSERT)
-        event2.dict['data'] = pInputOrder
-        event2.dict['error'] = pRspInfo
+        event2.dict['data'] = copy.copy(pInputOrder)
+        event2.dict['error'] = copy.copy(pRspInfo)
         self.eventEngine.put(event2)                
     
     def OnRtnOrder(self, porder):
@@ -558,12 +567,12 @@ class CTPTraderRspMixin(object):
         '''
         # 常规报单事件
         event1 = Event(type=EVENT_ORDER)
-        event1.dict['data'] = porder
+        event1.dict['data'] = copy.copy(porder)
         self.eventEngine.put(event1)
         
         # 特定合约行情事件
         event2 = Event(type=(EVENT_ORDER_ORDERREF+porder.OrderRef))
-        event2.dict['data'] = porder
+        event2.dict['data'] = copy.copy(porder)
         self.eventEngine.put(event2)
 
     def OnRtnTrade(self, ptrade):
@@ -573,12 +582,12 @@ class CTPTraderRspMixin(object):
         '''
         # 常规成交事件
         event1 = Event(type=EVENT_TRADE)
-        event1.dict['data'] = ptrade
+        event1.dict['data'] = copy.copy(ptrade)
         self.eventEngine.put(event1)
         
         # 特定合约成交事件
         event2 = Event(type=(EVENT_TRADE_CONTRACT+ptrade.InstrumentID))
-        event2.dict['data'] = ptrade
+        event2.dict['data'] = copy.copy(ptrade)
         self.eventEngine.put(event2)
         
     def OnRspOrderAction(self, pInputOrderAction, pRspInfo, nRequestID, bIsLast):
@@ -591,8 +600,8 @@ class CTPTraderRspMixin(object):
         self.eventEngine.put(event)
         
         event2 = Event(type=EVENT_ERRORDERCANCEL)
-        event2.dict['data'] = pInputOrderAction
-        event2.dict['error'] = pRspInfo
+        event2.dict['data'] = copy.copy(pInputOrderAction)
+        event2.dict['error'] = copy.copy(pRspInfo)
         self.eventEngine.put(event2)  
 
     def OnErrRtnOrderAction(self, pOrderAction, pRspInfo):
@@ -603,8 +612,8 @@ class CTPTraderRspMixin(object):
         self.eventEngine.put(event)
         
         event2 = Event(type=EVENT_ERRORDERCANCEL)
-        event2.dict['data'] = pOrderAction
-        event2.dict['error'] = pRspInfo
+        event2.dict['data'] = copy.copy(pOrderAction)
+        event2.dict['error'] = copy.copy(pRspInfo)
         self.eventEngine.put(event2)         
 
 
@@ -668,7 +677,6 @@ class Agent(object):
         self.ref2order = {}    #orderref==>order
         self.ref2trade = {}
         #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
-        
         #当前资金/持仓
         self.available = 0  #可用资金
         self.locked_margin = 0
@@ -677,6 +685,7 @@ class Agent(object):
         self.pnl_total = 0.0
         self.curr_capital = 1000000.0
         self.prev_capital = 1000000.0
+        self.ctp_orders = []
         self.eventEngine = EventEngine(1)
         self.eventEngine.register(EVENT_LOG, self.log_handler)
         self.eventEngine.register(EVENT_MARKETDATA, self.rtn_tick)
@@ -729,7 +738,7 @@ class Agent(object):
             self.positions[name] = order.Position(self.instruments[name])
             self.day_data_func[name] = []
             self.min_data_func[name] = {}    
-            self.qry_pos[name]   = {}
+            self.qry_pos[name]   = {'tday': [0, 0], 'yday': [0, 0]}
             self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
             self.cur_day[name]['date'] = tday
             if name not in self.inst2strat:
@@ -755,6 +764,7 @@ class Agent(object):
             #self.resume()
         self.qry_commands = []
         self.qry_commands.append(self.fetch_trading_account)
+        self.qry_commands.append(self.fetch_investor_position)
         self.qry_commands.append(self.fetch_order)
         self.qry_commands.append(self.fetch_trade)
    
@@ -1238,7 +1248,7 @@ class Agent(object):
         r = self.trader.query_trading_account()
         return r
 
-    def fetch_investor_position(self,instrument_id):
+    def fetch_investor_position(self, instrument_id = ''):
         #获取合约的当前持仓
         self.logger.info(u'A:获取合约%s的当前持仓..' % (instrument_id,))
         r = self.trader.query_investor_position(instrument_id)
@@ -1490,7 +1500,7 @@ class Agent(object):
         if not ptrade.OrderRef.isdigit():
             return
         else:
-            self.logger.info('trade update: %s' % ptrade)
+            self.logger.info('trade = %s' % repr(ptrade))
         order_ref = int(ptrade.OrderRef)
         if order_ref in self.ref2order:
             myorder = self.ref2order[order_ref]
@@ -1510,15 +1520,17 @@ class Agent(object):
         if not porder.OrderRef.isdigit():
             return
         else:
-            self.logger.info('order update: %s' % porder)
+            self.logger.info('order = %s' % repr(porder))
         order_ref = int(porder.OrderRef)
         if (order_ref in self.ref2order):
             myorder = self.ref2order[order_ref]
+            if porder.VolumeTraded > porder.VolumeTotalOriginal:
+                return
             status = myorder.on_order(porder.OrderSysID, porder.LimitPrice, porder.VolumeTraded)
             if status:
                 self.trade_update(myorder)
             if porder.OrderStatus in [ self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
-                self.logger.info(u'撤单, 撤销开/平仓单')
+                self.logger.info('cancel the rest order in order_ref = %s' % order_ref )
                 myorder.on_cancel()                
                 self.trade_update(myorder) 
         else:
@@ -1551,12 +1563,12 @@ class Agent(object):
         instrument_id = porder.InstrumentID
         error = event.dict['error']
         if order_ref in self.ref2order:
-            self.logger.warning(u'报单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
             myorder = self.ref2order[order_ref]
             myorder.on_cancel()
-            self.trade_update(myorder) 
+            self.trade_update(myorder)
+            self.logger.warning(u'OrderInsert is not accepted by CTP, order_res, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
         else:
-            self.logger.warning(u'非本程序保单未被CTP或交易所接受, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))        
+            self.logger.warning(u'OrderInsert error from other programs, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
 
     def err_order_action(self, event):
         '''
@@ -1568,8 +1580,8 @@ class Agent(object):
             order_ref = int(porder.OrderRef)
             self.logger.info('trade update: %s' % porder)
             myorder = self.ref2order[order_ref]
-            if int(error.ErrorID) in [25,26] and myorder.status!=order.OrderStatus.Cancelled:
-                self.logger.info(u'撤销开仓单')
+            if int(error.ErrorID) in [25,26] and myorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
+                self.logger.info('cancel order_ref=%s'% order_ref)
                 myorder.on_cancel()
                 self.trade_update(myorder) 
         else:
@@ -1578,11 +1590,24 @@ class Agent(object):
     ###辅助   
     def rsp_qry_position(self, event):
         pposition = event.dict['data']
-        error = event.dict['error']
+        isLast = event.dict['isLast']
         instID = pposition.InstrumentID
-        if (error.ErrorID == 0) and (pposition != None) and (instID in self.qry_pos):
-            key = pposition.PosiDirection + '.' + pposition.PositionDate
-            self.qry_pos[instID][key] =  pposition.Position
+        if (instID in self.qry_pos):
+            key = 'yday'
+            idx = 1
+            if pposition.PosiDirection == self.trader.ApiStruct.PD_Long:
+                if pposition.PositionDate == self.trader.ApiStruct.PSD_Today:
+                    key = 'tday'
+                    idx = 0
+                else:
+                    idx = 0
+            else:
+                if pposition.PositionDate == self.trader.ApiStruct.PSD_Today:
+                    key = 'tday'
+            self.qry_pos[instID][key][idx] = pposition.Position
+            self.qry_pos[instID]['yday'][idx] = pposition.YdPosition
+        if isLast:
+            pass
         # need to cross check position accuracy
 
     def rsp_qry_instrument_marginrate(self, event):
@@ -1615,15 +1640,17 @@ class Agent(object):
     def rsp_qry_order(self, event):
         '''查询报单'''
         sorder = event.dict['data']
+        isLast = event.dict['isLast']
         if (sorder == None) or (sorder.InstrumentID not in self.instruments) or (len(sorder.OrderRef) == 0):
             return
         if not sorder.OrderRef.isdigit():
             return
         else:
-            self.logger.info('query order return: %s' % sorder)
+            self.logger.info('query order return= %s' % repr(sorder))
         order_ref = int(sorder.OrderRef) 
         if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
+            self.ctp_orders.append(order_ref)
             status = iorder.on_order(sorder.OrderSysID, sorder.LimitPrice, sorder.VolumeTraded)
             if status:
                 self.trade_update(iorder)
@@ -1638,16 +1665,22 @@ class Agent(object):
                     self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status))                          
                     iorder.on_cancel()
                     self.trade_update(iorder)
+        if isLast:
+            for order_ref in self.ref2order:
+                if (order_ref not in self.ctp_orders):
+                    iorder = self.ref2order[order_ref]
+                    iorder.on_cancel()
+                    self.trade_update(iorder)
+            self.ctp_orders = []
 
     def rsp_qry_trade(self, event):
         '''查询成交'''
         strade = event.dict['data']
         if (strade == None) or (strade.InstrumentID not in self.instruments) or (len(strade.OrderRef) == 0):
             return
+        self.logger.info('query trade return= %s' % repr(strade))
         if not strade.OrderRef.isdigit():
             return
-        else:
-            self.logger.info('query trade return: %s' % strade)
         order_ref = int(strade.OrderRef) 
         if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
