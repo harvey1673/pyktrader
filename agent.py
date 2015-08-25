@@ -160,13 +160,12 @@ class CTPMdMixin(object):
         try:
             if dp.LastPrice > dp.UpperLimitPrice or dp.LastPrice < dp.LowerLimitPrice:
                 event = Event(type=EVENT_LOG)
-                event.dict['log'] = u'MD:收到的行情数据有误:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice)
+                event.dict['log'] = u'MD:error in market data - last price:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice)
                 self.eventEngine.put(event)
                 return
-            if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or \
-                    (dp.BidPrice1 < dp.LowerLimitPrice and dp.AskPrice1 >= dp.UpperLimitPrice):
+            if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or (dp.BidPrice1 >= dp.AskPrice1):
                 event = Event(type=EVENT_LOG)
-                event.dict['log'] = u'MD:收到的行情数据有误:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
+                event.dict['log'] = u'MD:error in market data - bid ask:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
                 self.eventEngine.put(event)
                 return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
@@ -1020,10 +1019,8 @@ class Agent(object):
         curr_tick = tick.tick_id
         self.instruments[inst].up_limit   = tick.upLimit
         self.instruments[inst].down_limit = tick.downLimit        
-        if (tick.askPrice1 > MKT_DATA_BIGNUMBER) or (tick.askPrice1 < MKT_DATA_SMALLNUM):
-            tick.askPrice1 = tick.bidPrice1
-        if (tick.bidPrice1 > MKT_DATA_BIGNUMBER) or (tick.bidPrice1 < MKT_DATA_SMALLNUM):
-            tick.bidPrice1 = tick.askPrice1  
+        tick.askPrice1 = min(tick.askPrice1, tick.upLimit)
+        tick.bidPrice1 = max(tick.bidPrice1, tick.downLimit)
         self.instruments[inst].last_update = curr_tick
         self.instruments[inst].bid_price1 = tick.bidPrice1
         self.instruments[inst].ask_price1 = tick.askPrice1
@@ -1566,7 +1563,7 @@ class Agent(object):
             myorder = self.ref2order[order_ref]
             myorder.on_cancel()
             self.trade_update(myorder)
-            self.logger.warning(u'OrderInsert is not accepted by CTP, order_res, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
+            self.logger.warning(u'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
         else:
             self.logger.warning(u'OrderInsert error from other programs, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
 
@@ -1607,8 +1604,9 @@ class Agent(object):
             self.qry_pos[instID][key][idx] = pposition.Position
             self.qry_pos[instID]['yday'][idx] = pposition.YdPosition
         if isLast:
+            # need to cross check position accuracy
+            #print self.qry_pos
             pass
-        # need to cross check position accuracy
 
     def rsp_qry_instrument_marginrate(self, event):
         '''查询保证金率回报. '''

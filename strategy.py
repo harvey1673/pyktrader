@@ -196,7 +196,7 @@ class Strategy(object):
                     break
                 elif tradepos.exit_tradeid == etrade.id:
                     tradepos.cancel_close()
-                    self.logger.info('strat %s cancelled closing a position on %s after tradeid=%s is cancelled. The position is still open with pos=%s.' %
+                    self.logger.info('strat %s cancelled closing a position on %s after tradeid=%s is cancelled. The position is still open.' %
                                      (self.name, '_'.join(sorted(tradepos.insts)), etrade.id))
                     etrade.status = order.ETradeStatus.StratConfirm
                     save_status = True
@@ -385,25 +385,22 @@ class Strategy(object):
                     exit_target = float(row[11])
                     price_unit = float(row[15])
                     tradepos = TradePos(insts, vols, pos, entry_target, exit_target, price_unit)
-                    if row[6] == '':
+                    if row[6] in ['', '19700101 00:00:00 000000']:
                         entry_time = NO_ENTRY_TIME
                         entry_price = 0
                     else:
                         entry_time = datetime.datetime.strptime(row[6], '%Y%m%d %H:%M:%S %f')
                         entry_price = float(row[5])
                         tradepos.open(entry_price,entry_time)
-
                     tradepos.entry_tradeid = int(row[8])           
-                    tradepos.exit_tradeid = int(row[12])    
-                    
-                    if row[10] == '':
+                    tradepos.exit_tradeid = int(row[12])
+                    if row[10] in ['', '19700101 00:00:00 000000']:
                         exit_time = NO_ENTRY_TIME
                         exit_price = 0
-                    else:                    
+                    else:
                         exit_time = datetime.datetime.strptime(row[10], '%Y%m%d %H:%M:%S %f')
                         exit_price = float(row[9])
                         tradepos.close(exit_price, exit_time)
-                    
                     is_added = False
                     for under, tplist in zip(self.underliers, positions):
                         if set(under) == set(insts):
