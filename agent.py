@@ -1604,9 +1604,9 @@ class Agent(object):
             self.qry_pos[instID][key][idx] = pposition.Position
             self.qry_pos[instID]['yday'][idx] = pposition.YdPosition
         if isLast:
-            # need to cross check position accuracy
             #print self.qry_pos
             pass
+        # need to cross check position accuracy
 
     def rsp_qry_instrument_marginrate(self, event):
         '''查询保证金率回报. '''

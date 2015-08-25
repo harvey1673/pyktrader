@@ -108,6 +108,8 @@ class DTTrader(Strategy):
                                     % (inst, self.tday_open[idx], buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
                 self.close_tradepos(idx, self.positions[idx][0], self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
+            if self.trade_unit[idx] <= 0:
+                return
             if  (self.curr_prices[idx] >= buy_trig):
                 buysell = 1
             else:
