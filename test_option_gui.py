@@ -1,6 +1,7 @@
 from agent_gui import *
 import datetime
 import misc
+import base
 import logging
 import sys
 import optionarb
@@ -23,12 +24,15 @@ def get_option_map(underliers, expiries, strikes):
     return opt_map
     
 def option_test(tday, name='option_test'):
-    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    base.config_logging("ctp_" + name + ".log", level=logging.DEBUG,
+                   format = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s',
+                   to_console = True,
+                   console_level = logging.INFO)
     trader_cfg = misc.TEST_TRADER
     user_cfg = misc.TEST_USER
     opt_strat = optionarb.OptionArbStrat(name,
-                                    ['IF1508', 'IF1509'],
-                                    [201508, 201509],
+                                    ['IF1509', 'IF1512'],
+                                    [201509, 201512],
                                     [[3400, 3500, 3600, 3650, 3700, 3750, 3800, 3850, 3900, 4000, 4100]]*2)
     ins_setup = {'IF1509':1}
     insts = ins_setup.keys()
@@ -63,22 +67,25 @@ def option_test(tday, name='option_test'):
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = freq, 
                                  agent = None, email_notify = [])
     strategies = [tl_strat, dt_strat, rb_strat]
+    folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
-                 'folder': 'c:\\dev\\pyktlib\\pyktrader\\', \
+                 'folder': folder, \
                  'daily_data_days':21, \
                  'min_data_days':1,
                  'enable_option': True }
-    
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
     myGui = Gui(myApp)
     myGui.mainloop()
     
 def Soymeal_Opt(tday, name='Soymeal_Opt'):
-    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    base.config_logging("ctp_" + name + ".log", level=logging.DEBUG,
+                   format = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s',
+                   to_console = True,
+                   console_level = logging.INFO)
     trader_cfg = misc.HT_OPTSIM_TRADER
     user_cfg = misc.HT_OPTSIM_USER
-    ins_setup = {'m1601':2,
-                 'm1605':2}
+    ins_setup = {'m1601':5,
+                 'm1605':5}
     insts = ins_setup.keys()
     units_tl = [ins_setup[inst] for inst in insts]
     under_tl = [[inst] for inst in insts]
@@ -86,9 +93,8 @@ def Soymeal_Opt(tday, name='Soymeal_Opt'):
     tl_strat = strat_tl.TurtleTrader('ProdTL', under_tl, vol_tl, trade_unit = units_tl,
                                  agent = None, email_notify = [])
 
-    ins_setup = {'m1509':(0, 0.5, 0.0, 6, False),
-				 'm1601':(0, 0.5, 0.0, 12, False),
-                 'm1605':(0, 0.5, 0.0, 7, False)}
+    ins_setup = {'m1601':(0, 0.5, 0.0, 10, False),
+                 'm1605':(0, 0.5, 0.0, 10, False)}
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
     under_dt = [[inst] for inst in insts]
@@ -100,8 +106,8 @@ def Soymeal_Opt(tday, name='Soymeal_Opt'):
                                  ratios = ratios, lookbacks = lookbacks,
                                  agent = None, daily_close = daily_close,
                                  email_notify = [])
-    ins_setup = {'m1601': [[0.3, 0.07, 0.2], 1, 30, 2],
-                 'm1605': [[0.3, 0.07, 0.2], 1, 30, 2]}
+    ins_setup = {'m1601': [[0.3, 0.07, 0.2], 1, 30, 5],
+                 'm1605': [[0.3, 0.07, 0.2], 1, 30, 5]}
     insts = ins_setup.keys()
     units_rb = [ins_setup[inst][1] for inst in insts]
     under_rb = [[inst] for inst in insts]
@@ -114,12 +120,12 @@ def Soymeal_Opt(tday, name='Soymeal_Opt'):
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = freq,
                                  agent = None, email_notify = [])
     strategies = [tl_strat, dt_strat, rb_strat]
+    folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
-                 'folder': 'c:\\dev\\pyktlib\\pyktrader\\', \
+                 'folder': folder, \
                  'daily_data_days':21, \
                  'min_data_days':1,
                  'enable_option': True }
-
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = True)
     myGui = Gui(myApp)
     myGui.mainloop()

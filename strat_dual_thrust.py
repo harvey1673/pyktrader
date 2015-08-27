@@ -75,7 +75,7 @@ class DTTrader(Strategy):
         inst = self.underliers[idx][0]
         self.tday_open[idx] = self.agent.cur_day[inst]['open']
         if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0) or (self.curr_prices[idx] <= 0.001):
-            self.logger.warning("warning: open price =0.0 or range = 0.0 or curr_price=0 for inst=%s for stat = %s" % (inst, self.name))
+            self.logger.info("warning: open price =0.0 or range = 0.0 or curr_price=0 for inst=%s for stat = %s" % (inst, self.name))
             return
         min_id = self.agent.tick_id/1000.0
         num_pos = len(self.positions[idx])

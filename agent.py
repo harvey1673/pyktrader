@@ -113,17 +113,20 @@ class CTPMdMixin(object):
         event = Event(type=EVENT_LOG)
         log = u'行情错误回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')
         event.dict['log'] = log
+        event.dict['level'] = logging.WARNING
         self.eventEngine.put(event)
     
     def OnFrontDisConnected(self, reason):
         """服务器断开"""
         event = Event(type=EVENT_LOG)
         event.dict['log'] = u'行情服务器连接断开'
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
     
     def OnFrontConnected(self):
         event = Event(type=EVENT_LOG)
         event.dict['log'] = u'行情服务器连接成功'
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
         self.user_login(self.broker_id, self.investor_id, self.passwd)
 
@@ -139,6 +142,7 @@ class CTPMdMixin(object):
         else:
             log = u'登陆回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')        
         event.dict['log'] = log
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
         if is_last and (info.ErrorID == 0):
             trade_day_str = self.GetTradingDay()
@@ -161,11 +165,13 @@ class CTPMdMixin(object):
             if dp.LastPrice > dp.UpperLimitPrice or dp.LastPrice < dp.LowerLimitPrice:
                 event = Event(type=EVENT_LOG)
                 event.dict['log'] = u'MD:error in market data - last price:%s,LastPrice=:%s' %(dp.InstrumentID,dp.LastPrice)
+                event.dict['level'] = logging.DEBUG
                 self.eventEngine.put(event)
                 return
             if (dp.AskPrice1 > dp.UpperLimitPrice and dp.BidPrice1 <= dp.LowerLimitPrice) or (dp.BidPrice1 >= dp.AskPrice1):
                 event = Event(type=EVENT_LOG)
                 event.dict['log'] = u'MD:error in market data - bid ask:%s,BidPrice=%s, AskPrice=%s' %(dp.InstrumentID,dp.BidPrice1,dp.AskPrice1)
+                event.dict['level'] = logging.DEBUG
                 self.eventEngine.put(event)
                 return
             timestr = str(dp.UpdateTime) + ' ' + str(dp.UpdateMillisec) + '000'
@@ -255,7 +261,8 @@ class CTPTraderQryMixin(object):
         if not self.is_logged:
             event = Event(type=EVENT_LOG)
             event.dict['log'] = 'The trader is not logged, cannot send the order, so cancelling order ref = %s, sysid = %s' % (iorder.order_ref, iorder.sys_id)
-            self.eventEngine.put(event)     
+            event.dict['level'] = logging.WARNING
+            self.eventEngine.put(event)
             iorder.on_cancel()
             return False 
         if iorder.direction == ORDER_BUY:
@@ -306,6 +313,7 @@ class CTPTraderQryMixin(object):
                           iorder.volume,
                           iorder.limit_price, 
                           iorder.price_type)
+        event.dict['level'] = logging.DEBUG
         self.eventEngine.put(event) 
         r = self.ReqOrderInsert(req,self.agent.inc_request_id())
         return r
@@ -315,6 +323,7 @@ class CTPTraderQryMixin(object):
         event = Event(type=EVENT_LOG)
         event.dict['log'] = u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' % (iorder.order_ref, \
                             iorder.sys_id, inst.exchange, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume)
+        event.dict['level'] = logging.DEBUG
         self.eventEngine.put(event)         
         if len(iorder.sys_id) >0:
             exch = inst.exchange
@@ -329,6 +338,7 @@ class CTPTraderQryMixin(object):
         else:
             event = Event(type=EVENT_LOG)
             event.dict['log'] = 'order=%s has no OrderSysID, using Order_ref to cancel' % (iorder.order_ref)
+            event.dict['level'] = logging.INFO
             self.eventEngine.put(event)         
             req = self.ApiStruct.InputOrderAction(
                 InstrumentID = inst.name,
@@ -357,6 +367,7 @@ class CTPTraderRspMixin(object):
         """服务器连接"""
         event = Event(type=EVENT_LOG)
         event.dict['log'] = u'交易服务器连接成功'
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
         self.login()
 
@@ -365,6 +376,7 @@ class CTPTraderRspMixin(object):
         self.is_logged = False
         event = Event(type=EVENT_LOG)
         event.dict['log'] = u'交易服务器连接断开'
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
 
         event2 = Event(type=EVENT_TDDISCONNECTED)
@@ -382,6 +394,7 @@ class CTPTraderRspMixin(object):
         else:
             log = u'登陆回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')        
         event.dict['log'] = log
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
         
         if pRspInfo.ErrorID == 0:
@@ -401,6 +414,7 @@ class CTPTraderRspMixin(object):
         else:
             log = u'登陆回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')        
         event.dict['log'] = log
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
         self.is_logged = False
 
@@ -416,6 +430,7 @@ class CTPTraderRspMixin(object):
             log = u'TD:%s结果: 等待数据接收完全...' % name
             val = 0
         event.dict['log'] = log
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event) 
         return val
         
@@ -452,6 +467,7 @@ class CTPTraderRspMixin(object):
             event = Event(type=EVENT_LOG)
             log = u'合约投资者回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
             event.dict['log'] = log
+            event.dict['level'] = logging.DEBUG
             self.eventEngine.put(event)             
         
     def OnRspQryTradingAccount(self, pTradingAccount, pRspInfo, nRequestID, bIsLast):
@@ -466,6 +482,7 @@ class CTPTraderRspMixin(object):
             event = Event(type=EVENT_LOG)
             log = u'账户查询回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
             event.dict['log'] = log
+            event.dict['level'] = logging.DEBUG
             self.eventEngine.put(event)
 
     def OnRspQryInvestor(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
@@ -479,6 +496,7 @@ class CTPTraderRspMixin(object):
             event = Event(type=EVENT_LOG)
             log = u'合约投资者回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
             event.dict['log'] = log
+            event.dict['level'] = logging.DEBUG
             self.eventEngine.put(event)
             
     def OnRspQryInvestorPosition(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
@@ -492,6 +510,7 @@ class CTPTraderRspMixin(object):
             event = Event(type=EVENT_LOG)
             log = u'持仓查询回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
             event.dict['log'] = log
+            event.dict['level'] = logging.DEBUG
             self.eventEngine.put(event)
       
     def OnRspQryInvestorPositionDetail(self, pInvestorPositionDetail, pRspInfo, nRequestID, bIsLast):
@@ -503,6 +522,7 @@ class CTPTraderRspMixin(object):
         event = Event(type=EVENT_LOG)
         log = u'交易错误回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')
         event.dict['log'] = log
+        event.dict['level'] = logging.INFO
         self.eventEngine.put(event)
 
     def OnRspQryOrder(self, porder, pRspInfo, nRequestID, bIsLast):
@@ -517,6 +537,7 @@ class CTPTraderRspMixin(object):
             event = Event(type=EVENT_LOG)
             log = u'交易错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
             event.dict['log'] = log
+            event.dict['level'] = logging.DEBUG
             self.eventEngine.put(event)
         
     def OnRspQryTrade(self, ptrade, pRspInfo, nRequestID, bIsLast):
@@ -531,6 +552,7 @@ class CTPTraderRspMixin(object):
             event = Event(type=EVENT_LOG)
             log = u'交易错误回报，错误代码：' + unicode(info.ErrorID) + u',' + u'错误信息：' + info.ErrorMsg.decode('gbk')
             event.dict['log'] = log
+            event.dict['level'] = logging.DEBUG
             self.eventEngine.put(event)
     
     def OnRspOrderInsert(self, pInputOrder, pRspInfo, nRequestID, bIsLast):
@@ -541,6 +563,7 @@ class CTPTraderRspMixin(object):
         event = Event(type=EVENT_LOG)
         log = u' 发单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
         event.dict['log'] = log
+        event.dict['level'] = logging.WARNING
         self.eventEngine.put(event)
         event2 = Event(type=EVENT_ERRORDERINSERT)
         event2.dict['data'] = copy.copy(pInputOrder)
@@ -552,6 +575,7 @@ class CTPTraderRspMixin(object):
         event = Event(type=EVENT_LOG)
         log = u'发单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
         event.dict['log'] = log
+        event.dict['level'] = logging.WARNING
         self.eventEngine.put(event)
         
         event2 = Event(type=EVENT_ERRORDERINSERT)
@@ -596,6 +620,7 @@ class CTPTraderRspMixin(object):
         event = Event(type=EVENT_LOG)
         log = u'撤单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
         event.dict['log'] = log
+        event.dict['level'] = logging.WARNING
         self.eventEngine.put(event)
         
         event2 = Event(type=EVENT_ERRORDERCANCEL)
@@ -608,6 +633,7 @@ class CTPTraderRspMixin(object):
         event = Event(type=EVENT_LOG)
         log = u'撤单错误回报，错误代码：' + unicode(pRspInfo.ErrorID) + u',' + u'错误信息：' + pRspInfo.ErrorMsg.decode('gbk')
         event.dict['log'] = log
+        event.dict['level'] = logging.WARNING
         self.eventEngine.put(event)
         
         event2 = Event(type=EVENT_ERRORDERCANCEL)
@@ -703,7 +729,8 @@ class Agent(object):
         self.margin_cap = margin_cap
 
     def log_handler(self, event):
-        self.logger.info(event.dict['log'])
+        lvl = event.dict['level']
+        self.logger.log(lvl, event.dict['log'])
 
     def td_disconnected(self, event):
         pass
@@ -790,7 +817,7 @@ class Agent(object):
         
     def prepare_data_env(self, mid_day = True): 
         if self.daily_data_days > 0 or mid_day:
-            self.logger.info('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))            
+            self.logger.debug('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
             for inst in self.instruments:  
@@ -807,7 +834,7 @@ class Agent(object):
                         df[ts.name]= pd.Series(ts, index=df.index)
 
         if self.min_data_days > 0 or mid_day:
-            self.logger.info('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d')) 
+            self.logger.debug('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d'))
             d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
             d_end = self.scur_day
             for inst in self.instruments: 
@@ -831,7 +858,7 @@ class Agent(object):
                         self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
                         self.instruments[inst].price = float(mindata.ix[-1,'close'])
                         self.instruments[inst].last_update = 0
-                        self.logger.info('inst=%s tick data loaded for date=%s' % (inst, min_date))                        
+                        self.logger.debug('inst=%s tick data loaded for date=%s' % (inst, min_date))
                     for m in self.min_data_func[inst]:
                         if m != 1:
                             self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
@@ -844,10 +871,10 @@ class Agent(object):
     def resume(self):
         if self.initialized:
             return 
-        self.logger.info('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
+        self.logger.debug('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
         self.prepare_data_env(mid_day = True)
         self.get_eod_positions()            
-        self.logger.info('Prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
+        self.logger.debug('Prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         file_prefix = self.folder
         self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
         keys = self.ref2order.keys()
@@ -906,20 +933,20 @@ class Agent(object):
                 return False
         else:
             self.eod_flag = True
-        self.logger.info('Starting; getting EOD position for %s' % pos_date.strftime('%y%m%d'))
+        self.logger.debug('Starting; getting EOD position for %s' % pos_date.strftime('%y%m%d'))
         with open(logfile, 'rb') as f:
             reader = csv.reader(f)
             for idx, row in enumerate(reader):
                 if row[0] == 'capital':
                     self.prev_capital = float(row[1])
-                    self.logger.info('getting prev EOD capital = %s' % row[1])
+                    self.logger.debug('getting prev EOD capital = %s' % row[1])
                 elif row[0] == 'pos':
                     inst = row[1]
                     if inst in self.positions:
                         self.positions[inst].pos_yday.long = int(row[2]) 
                         self.positions[inst].pos_yday.short = int(row[3])
                         self.instruments[inst].prev_close = float(row[4])    
-                        self.logger.info('getting prev EOD pos = %s: long=%s, short=%s, price=%s' % (row[1], row[2], row[3], row[4]))                
+                        self.logger.debug('getting prev EOD pos = %s: long=%s, short=%s, price=%s' % (row[1], row[2], row[3], row[4]))
         return True
     
     def save_eod_positions(self):
@@ -968,7 +995,7 @@ class Agent(object):
         self.pnl_total = yday_pnl + tday_pnl
         self.curr_capital = self.prev_capital + self.pnl_total
         self.available = self.curr_capital - self.locked_margin
-        self.logger.info('calc_margin: curr_capital=%s, prev_capital=%s, pnl_tday=%s, pnl_yday=%s, locked_margin=%s, used_margin=%s, available=%s' \
+        self.logger.debug('calc_margin: curr_capital=%s, prev_capital=%s, pnl_tday=%s, pnl_yday=%s, locked_margin=%s, used_margin=%s, available=%s' \
                         % (self.curr_capital, self.prev_capital, tday_pnl, yday_pnl, locked_margin, used_margin, self.available))
  
     def save_state(self):
@@ -976,7 +1003,7 @@ class Agent(object):
             保存环境
         '''
         if not self.eod_flag:
-            self.logger.info(u'保存执行状态.....................')
+            self.logger.debug(u'保存执行状态.....................')
             file_prefix = self.folder
             order.save_order_list(self.scur_day, self.ref2order, file_prefix)
             order.save_trade_list(self.scur_day, self.ref2trade, file_prefix)
@@ -1052,7 +1079,7 @@ class Agent(object):
         #try:
         if (self.cur_day[inst]['open'] == 0.0):
             self.cur_day[inst]['open'] = tick.price
-            self.logger.info('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))            
+            self.logger.debug('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))
         self.cur_day[inst]['close'] = tick.price
         self.cur_day[inst]['high']  = tick.high
         self.cur_day[inst]['low']   = tick.low
@@ -1125,7 +1152,7 @@ class Agent(object):
         for inst in insts:
             if not self.instruments[inst].day_finalized:
                 self.instruments[inst].day_finalized = True
-                self.logger.info('finalizing the day for market data = %s, scur_date=%s' % (inst, self.scur_day))
+                self.logger.debug('finalizing the day for market data = %s, scur_date=%s' % (inst, self.scur_day))
                 if (len(self.tick_data[inst]) > 0) :
                     last_tick = self.tick_data[inst][-1]
                     self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
@@ -1190,14 +1217,13 @@ class Agent(object):
     def day_switch(self, event):
         newday = event.dict['date']
         if newday <= self.scur_day:
-            return 
-        self.logger.info('switching the trading day from %s to %s' % (self.scur_day, newday))
+            return
+        self.logger.info('switching the trading day from %s to %s, reset tick_id=%s to 0' % (self.scur_day, newday, self.tick_id))
         self.day_finalize(self.instruments.keys())
         self.isSettlementInfoConfirmed = False
         if not self.eod_flag:
             self.run_eod()
         self.scur_day = newday
-        print "scur_day = %s, reset tick_id= %s to 0" % (self.scur_day, self.tick_id)
         self.tick_id = 0
         self.timer_count = 0
         for inst in self.instruments:
@@ -1241,13 +1267,13 @@ class Agent(object):
     ##内务处理
     def fetch_trading_account(self):
         #获取资金帐户
-        self.logger.info('A:getting trading account info..')
+        self.logger.debug('A:getting trading account info..')
         r = self.trader.query_trading_account()
         return r
 
     def fetch_investor_position(self, instrument_id = ''):
         #获取合约的当前持仓
-        self.logger.info(u'A:获取合约%s的当前持仓..' % (instrument_id,))
+        self.logger.debug(u'A:获取合约%s的当前持仓..' % (instrument_id,))
         r = self.trader.query_investor_position(instrument_id)
         return r
     
@@ -1255,36 +1281,36 @@ class Agent(object):
         '''
             获取合约的当前持仓明细，目前没用
         '''
-        self.logger.info(u'A:获取合约%s的当前持仓..' % (instrument_id,))
+        self.logger.debug(u'A:获取合约%s的当前持仓..' % (instrument_id,))
         r = self.trader.query_investor_position_detail(instrument_id)
-        self.logger.info(u'A:查询持仓, 函数发出返回值:%s' % r)
+        self.logger.debug(u'A:查询持仓, 函数发出返回值:%s' % r)
         return r
 
     def fetch_instrument_marginrate(self,instrument_id):
         r = self.trader.query_instrument_marginrate(instrument_id)
-        self.logger.info(u'A:查询保证金率, 函数发出返回值:%s' % r)
+        self.logger.debug(u'A:查询保证金率, 函数发出返回值:%s' % r)
         return r
 
     def fetch_instrument(self,instrument_id):
         r = self.trader.query_instrument(instrument_id)
-        self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
+        self.logger.debug(u'A:查询合约, 函数发出返回值:%s' % r)
         return r
 
     def fetch_instruments_by_exchange(self,exchange_id):
         '''不能单独用exchange_id,因此没有意义
         '''
         r = self.trader.query_instruments_by_exch(exchange_id)
-        self.logger.info(u'A:查询合约, 函数发出返回值:%s' % r)
+        self.logger.debug(u'A:查询合约, 函数发出返回值:%s' % r)
         return r
 
     def fetch_order(self, start_time='', end_time=''):
         r = self.trader.query_order( start_time, end_time )
-        self.logger.info(u'A:查询报单, 函数发出返回值:%s' % r)
+        self.logger.debug(u'A:查询报单, 函数发出返回值:%s' % r)
         return r
 
     def fetch_trade(self, start_time='', end_time=''):
         r = self.trader.query_trade( start_time, end_time )
-        self.logger.info(u'A:查询成交单, 函数发出返回值:%s' % r)
+        self.logger.debug(u'A:查询成交单, 函数发出返回值:%s' % r)
         return r
     
     def rtn_tick(self, event):#行情处理主循环
@@ -1402,9 +1428,9 @@ class Agent(object):
             exec_trade.status = order.ETradeStatus.Processed
             return pending_orders
         else:
-            self.logger.info("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % \
-                             (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
-            return pending_orders    
+            #self.logger.debug("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % \
+            #                 (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
+            return pending_orders
         
     def check_trade(self, exec_trade):
         pending_orders = []
@@ -1468,7 +1494,7 @@ class Agent(object):
         # 上期所不支持市价单
         if (iorder.price_type == OPT_MARKET_ORDER):
             if (inst.exchange == 'SHFE' or inst.exchange == 'CFFEX'):
-                self.logger.info('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, iorder.instrument.name))
+                self.logger.debug('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, iorder.instrument.name))
                 iorder.price_type = OPT_LIMIT_ORDER
                 # 以后可以改成涨停,跌停价
                 if iorder.direction == ORDER_BUY:
@@ -1497,18 +1523,18 @@ class Agent(object):
         if not ptrade.OrderRef.isdigit():
             return
         else:
-            self.logger.info('trade = %s' % repr(ptrade))
+            self.logger.debug('trade = %s' % repr(ptrade))
         order_ref = int(ptrade.OrderRef)
         if order_ref in self.ref2order:
             myorder = self.ref2order[order_ref]
             myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume)
             self.trade_update(myorder)
             if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
-                self.logger.info(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
+                self.logger.debug(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
             else:
-                self.logger.info(u'A_RT32,平仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
+                self.logger.debug(u'A_RT32,平仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
         else:
-            self.logger.warning(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))        
+            self.logger.info(u'A_RT2:收到非本程序发出的成交回报:%s-%s' % (ptrade.InstrumentID,ptrade.OrderRef))
 
     def rtn_order(self, event):
         '''交易所接受下单回报(CTP接受的已经被过滤)暂时只处理撤单的回报. 
@@ -1517,7 +1543,7 @@ class Agent(object):
         if not porder.OrderRef.isdigit():
             return
         else:
-            self.logger.info('order = %s' % repr(porder))
+            self.logger.debug('order = %s' % repr(porder))
         order_ref = int(porder.OrderRef)
         if (order_ref in self.ref2order):
             myorder = self.ref2order[order_ref]
@@ -1527,11 +1553,11 @@ class Agent(object):
             if status:
                 self.trade_update(myorder)
             if porder.OrderStatus in [ self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
-                self.logger.info('cancel the rest order in order_ref = %s' % order_ref )
+                self.logger.debug('cancel the rest order in order_ref = %s' % order_ref )
                 myorder.on_cancel()                
                 self.trade_update(myorder) 
         else:
-            self.logger.info('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)
+            self.logger.debug('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)
             print porder
 
     def trade_update(self, myorder):
@@ -1555,7 +1581,7 @@ class Agent(object):
         if not porder.OrderRef.isdigit():
             return
         else:
-            self.logger.info('trade update: %s' % porder)
+            self.logger.debug('trade update: %s' % porder)
         order_ref = int(porder.OrderRef)
         instrument_id = porder.InstrumentID
         error = event.dict['error']
@@ -1565,7 +1591,7 @@ class Agent(object):
             self.trade_update(myorder)
             self.logger.warning(u'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
         else:
-            self.logger.warning(u'OrderInsert error from other programs, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
+            self.logger.info(u'OrderInsert error from other programs, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
 
     def err_order_action(self, event):
         '''
@@ -1575,10 +1601,10 @@ class Agent(object):
         error = event.dict['error']
         if porder.OrderRef.isdigit():
             order_ref = int(porder.OrderRef)
-            self.logger.info('trade update: %s' % porder)
+            self.logger.debug('trade update: %s' % porder)
             myorder = self.ref2order[order_ref]
             if int(error.ErrorID) in [25,26] and myorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
-                self.logger.info('cancel order_ref=%s'% order_ref)
+                self.logger.debug('cancel order_ref=%s'% order_ref)
                 myorder.on_cancel()
                 self.trade_update(myorder) 
         else:
@@ -1604,7 +1630,6 @@ class Agent(object):
             self.qry_pos[instID][key][idx] = pposition.Position
             self.qry_pos[instID]['yday'][idx] = pposition.YdPosition
         if isLast:
-            #print self.qry_pos
             pass
         # need to cross check position accuracy
 
@@ -1644,7 +1669,7 @@ class Agent(object):
         if not sorder.OrderRef.isdigit():
             return
         else:
-            self.logger.info('query order return= %s' % repr(sorder))
+            self.logger.debug('query order return= %s' % repr(sorder))
         order_ref = int(sorder.OrderRef) 
         if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
@@ -1654,13 +1679,13 @@ class Agent(object):
                 self.trade_update(iorder)
             elif sorder.OrderStatus in [self.trader.ApiStruct.OST_NoTradeQueueing, self.trader.ApiStruct.OST_PartTradedQueueing, self.trader.ApiStruct.OST_Unknown]:
                 if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}: 
-                    self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status))
+                    self.logger.info('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status))
                     iorder.status = order.OrderStatus.Sent
                     iorder.conditionals = {}
                     #iorpder.position.re_calc()
             elif sorder.OrderStatus in [self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing, self.trader.ApiStruct.OST_NoTradeNotQueueing]:
                 if iorder.status != order.OrderStatus.Cancelled:                     
-                    self.logger.warning('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status))                          
+                    self.logger.info('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status))
                     iorder.on_cancel()
                     self.trade_update(iorder)
         if isLast:
@@ -1676,7 +1701,7 @@ class Agent(object):
         strade = event.dict['data']
         if (strade == None) or (strade.InstrumentID not in self.instruments) or (len(strade.OrderRef) == 0):
             return
-        self.logger.info('query trade return= %s' % repr(strade))
+        self.logger.debug('query trade return= %s' % repr(strade))
         if not strade.OrderRef.isdigit():
             return
         order_ref = int(strade.OrderRef) 
@@ -1692,7 +1717,7 @@ class Agent(object):
         """退出"""
         # 停止事件驱动引擎
         self.eventEngine.stop()
-        print "exiting ..."
+        self.logger.info('stopped the engine, exiting the agent ...')
         self.save_state()
         for strat_name in self.strat_list:
             strat = self.strategies[strat_name]

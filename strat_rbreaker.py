@@ -94,7 +94,7 @@ class RBreakerTrader(Strategy):
         inst = self.underliers[idx][0]
         min_id = self.agent.cur_min[inst]['min_id']
         if (min_id < self.start_min_id[idx]):
-            self.logger.warning('inst=%s has not started in this strategy = %s' % (inst, self.name))
+            self.logger.debug('inst=%s has not started in this strategy = %s' % (inst, self.name))
             return
         if (freq != self.freq[idx]) or (len(self.submitted_trades[idx]) > 0):
             if (min_id >= self.last_min_id[idx]):

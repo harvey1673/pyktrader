@@ -179,7 +179,7 @@ class ETrade(object):
                         iorder.status = OrderStatus.Ready
                         iorder.conditionals = {}
                         pending_orders.append(iorder.order_ref)
-                        logging.info('order %s is ready after %s is canceld, the remaining volume is %s' \
+                        logging.debug('order %s is ready after %s is canceld, the remaining volume is %s' \
                                         % (iorder.order_ref, sorder.order_ref, iorder.volume))
                 elif len(iorder.conditionals)> 0:
                     for o in iorder.conditionals:
@@ -191,7 +191,7 @@ class ETrade(object):
                         elif (o.status != iorder.conditionals[o]):
                             break    
                     else:
-                        logging.info('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
+                        logging.debug('conditions for order %s are met, changing status to be ready' % iorder.order_ref)
                         iorder.status = OrderStatus.Ready
                         pending_orders.append(iorder.order_ref)
                         iorder.conditionals = {}
@@ -248,7 +248,7 @@ class Order(object):
             return True
         self.filled_volume = volume
         self.filled_price = price
-        logging.info(u'成交纪录:price=%s,volume=%s,filled_vol=%s, is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
+        logging.debug(u'成交纪录:price=%s,volume=%s,filled_vol=%s, is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
         if self.filled_volume > self.volume:
             self.filled_volume = self.volume
             logging.warning(u'a new trade confirm exceeds the order volume price=%s, filled_vol=%s, order_vol =%s' % \
@@ -271,7 +271,7 @@ class Order(object):
             self.status = OrderStatus.Cancelled
             self.cancelled_volume = max(self.volume - self.filled_volume, 0)
             self.volume = self.filled_volume    #不会再有成交回报
-            logging.info(u'撤单记录: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
+            logging.debug(u'撤单记录: OrderRef=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' \
                 % (self.order_ref, self.instrument.name, self.volume, self.filled_volume, self.cancelled_volume))
         self.position.re_calc()
 
@@ -323,7 +323,7 @@ class Position(object):
         yday_c_locked = BaseObject(long=0,short=0)
         
         for mo in self.orders:
-            logging.info(str(mo))
+            logging.debug(str(mo))
             if mo.action_type == OF_OPEN:
                 if mo.direction == ORDER_BUY:
                     tday_opened.long += mo.filled_volume
@@ -376,7 +376,7 @@ class Position(object):
         
         self.can_open.long  = max(self.instrument.max_holding[0] - self.locked_pos.long,0)
         self.can_open.short = max(self.instrument.max_holding[1] - self.locked_pos.short,0)
-        logging.info(u'P_RC_1:%s 重算头寸，当前已开数 long=%s,short=%s 当前锁定数 long=%s,short=%s, 昨日仓位long=%s,short=%s' \
+        logging.debug(u'P_RC_1:%s 重算头寸，当前已开数 long=%s,short=%s 当前锁定数 long=%s,short=%s, 昨日仓位long=%s,short=%s' \
                     % (str(self), self.curr_pos.long,self.curr_pos.short,self.locked_pos.long,self.locked_pos.short, self.pos_yday.long, self.pos_yday.short))
         
     def get_open_volume(self):

@@ -202,7 +202,6 @@ class Strategy(object):
                     save_status = True
                     break
             if etrade.status != order.ETradeStatus.StratConfirm:
-                print "WARNING:the trade %s is cancelled but not found in the strat=%s tradepos table, removing the trade" % (etrade.id, self.name)
                 self.logger.warning('the trade %s is cancelled but not found in the strat=%s tradepos table' % (etrade.id, self.name))
                 etrade.status = order.ETradeStatus.StratConfirm
                 save_status = True
@@ -232,7 +231,7 @@ class Strategy(object):
         if len(self.positions[idx]) > 0:
             for pos in self.positions[idx]:
                 if (pos.entry_time > NO_ENTRY_TIME) and (pos.exit_tradeid == 0):
-                    print 'liquidating', idx
+                    self.logger.info( 'strat=%s is liquidating underliers = %s' % ( self.name,   '_'.join(sorted(pos.insts))))
                     self.close_tradepos(idx, pos, self.curr_prices[idx])
                     save_status = True
         return save_status
@@ -247,7 +246,7 @@ class Strategy(object):
         idx = self.under2idx[trade_key]
         for cur_trade in self.submitted_trades[idx]:
             if etrade.id == cur_trade.id:
-                self.logger.info('trade_id = %s is already in the strategy= %s list' % (etrade.id, self.name))
+                self.logger.debug('trade_id = %s is already in the strategy= %s list' % (etrade.id, self.name))
                 return False
         self.logger.info('trade_id = %s is added to the strategy= %s list' % (etrade.id, self.name))
         self.submitted_trades[idx].append(etrade)
@@ -355,7 +354,7 @@ class Strategy(object):
         
     def save_state(self):
         filename = self.folder + 'strat_status.csv'
-        self.logger.info('save state for strat = %s' % (self.name))
+        self.logger.debug('save state for strat = %s' % (self.name))
         with open(filename,'wb') as log_file:
             file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             for tplist in self.positions:
@@ -372,7 +371,7 @@ class Strategy(object):
         if not os.path.isfile(logfile):
             self.positions  = positions
             return 
-        self.logger.info('load state for strat = %s' % (self.name))
+        self.logger.debug('load state for strat = %s' % (self.name))
         with open(logfile, 'rb') as f:
             reader = csv.reader(f)
             for row in reader:
@@ -408,9 +407,7 @@ class Strategy(object):
                             is_added = True
                             break
                     if is_added == False:
-                        #self.underliers.append(insts)
-                        #positions.append([tradepos])
-                        self.logger.warning('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
+                        self.logger.info('underlying = %s is missing in strategy=%s. It is added now' % (insts, self.name))
                 else:
                     self.load_local_variables(row)
         self.positions = positions

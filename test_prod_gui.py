@@ -1,6 +1,7 @@
 #-*- coding:utf-8 -*-
 import misc
 import logging
+import base
 import sys
 import strat_dual_thrust as strat_dt
 import strat_rbreaker as strat_rb
@@ -8,10 +9,12 @@ import strat_turtle as strat_tl
 from agent_gui import *
    
 def prod_test(tday, name='prod_test'):
-    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    base.config_logging("ctp_" + name + ".log", level=logging.DEBUG,
+                   format = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s',
+                   to_console = True,
+                   console_level = logging.INFO)
     trader_cfg = None
     user_cfg = misc.HT_PROD_MD
-    folder = misc.get_prod_folder()
     ins_setup = {'IF1509': [[0.3, 0.07, 0.2], 1,  30, 1],
                  'IH1509': [[0.3, 0.07, 0.2], 1,  30, 1],
                 'ru1601':  [[0.35, 0.08, 0.25], 1,  120, 3],
@@ -102,11 +105,11 @@ def prod_test(tday, name='prod_test'):
     tl_strat = strat_tl.TurtleTrader('ProdTL', under_tl, vol_tl, trade_unit = units_tl,
                                  agent = None, email_notify = [])    
     strategies = [rb_strat, dt_strat, dtma_strat, tl_strat]
+    folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
-                 'folder': '/home/harvey/dev/pyctp2/', \
+                 'folder': folder, \
                  'daily_data_days':21, \
                  'min_data_days':1 }
-
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
     myGui = Gui(myApp)
     #myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')

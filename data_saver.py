@@ -7,6 +7,7 @@ import time
 import logging
 import mysqlaccess
 import misc
+import base
 
 def filter_main_cont(sdate):
     insts, prods  = mysqlaccess.load_alive_cont(sdate)
@@ -23,7 +24,10 @@ def filter_main_cont(sdate):
         
 def save_ctp(tday):
     prod_md = misc.HT_PROD_MD
-    logging.basicConfig(filename="save_all_agent.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    base.config_logging("save_all_agent.log", level=logging.DEBUG,
+                   format = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s',
+                   to_console = True,
+                   console_level = logging.INFO)
     save_insts = filter_main_cont(tday)
     app_name = 'SaveAgent'
     config = {'daily_data_days': 0, 'min_data_days': 0}
@@ -38,7 +42,10 @@ def save_ctp(tday):
 
 def save_lts_test(tday):
     prod_md = misc.LTS_SO_USER
-    logging.basicConfig(filename="save_lts_test.log",level=logging.INFO,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    base.config_logging("save_lts_test.log", level=logging.DEBUG,
+                   format = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s',
+                   to_console = True,
+                   console_level = logging.INFO)
     save_insts = ['510050']
     app_name = 'SaveAgent'
     config = {'daily_data_days': 0, 'min_data_days': 0}
