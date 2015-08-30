@@ -19,9 +19,9 @@ def get_bktest_folder():
     folder = ''
     system = platform.system()
     if system == 'Linux':
-        folder = '/home/harvey/dev/pyctp/results/'
+        folder = '/home/harvey/dev/pyctp2/results/'
     elif system == 'Windows':
-        folder = 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\results\\'
+        folder = 'C:\\dev\\pyktlib\\pyktrader\\results\\'
     return folder
     
 def get_asset_tradehrs(asset):

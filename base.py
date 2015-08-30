@@ -20,7 +20,7 @@ from inspect import (
 
 
 MY_FORMAT = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s'
-CONSOLE_FORMAT = '**%(message)s'
+CONSOLE_FORMAT = '%(asctime)s%(message)s'
 
 #设定日志
 def config_logging(filename,level=logging.DEBUG,format=MY_FORMAT,to_console=True,console_level=logging.INFO):

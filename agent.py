@@ -1674,20 +1674,21 @@ class Agent(object):
         if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
             self.ctp_orders.append(order_ref)
-            status = iorder.on_order(sorder.OrderSysID, sorder.LimitPrice, sorder.VolumeTraded)
-            if status:
-                self.trade_update(iorder)
-            elif sorder.OrderStatus in [self.trader.ApiStruct.OST_NoTradeQueueing, self.trader.ApiStruct.OST_PartTradedQueueing, self.trader.ApiStruct.OST_Unknown]:
-                if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}: 
-                    self.logger.info('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status))
-                    iorder.status = order.OrderStatus.Sent
-                    iorder.conditionals = {}
-                    #iorpder.position.re_calc()
-            elif sorder.OrderStatus in [self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing, self.trader.ApiStruct.OST_NoTradeNotQueueing]:
-                if iorder.status != order.OrderStatus.Cancelled:                     
-                    self.logger.info('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status))
-                    iorder.on_cancel()
+            if iorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
+                status = iorder.on_order(sorder.OrderSysID, sorder.LimitPrice, sorder.VolumeTraded)
+                if status:
                     self.trade_update(iorder)
+                elif sorder.OrderStatus in [self.trader.ApiStruct.OST_NoTradeQueueing, self.trader.ApiStruct.OST_PartTradedQueueing, self.trader.ApiStruct.OST_Unknown]:
+                    if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
+                        self.logger.info('order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status))
+                        iorder.status = order.OrderStatus.Sent
+                        iorder.conditionals = {}
+                        #iorpder.position.re_calc()
+                elif sorder.OrderStatus in [self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing, self.trader.ApiStruct.OST_NoTradeNotQueueing]:
+                    if iorder.status != order.OrderStatus.Cancelled:
+                        self.logger.info('order status for OrderSysID = %s, Inst=%s is set to %s, but should be cancelled' % (iorder.sys_id, iorder.instrument.name, iorder.status))
+                        iorder.on_cancel()
+                        self.trade_update(iorder)
         if isLast:
             for order_ref in self.ref2order:
                 if (order_ref not in self.ctp_orders):
