@@ -21,7 +21,7 @@ def load_tick_data(tday, folder = ''):
     for inst in all_insts:
         data_file = folder + inst + '.csv'
         if os.path.isfile(data_file):
-            stmt = "load data infile '{data_file}' replace into table fut_tick fields terminated by ','".format(data_file = data_file)
+            stmt = "load data local infile '{data_file}' replace into table fut_tick fields terminated by ','".format(data_file = data_file)
             cursor.execute( stmt )
             print inst
     cnx.close()

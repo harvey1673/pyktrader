@@ -160,24 +160,24 @@ class StratGui(object):
         stringvars = {}
         row_id = 0
         set_btn = ttk.Button(self.lblframe, text='Set', command=self.set_params)
-        set_btn.grid(row=row_id, column=1, sticky="ew")
+        set_btn.grid(row=row_id, column=3, sticky="ew")
         refresh_btn = ttk.Button(self.lblframe, text='Refresh', command=self.get_params)
-        refresh_btn.grid(row=row_id, column=2, sticky="ew")
+        refresh_btn.grid(row=row_id, column=4, sticky="ew")
         recalc_btn = ttk.Button(self.lblframe, text='Recalc', command=self.recalc)
-        recalc_btn.grid(row=row_id, column=3, sticky="ew")        
+        recalc_btn.grid(row=row_id, column=5, sticky="ew")
         row_id += 1
         for idx, field in enumerate(self.shared_fields):
-            lbl = ttk.Label(self.lblframe, text = field, anchor='w')
-            lbl.grid(row=row_id, column=idx, sticky="ew")
+            lbl = ttk.Label(self.lblframe, text = field, anchor='w', width = 8)
+            lbl.grid(row=row_id, column=idx+2, sticky="ew")
             if field in self.entry_fields:
-                ent = ttk.Entry(self.lblframe)
-                ent.grid(row=row_id+1, column=idx, sticky="ew")
+                ent = ttk.Entry(self.lblframe, width=4)
+                ent.grid(row=row_id+1, column=idx+2, sticky="ew")
                 ent.insert(0, "0")
                 entries[field] = ent
             elif field in self.status_fields:
                 v= get_type_var(self.field_types[field])
-                lab = ttk.Label(self.lblframe, textvariable = v, anchor='w')
-                lab.grid(row=row_id+1, column=idx, sticky="ew")
+                lab = ttk.Label(self.lblframe, textvariable = v, anchor='w', width = 8)
+                lab.grid(row=row_id+1, column=idx+2, sticky="ew")
                 v.set('0')
                 stringvars[field] = v                   
         row_id += 2
@@ -185,17 +185,17 @@ class StratGui(object):
         local_status_fields = [ f for f in self.status_fields if f not in self.shared_fields]
         fields = ['assets'] + local_entry_fields + local_status_fields
         for idx, field in enumerate(fields):
-            lbl = ttk.Label(self.lblframe, text = field, anchor='w')
+            lbl = ttk.Label(self.lblframe, text = field, anchor='w', width = 8)
             lbl.grid(row=row_id, column=idx, sticky="ew")
         row_id += 1
         for underlier in self.underliers:
             under_key = ','.join(underlier)
-            inst_lbl = ttk.Label(self.lblframe, text=under_key, anchor="w")
+            inst_lbl = ttk.Label(self.lblframe, text=under_key, anchor="w", width = 8)
             inst_lbl.grid(row=row_id, column=0, sticky="ew")
             col_id = 1
             entries[under_key] = {}
             for idx, field in enumerate(local_entry_fields):
-                ent = ttk.Entry(self.lblframe)
+                ent = ttk.Entry(self.lblframe, width=5)
                 ent.grid(row=row_id, column=col_id+idx, sticky="ew")
                 ent.insert(0, "0")
                 entries[under_key][field] = ent
@@ -203,7 +203,7 @@ class StratGui(object):
             stringvars[under_key] = {}            
             for idx, field in enumerate(local_status_fields):
                 v= get_type_var(self.field_types[field])
-                lab = ttk.Label(self.lblframe, textvariable = v, anchor='w')
+                lab = ttk.Label(self.lblframe, textvariable = v, anchor='w', width = 8)
                 lab.grid(row=row_id, column=col_id+idx, sticky="ew")
                 v.set('0')
                 stringvars[under_key][field] = v       
@@ -668,7 +668,7 @@ class Gui(tk.Tk):
             #row = tk.Frame(root)
             lab = ttk.Label(lbl_frame, text=field1+": ", anchor='w')
             lab.grid(column=0, row=row_idx, sticky="ew")
-            ent = tk.Entry(lbl_frame)
+            ent = ttk.Entry(lbl_frame, width=4)
             self.entries[field1] = ent
             ent.insert(0,"0")
             ent.grid(column=1, row=row_idx, sticky="ew")
@@ -712,7 +712,7 @@ class Gui(tk.Tk):
         field = 'QryInst'
         lab = ttk.Label(lbl_frame, text= field, anchor='w')
         lab.grid(column=0, row=row_idx, sticky="ew")
-        ent = tk.Entry(lbl_frame)
+        ent = ttk.Entry(lbl_frame, width=4)
         ent.grid(column=0, row=row_idx+1, sticky="ew")
         self.entries[field] = ent
         inst_fields = ['Price', 'PrevClose', 'Volume', 'OI', 'AskPrice', 'AskVol', 'BidPrice', 'BidVol', 'UpLimit', 'DownLimit']        

@@ -164,13 +164,14 @@ def run_sim(start_date, end_date, daily_close = False):
     commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,10,1)] * 12 + \
                 [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH','pp', 'IF']
+    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH','pp', 'IF', 'MA', 'TF','IH', 'IC']
     start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
                 [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
-                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
+                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)] + \
+                [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'RM', 'y', 'p', 'l', 'pp', 'rb', 'ru', 'TA', 'jd', 'SR', 'a', 'i', 'TF', 'j']
+    sim_list = ['y', 'p', 'm', 'RM', 'TA', 'jd', 'SR', 'a', 'i', 'TF', 'j', 'MA', 'OI', 'ru', 'rb', 'l', 'pp']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -189,7 +190,11 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.0,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.4, -1, 0), (0.6, -1, 0), (0.5, 0, 0.5), (0.7, 0, 0.5), (0.5, 1, 0), (0.7, 1, 0), (0.9, 1, 0), (0.3, 2, 0), (0.4, 2, 0)]
+    scenarios = [(0.5, -1, 0), (0.6, -1, 0), (0.7, -1, 0), (0.8, -1, 0), \
+                 (0.6, 0, 0.5),  (0.7, 0, 0.5),  (0.8, 0, 0.5),  (0.9, 0, 0.5), (1.0, 0, 0.5),\
+                 (0.7, 1, 0), (0.8, 1, 0), (0.9, 1, 0), (1.0, 1, 0), (1.1, 1, 0),\
+                 (0.3, 2, 0), (0.4, 2, 0), (0.5, 2, 0), (0.6, 2, 0),\
+                 (0.2, 4, 0), (0.3, 4, 0), (0.4, 4, 0), (0.5, 4, 0)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
@@ -198,10 +203,12 @@ def run_sim(start_date, end_date, daily_close = False):
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
-        elif asset in ['IF']:
-            config['rollrule'] = '-1b'
+        elif asset in ['IF', 'IH', 'IC']:
+            config['rollrule'] = '-2b'
         elif asset in ['au', 'ag']:
-            config['rollrule'] = '-25b'       
+            config['rollrule'] = '-25b'
+        elif asset in ['TF', 'T']:
+            config['rollrule'] = '-20b'
         dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config)
     return
 
