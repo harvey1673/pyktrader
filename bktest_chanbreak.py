@@ -138,7 +138,7 @@ def run_sim(start_date, end_date):
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
     #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
-    sim_list = [ 'IF']
+    sim_list = [ 'm', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'RM', 'cu']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -153,13 +153,13 @@ def run_sim(start_date, end_date):
               'scaler': (0.5, 2),
               'channel_func': [dh.DONCH_H, dh.DONCH_L],
               'file_prefix': file_prefix}        
-    freqs = [3]
-    windows = [20, 30, 60, 270]
+    freqs = [3, 5, ]
+    windows = [20, 40, 60, 120, 270]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['rollrule'] = '-50b' 
         config['nearby'] = 1 
-        config['start_min'] = 1505
+        config['start_min'] = 1600
         config['exit_min'] = 2055
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
@@ -168,7 +168,7 @@ def run_sim(start_date, end_date):
             config['start_min'] = 1520
             config['exit_min'] = 2112
             config['rollrule'] = '-1b'    
-    chanbreak( asset, start_date, end_date, freqs, windows, config)
+        chanbreak( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
     args = sys.argv[1:]

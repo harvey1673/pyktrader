@@ -171,7 +171,7 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['y', 'p', 'm', 'RM', 'TA', 'jd', 'SR', 'a', 'i', 'TF', 'j', 'MA', 'OI', 'ru', 'rb', 'l', 'pp']
+    sim_list = ['y', 'p', 'm', 'RM', 'TA', 'jd', 'SR', 'a', 'i', 'TF', 'ME', 'rb', 'l', 'pp']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -190,9 +190,9 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.0,
               'file_prefix': file_prefix}
     
-    scenarios = [(0.5, -1, 0), (0.6, -1, 0), (0.7, -1, 0), (0.8, -1, 0), \
-                 (0.6, 0, 0.5),  (0.7, 0, 0.5),  (0.8, 0, 0.5),  (0.9, 0, 0.5), (1.0, 0, 0.5),\
-                 (0.7, 1, 0), (0.8, 1, 0), (0.9, 1, 0), (1.0, 1, 0), (1.1, 1, 0),\
+    scenarios = [(0.4, -1, 0), (0.5, -1, 0), (0.6, -1, 0), (0.7, -1, 0), (0.8, -1, 0), \
+                 (0.5, 0, 0.5), (0.6, 0, 0.5),  (0.7, 0, 0.5),  (0.8, 0, 0.5),  (0.9, 0, 0.5), (1.0, 0, 0.5), (1.1, 0, 0.5), (1.2, 0, 0.5), \
+                 (0.6, 1, 0), (0.7, 1, 0), (0.8, 1, 0), (0.9, 1, 0), (1.0, 1, 0), (1.1, 1, 0), (1.2, 1, 0),\
                  (0.3, 2, 0), (0.4, 2, 0), (0.5, 2, 0), (0.6, 2, 0),\
                  (0.2, 4, 0), (0.3, 4, 0), (0.4, 4, 0), (0.5, 4, 0)]
     for asset, sdate in zip(sim_list, sdate_list):

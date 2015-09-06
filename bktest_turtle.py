@@ -15,7 +15,7 @@ margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
                 'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
                 'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'OI': 0.05,
-                'v': 0.05, 'IF': 0.1, 'FG':0.06, 'IF': 0.1}
+                'v': 0.05, 'IF': 0.1, 'IF': 0.1, 'FG':0.06, 'IH': 0.1}
 
 def turtle( asset, start_date, end_date, systems, config):
     rollrule = config['rollrule']
@@ -27,7 +27,9 @@ def turtle( asset, start_date, end_date, systems, config):
     #ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
     for ix, sys in enumerate(systems):
-        config['signals'] = sys
+        config['signals'] = sys[:3]
+        config['max_loss'] = sys[3]
+        config['max_pos'] = sys[4]
         (res, closed_trades, ts) = turtle_sim( ddf, mdf, config)
         output[ix] = res
         print 'saving results for scen = %s' % str(ix)
@@ -163,7 +165,7 @@ def run_sim(start_date, end_date, trail_loss = False):
     file_prefix = test_folder + 'Turtle' + postfix  
     config = {'capital': 10000,
               'offset': 0,
-              'trans_cost': 0.0, 
+              'trans_cost': 0.0,
               'max_loss': 2,
               'max_pos': 4,
               'unit': 1,
@@ -181,14 +183,16 @@ def run_sim(start_date, end_date, trail_loss = False):
                 [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
     commod_list = commod_list1+commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'RM', 'p', 'y']
+    sim_list = ['c', 'rb', 'm', 'RM', 'y', 'p', 'a', 'jd', 'l', 'ru', 'SR', 'TA', 'CF']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    systems = [(20, 10, 2), (20, 5, 2), (15, 5, 2), (10, 5, 2)]
+    systems = [(20, 10, 1, 2, 4), (20, 5, 1, 2, 4), (15, 5, 1, 2, 4), (10, 5, 1, 2, 4), \
+               (20, 10, 1, 2, 3), (20, 5, 1, 2, 3), (15, 5, 1, 2, 3), (10, 5, 1, 2, 3), \
+               (20, 10, 1, 2, 2), (20, 5, 1, 2, 2), (15, 5, 1, 2, 2), (10, 5, 1, 2, 2) ]
     for asset, sdate in zip(sim_list, sdate_list):
-        config['marginrate'] = ( margin_dict[asset], margin_dict[asset]) 
+        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['nearby'] = 1
         config['rollrule'] = '-50b'
         if asset in ['cu', 'al', 'zn']:
