@@ -234,6 +234,7 @@ class Order(object):
         self.filled_volume = 0  #实际成交手数
         self.filled_price  = 0
         self.cancelled_volume = 0
+        self.filled_orders = []
         self.conditionals = conditionals
         if len(self.conditionals) == 0:
             self.status = OrderStatus.Ready
@@ -241,30 +242,37 @@ class Order(object):
             self.status = OrderStatus.Waiting
         #self.close_lock = False #平仓锁定，即已经发出平仓信号
 
-    def on_trade(self, price, volume):
+    def on_trade(self, price, volume, trade_id):
         ''' 返回是否完全成交
         '''
         if self.status == OrderStatus.Done:
             return True
-        self.filled_volume = volume
-        self.filled_price = price
-        logging.debug(u'成交纪录:price=%s,volume=%s,filled_vol=%s, is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
+        if trade_id in [o.trade_id for o in self.filled_orders]:
+            return False
+        self.filled_orders.append(BaseObject(price = price, volume = volume, trade_id = trade_id))
+        self.filled_volume = sum([o.volume for o in self.filled_orders])
+        self.filled_price = sum([o.volume*o.price for o in self.filled_orders])/self.filled_volume
         if self.filled_volume > self.volume:
             self.filled_volume = self.volume
+            self.status = OrderStatus.Done
             logging.warning(u'a new trade confirm exceeds the order volume price=%s, filled_vol=%s, order_vol =%s' % \
                                 (price, volume, self.volume))
-        self.status = OrderStatus.Done
+        elif (self.filled_volume == self.volume) and (self.volume>0):
+            self.status = OrderStatus.Done
+        logging.debug(u'成交纪录:price=%s,volume=%s,filled_vol=%s, is_closed=%s' % (price,volume,self.filled_volume,self.is_closed()))
         self.position.re_calc()
         return self.filled_volume == self.volume
     
-    def on_order(self, sys_id, price, volume):
+    def on_order(self, sys_id, price = 0, volume = 0):
         self.sys_id = sys_id
-        self.filled_price = price   
-        self.filled_volume = volume
-        if self.filled_volume == self.volume:
-            self.status = OrderStatus.Done
-            self.position.re_calc()
-        return self.filled_volume == self.volume
+        if volume > 0:
+            self.filled_price = price
+            self.filled_volume = volume
+            if self.filled_volume == self.volume:
+                self.status = OrderStatus.Done
+                self.position.re_calc()
+                return True
+        return False
 
     def on_cancel(self):    #已经撤单
         if self.status != OrderStatus.Cancelled:

@@ -1489,7 +1489,7 @@ class Agent(object):
     def send_order(self,iorder):
         ''' 发出下单指令
         '''
-        self.logger.info(u'A_CC:开仓平仓命令: order_ref = %s' % iorder.order_ref)
+        self.logger.debug(u'A_CC:开仓平仓命令: order_ref = %s' % iorder.order_ref)
         inst = iorder.instrument
         # 上期所不支持市价单
         if (iorder.price_type == OPT_MARKET_ORDER):
@@ -1527,7 +1527,7 @@ class Agent(object):
         order_ref = int(ptrade.OrderRef)
         if order_ref in self.ref2order:
             myorder = self.ref2order[order_ref]
-            myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume)
+            myorder.on_trade(price = ptrade.Price, volume=ptrade.Volume, trade_id = ptrade.TradeID)
             self.trade_update(myorder)
             if myorder.action_type == OF_OPEN:#开仓, 也可用pTrade.OffsetFlag判断
                 self.logger.debug(u'A_RT31,开仓回报,price=%s,trade_id=%s' % (ptrade.Price, ptrade.TradeID))
@@ -1547,18 +1547,16 @@ class Agent(object):
         order_ref = int(porder.OrderRef)
         if (order_ref in self.ref2order):
             myorder = self.ref2order[order_ref]
-            if porder.VolumeTraded > porder.VolumeTotalOriginal:
-                return
-            status = myorder.on_order(porder.OrderSysID, porder.LimitPrice, porder.VolumeTraded)
+            # only update sysID,
+            status = myorder.on_order(sys_id = porder.OrderSysID, price = porder.LimitPrice, volume = 0)
             if status:
                 self.trade_update(myorder)
-            if porder.OrderStatus in [ self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
-                self.logger.debug('cancel the rest order in order_ref = %s' % order_ref )
+            elif porder.OrderStatus in [ self.trader.ApiStruct.OST_Canceled, self.trader.ApiStruct.OST_PartTradedNotQueueing]:   #完整撤单或部成部撤
+                self.logger.info('cancel the rest order in order_ref = %s' % order_ref )
                 myorder.on_cancel()                
                 self.trade_update(myorder) 
         else:
-            self.logger.debug('receive order update from other agents, OrderSysID=%s' % porder.OrderSysID)
-            print porder
+            self.logger.warning('receive order update from other agents, Order=%s' % repr(porder))
 
     def trade_update(self, myorder):
         trade_ref = myorder.trade_ref
@@ -1675,7 +1673,7 @@ class Agent(object):
             iorder = self.ref2order[order_ref]
             self.ctp_orders.append(order_ref)
             if iorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
-                status = iorder.on_order(sorder.OrderSysID, sorder.LimitPrice, sorder.VolumeTraded)
+                status = iorder.on_order(sys_id = sorder.OrderSysID, price = sorder.LimitPrice, volume = sorder.VolumeTraded)
                 if status:
                     self.trade_update(iorder)
                 elif sorder.OrderStatus in [self.trader.ApiStruct.OST_NoTradeQueueing, self.trader.ApiStruct.OST_PartTradedQueueing, self.trader.ApiStruct.OST_Unknown]:
@@ -1709,9 +1707,9 @@ class Agent(object):
         if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
             if (iorder.status not in [order.OrderStatus.Done, order.OrderStatus.Cancelled]) or (iorder.filled_volume != strade.Volume):
-                status = iorder.on_order(strade.OrderSysID, strade.Price, strade.Volume)
-                if status == False:
-                    iorder.on_cancel()
+                status = iorder.on_trade(price = strade.Price, volume=strade.Volume, trade_id = strade.TradeID)
+                #if status == False:
+                #    iorder.on_cancel()
                 self.trade_update(iorder)       
 
     def exit(self):
@@ -1732,7 +1730,7 @@ class SaveAgent(Agent):
     def init_init(self):
         self.save_flag = True 
         self.live_trading = False
-        self.prepare_data_env(mid_day = False)
+        self.prepare_data_env(mid_day = True)
 
     def resume(self):
         self.eventEngine.start()
