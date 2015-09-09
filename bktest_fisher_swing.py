@@ -12,14 +12,16 @@ def fisher_swing( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
     file_prefix = config['file_prefix'] + '_' + asset + '_'
-    df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)    
+    df = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+    df = backtest.cleanup_mindata(df, asset)
     output = {}
     for ix, freq in enumerate(freqs):
         xdf = dh.conv_ohlc_freq(df, freq)
         for iy, win in enumerate(windows):
             idx = ix*10+iy
             config['win'] = win
-            (res, closed_trades, ts) = fisher_swing_sim( xdf, config)
+            config['freq'] = freq
+            (res, closed_trades, ts) = fisher_swing_sim( df, xdf, config)
             output[idx] = res
             print 'saving results for scen = %s' % str(idx)
             all_trades = {}
@@ -35,19 +37,19 @@ def fisher_swing( asset, start_date, end_date, freqs, windows, config):
     res.to_csv(fname)
     return 
 
-def fisher_swing_sim( df, config):
+def fisher_swing_sim( df, xdf, config):
     marginrate = config['marginrate']
     offset = config['offset']
     win = config['win']
     start_equity = config['capital']
     tcost = config['trans_cost']
     unit = config['unit']
-    fisher = dh.FISHER(df, win[0]).shift(1)
-    df['FISHER_I'] = fisher['FISHER_I']
-    df = df.join(dh.BBANDS_STOP(df, win[1], 1.0))
-    ha_df = dh.HEIKEN_ASHI(df, win[2])
-    df['HAopen'] = ha_df['HAopen']
-    df['HAclose'] = ha_df['HAclose']
+    fisher = dh.FISHER(xdf, win[0]).shift(1)
+    xdf['FISHER_I'] = fisher['FISHER_I']
+    xdf = xdf.join(dh.BBANDS_STOP(xdf, win[1], 1.0).shift(1))
+    ha_df = dh.HEIKEN_ASHI(xdf, win[2]).shift(1)
+    xdf['HAopen'] = ha_df['HAopen']
+    xdf['HAclose'] = ha_df['HAclose']
     ll = df.shape[0]
     df['pos'] = pd.Series([0]*ll, index = df.index)
     df['cost'] = pd.Series([0]*ll, index = df.index)
