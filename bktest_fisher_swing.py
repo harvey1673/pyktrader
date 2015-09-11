@@ -163,3 +163,4 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d)
     pass
+	
