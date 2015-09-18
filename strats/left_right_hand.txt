@@ -1,0 +1,356 @@
+Params
+	Bool bInitStatus(false);//³õÊ¼»¯±êÖ¾£¬ÐÞ¸Ä³õÊ¼²ÖÎ»Ê±ÐèÉèÖÃÎªTrue
+	Numeric InitMyRealMp(0);//³õÊ¼µ±Ç°Ê±¶Î²ÖÎ»£¬ÕýÊý±íÊ¾¿Õµ¥£¬¸ºÊý±íÊ¾¶àµ¥
+	Numeric InitPreMyRealMp(0);//³õÊ¼ÉÏÒ»Ê±¶Î²ÖÎ»£¬ÕýÊý±íÊ¾¿Õµ¥£¬¸ºÊý±íÊ¾¶àµ¥
+	Numeric FirstGrid(5);//µÚÒ»¸ñµÄ¼ä¾à£¬µãÊý
+	Numeric TotalGrids(10);//×ÜÍø¸ñÊý£¬¼´×î´ó³Ö²ÖÊý
+	Numeric GridInterval(5);//Íø¸ñ¼ä¾à£¬µãÊý
+	Numeric WinGrid(5);//Ó¯ÀûµãÊý
+	Numeric EveryLots(1);//Ã¿´Î¿ª²ÖÊÖÊý
+	Numeric OffSet(1);//Î¯ÍÐ¼ÛÆ«²î£¬Ä¬ÈÏÂòÂô¼ÛÆ«²î1¸ö»¬µã
+	Numeric ExitOnCloseMins(14.55);//ÊÕÅÌÆ½²ÖÊ±¼ä
+	Numeric StyleChangeGrid(3);//Ä¬ÈÏÕðµ´ÐÐÇé£¨º¬Èý¸ñ£©ÎªÍø¸ñ½»Ò×£¬ËÄ¸ñ¼°ÒÔÉÏÎª·´Íø¸ñ½»Ò×
+
+Vars
+	NumericSeries MidLine;
+	Numeric MinPoint;
+	Numeric Askline;
+	Numeric BidLine;
+	Numeric RealMidLine;
+	Numeric MyRealMp(0);
+	Numeric TmpGridIndex;
+	Numeric qcbz;//1¿ÉÒÔÇå²Ö£¬0²»ÔÙÇå²Ö
+	Bool tradetime;
+	Numeric TmpLots;
+	Numeric PreRealMidLine;
+	Numeric PreMyRealMp;
+	Numeric myBuyPosition;
+	Numeric mySellPosition;
+	
+Begin
+	MyRealMp=GetGlobalVar(0);
+	qcbz=GetGlobalVar(1);
+	PreRealMidLine=GetGlobalVar(2);
+	PreMyRealMp=GetGlobalVar(3);
+	
+	If(BarStatus==0 And (MyRealMp==InvalidNumeric||bInitStatus))
+	{
+		MyRealMp=InitMyRealMp;
+		PreMyRealMp=InitPreMyRealMp;
+	}
+	
+	If(Time==0.090000 or Time==0.091500 or Time==0.093000 or Time==0.094500
+	or Time==0.100000 or Time==0.103000 or Time==0.104500 or Time==0.110000
+	or Time==0.111500 or Time==0.133000 or Time==0.134500 or Time==0.140000
+	or Time==0.142000 or Time==0.144000)
+	{
+		MidLine=Open;
+		PreRealMidLine=MidLine[1];
+	}Else{
+		MidLine=MidLine[1];
+	}
+	
+	RealMidLine=MidLine;
+	MinPoint=MinMove*PriceScale;
+	Askline=Q_AskPrice;
+	BidLine=Q_BidPrice;
+	myBuyPosition=A_BuyPosition;
+	mySellPosition=A_SellPosition;
+	
+	If(Left(ExchangeName,4)=="ÉÏº£")
+	{
+		tradetime=(Q_LastTime>=0.090000 And CurrentTime>0.090000 And CurrentTime<0.101500)
+		or (CurrentTime>0.103000 And CurrentTime<0.113000)
+		or (CurrentTime>0.133000 And CurrentTime<0.141000)
+		or (CurrentTime>0.142000 and CurrentTime<0.150000);
+	}Else{
+		tradetime=(Q_LastTime>=0.090000 And CurrentTime>0.090000 And CurrentTime<0.101500)
+		or (CurrentTime>0.103000 And CurrentTime<0.113000)
+		or (CurrentTime>0.133000 And CurrentTime<0.150000);
+	}
+	
+	
+	If(BarStatus==2 && A_AccountID<>"" && tradetime)
+	{
+		If(Q_AskPrice<=0||Q_BidPrice<=0) Return;
+		If(Q_BidPrice==Q_UpperLimit||Q_AskPrice==Q_LowerLimit) Return;
+		If(High==Low) Return;
+		//¶¨Ê±Çå²Ö£¬ÖØÖÃÖÐÏßÖµ
+		If(Time==0.091500 or Time==0.093000 or Time==0.094500
+		or Time==0.100000 or Time==0.103000 or Time==0.104500
+		or Time==0.110000 or Time==0.111500 or Time==0.133000
+		or Time==0.134500 or Time==0.140000 or Time==0.142000
+		or Time==0.144000)
+		{
+			If(qcbz==1)
+			{
+				If(mySellPosition>0 And MyRealMp>0 And A_SellProfitLoss>0)
+				{
+					TmpLots=mySellPosition;
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					If(PreMyRealMp>0) MyRealMp=MyRealMp+PreMyRealMp-IntPart(TmpLots/EveryLots);
+					Else If(PreMyRealMp<=0 And MyRealMp>0) MyRealMp=MyRealMp-IntPart(TmpLots/EveryLots);
+					mySellPosition=mySellPosition-TmpLots;
+				}
+				If(myBuyPosition>0 And MyRealMp<0 And A_BuyProfitLoss>0)
+				{
+					TmpLots=myBuyPosition;
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					If(PreMyRealMp<0) MyRealMp=MyRealMp+PreMyRealMp+IntPart(TmpLots/EveryLots);
+					Else If(PreMyRealMp>=0 And MyRealMp<0) MyRealMp=MyRealMp+IntPart(TmpLots/EveryLots);
+					myBuyPosition=myBuyPosition-TmpLots;
+				}
+				
+				If(mySellPosition>0 And PreMyRealMp>0)
+				{
+					TmpLots=Min(mySellPosition,PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					MyRealMp=MyRealMp+PreMyRealMp-IntPart(TmpLots/EveryLots);
+					mySellPosition=mySellPosition-TmpLots;
+				}
+				
+				If(mySellPosition>0 And PreMyRealMp<0)
+				{
+					TmpLots=Min(myBuyPosition,-1*PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					MyRealMp=MyRealMp+PreMyRealMp+IntPart(TmpLots/EveryLots);
+					mySellPosition=mySellPosition-TmpLots;
+				}
+				
+				PreMyRealMp=MyRealMp;
+				MyRealMp=0;
+				qcbz=0;//Çå²ÖºóÉèÖÃÇå²Ö±êÖ¾Îª0£¬²»ÔÙÖØ¸´Çå²Ö
+			}
+		}Else qcbz=1;//ÆäÓàÊ±¼ä£¬»Ö¸´ÔÊÐíÇå²Ö
+		
+		If(CurrentTime<ExitOnCloseMins/100 And qcbz<>0)
+		{
+			//ÉÏÒ»Ê±¶ÎÁô²ÖµÄ´¦Àí---Start---
+			
+			//Õðµ´ÓëÇ÷ÊÆ½»»»£¬Çå²Ö---Start---
+			If(mySellPosition>0 And PreMyRealMp>0)
+			{
+				TmpGridIndex=Abs(BidLine-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And Askline>PreRealMidLine+FirstGrid*MinPoint)
+				//ÖÐÏßÉÏ·½£¬Õðµ´±äÇ÷ÊÆ£¬ÇåÍø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(mySellPosition,PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp-IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(PreRealMidLine-Askline)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid And Askline<PreRealMidLine-FirstGrid*MinPoint)
+				//ÖÐÏßÏÂ·½£¬Ç÷ÊÆ±äÕðµ´£¬Çå·´Íø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(mySellPosition,PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp-IntPart(TmpLots/EveryLots);
+				}
+			}Else If(myBuyPosition>0 And PreMyRealMp<0)
+			{
+				TmpGridIndex=Abs(BidLine-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid And Bidline>PreRealMidLine+FirstGrid*MinPoint)
+				//ÖÐÏßÉÏ·½£¬Ç÷ÊÆ±äÕðµ´£¬Çå·´Íø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(myBuyPosition,-1*PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp+IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(PreRealMidLine-Askline)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And Bidline<PreRealMidLine-FirstGrid*MinPoint)
+				//ÖÐÏßÏÂ·½£¬Õðµ´±äÇ÷ÊÆ£¬ÇåÍø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(myBuyPosition,-1*PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp+IntPart(TmpLots/EveryLots);
+				}
+			}
+			//Õðµ´ÓëÇ÷ÊÆ½»»»£¬Çå²Ö---End---
+			
+			//Õðµ´ÐÐÇéµÄÍø¸ñ£¬Ö¹Ó¯---Start---
+			If(PreMyRealMp>0 && Askline>PreRealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(AskLine-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=PreMyRealMp-1 And TmpGridIndex<=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					
+				}
+			}Else If(PreMyRealMp<0 && Bidline<PreRealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(PreRealMidLine-Bidline)/(GridInterval*MinPoint);
+				If(-1*TmpGridIndex>=PreMyRealMp+1 And TmpGridIndex<=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp+1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}
+			//Õðµ´ÐÐÇéµÄÍø¸ñ£¬Ö¹Ó¯---End---
+			
+			//Ç÷ÊÆÐÐÇéµÄ·´Íø¸ñ£¬Ö¹Ëð---Start---
+			If(PreMyRealMp<0 And Bidline>PreRealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(Bidline-MinPoint-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=-1*PreMyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}Else If(PreMyRealMp>0 And AskLine<PreRealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(PreRealMidLine-AskLine+MinPoint)/(GridInterval);
+				If(TmpGridIndex<=PreMyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}
+			//Ç÷ÊÆÐÐÇéµÄ·´Íø¸ñ£¬Ö¹Ëð---End---
+			//ÉÏÒ»Ê±¶ÎÁô²ÖµÄ´¦Àí---End---
+			
+			//Õðµ´ÓëÇ÷ÊÆ½»»»£¬Çå²Ö---Start---
+			If(mySellPosition>0 And MyRealMp>0)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And AskLine>RealMidLine+FirstGrid*MinPoint)
+				//ÖÐÏßÉÏ·½£¬Õðµ´±äÇ÷ÊÆ£¬ÇåÍø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(mySellPosition,MyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					MyRealMp=MyRealMp-IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid And AskLine<RealMidLine-FirstGrid*MinPoint)
+				//ÖÐÏßÏÂ·½£¬Ç÷ÊÆ±äÕðµ´£¬Çå·´Íø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(mySellPosition,MyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					MyRealMp=MyRealMp-IntPart(TmpLots/EveryLots);
+				}
+			}Else If(myBuyPosition>0 And MyRealMp<0)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid+1 And Bidline>RealMidLine+FirstGrid*MinPoint)
+				//ÖÐÏßÉÏ·½£¬Ç÷ÊÆ±äÕðµ´£¬Çå·´Íø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(myBuyPosition,-1*MyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					MyRealMp=MyRealMp+IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And BidLine<RealMidLine-FirstGrid*MinPoint)
+				//ÖÐÏßÏÂ·½£¬Õðµ´±äÇ÷ÊÆ£¬ÇåÍø¸ñ¿Õµ¥
+				{
+					TmpLots=Min(myBuyPosition,-1*MyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					MyRealMp=MyRealMp+IntPart(TmpLots/EveryLots);
+				}
+			}
+			//Õðµ´ÓëÇ÷ÊÆ½»»»£¬Çå²Ö---End---
+			
+			//Õðµ´ÐÐÇéµÄÍø¸ñ£¬Ö¹Ó¯---Start---
+			If(MyRealMp>0 && AskLine>RealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(AskLine-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=MyRealMp-1 And TmpGridIndex<=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}Else If(MyRealMp<0 && Bidline<RealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(RealMidLine-Bidline)/(GridInterval*MinPoint);
+				If(-1*TmpGridIndex>=MyRealMp+1 And TmpGridIndex<= StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}
+			//Õðµ´ÐÐÇéµÄÍø¸ñ£¬Ö¹Ó¯---End---
+			
+			//Ç÷ÊÆÐÐÇéµÄ·´Íø¸ñ£¬Ö¹Ëð---Start---
+			If(MyRealMp<0 And Bidline>RealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(Bidline-MinPoint-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=-1*MyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}Else If(MyRealMp>0 And AskLine<RealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(RealMidLine-AskLine+MinPoint)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=MyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}
+			//Ç÷ÊÆÐÐÇéµÄ·´Íø¸ñ£¬Ö¹Ëð---End---
+			
+			//Õðµ´ÐÐÇéµÄÍø¸ñ£¬¿ª²Ö---Start---
+			If(MyRealMp>=0 && Bidline>=RealMidLine+FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=MyRealMp+1 && MyRealMp<TotalGrids And TmpGridIndex<=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Entry,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}Else If(MyRealMp<=0 && AskLine<=RealMidLine-FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=-1*MyRealMp+1 && -1*MyRealMp<TotalGrids And TmpLots<=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Entry,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}
+			//Õðµ´ÐÐÇéµÄÍø¸ñ£¬¿ª²Ö---End---
+			
+			//Ç÷ÊÆÐÐÇéµÄ·´Íø¸ñ£¬¿ª²Ö---Start---
+			If(MyRealMp<=0 && Bidline>RealMidLine+FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=-1*MyRealMp+1 && -1*MyRealMp<TotalGrids And TmpGridIndex>=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Entry,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}Else If(MyRealMp>=0 && AskLine<RealMidLine-FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=MyRealMp+1 && MyRealMp<TotalGrids And TmpLots>=StyleChangeGrid+1)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Entry,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}
+			//Ç÷ÊÆÐÐÇéµÄ·´Íø¸ñ£¬¿ª²Ö---End---
+			
+		}Else If(CurrentTime>ExitOnCloseMins/100)
+		{
+			If(mySellPosition>0)
+			{
+				A_SendOrder(Enum_Buy,Enum_Exit,mySellPosition,Q_AskPrice+OffSet*MinPoint);
+			}Else If(myBuyPosition>0)
+			{
+				A_SendOrder(Enum_Sell,Enum_Exit,myBuyPosition,Q_BidPrice-OffSet*MinPoint);
+			}
+			MyRealMp=0;
+			PreMyRealMp=0;
+		}
+	} 
+		
+	SetGlobalVar(0,MyRealMp);
+	SetGlobalVar(1,qcbz);
+	SetGlobalVar(2,PreRealMidLine);
+	SetGlobalVar(3,PreMyRealMp);
+	Commentary("±¾Ê±¶ÎÖÐÏß="+Text(RealMidLine));
+	Commentary("ÉÏÊ±¶ÎÖÐÏß="+Text(PreRealMidLine));
+	Commentary("±¾Ê±¶Î²ÖÎ»="+Text(MyRealMp*EveryLots));
+	Commentary("ÉÏÊ±¶Î²ÖÎ»="+Text(PreMyRealMp*EveryLots));
+	Commentary("µ±Ç°Ê±¼ä="+TimeToString(CurrentTime));
+	Commentary("Çå²Ö±êÖ¾="+Text(qcbz));
+End
