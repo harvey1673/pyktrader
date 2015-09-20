@@ -183,14 +183,17 @@ def run_sim(start_date, end_date, trail_loss = False):
                 [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
     commod_list = commod_list1+commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['c', 'rb', 'm', 'RM', 'y', 'p', 'a', 'jd', 'l', 'ru', 'SR', 'TA', 'CF']
+    sim_list = ['cu', 'al', 'zn', 'IF', 'au', 'ag']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     systems = [(20, 10, 1, 2, 4), (20, 5, 1, 2, 4), (15, 5, 1, 2, 4), (10, 5, 1, 2, 4), \
                (20, 10, 1, 2, 3), (20, 5, 1, 2, 3), (15, 5, 1, 2, 3), (10, 5, 1, 2, 3), \
-               (20, 10, 1, 2, 2), (20, 5, 1, 2, 2), (15, 5, 1, 2, 2), (10, 5, 1, 2, 2) ]
+               (20, 10, 1, 2, 2), (20, 5, 1, 2, 2), (15, 5, 1, 2, 2), (10, 5, 1, 2, 2), \
+               (20, 10, 1, 2, 1), (20, 5, 1, 2, 1), (15, 5, 1, 2, 1), (10, 5, 1, 2, 1), \
+               (20, 10, 1, 1, 2), (20, 5, 1, 1, 2), (15, 5, 1, 1, 2), (10, 5, 1, 1, 2), \
+               (20, 10, 1, 1, 1), (20, 5, 1, 1, 1), (15, 5, 1, 1, 1), (10, 5, 1, 1, 1) ]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['nearby'] = 1

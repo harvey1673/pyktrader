@@ -5,11 +5,11 @@ import mysql.connector
 import misc
 import os
 
-def save_tick_data(tday, folder = ''):
+def save_tick_data(tday, folder = '', tick_id = 300000):
     all_insts = data_saver.filter_main_cont(tday)
     cnx = mysql.connector.connect(**misc.mysqlaccess.dbconfig)
     for inst in all_insts:
-        stmt = "select * from fut_tick where instID='{prod}' and date>='{cdate}'".format(prod=inst, cdate=tday.strftime('%Y-%m-%d'))
+        stmt = "select * from fut_tick where instID='{prod}' and date='{cdate}' and tick_id>='{tick}'".format(prod=inst, cdate=tday.strftime('%Y-%m-%d'), tick = tick_id)
         df = pd.io.sql.read_sql(stmt, cnx)
         df.to_csv(folder + inst + '.csv', header=False, index=False)
     return

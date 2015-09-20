@@ -5,14 +5,14 @@ from strategy import *
 import data_handler
  
 class TurtleTrader(Strategy):
-    def __init__(self, name, underliers,  volumes, trade_unit = [], agent = None, email_notify = None, datafreq = 'd', freq = 1, windows = [4, 8]):
+    def __init__(self, name, underliers,  volumes, trade_unit = [], agent = None, email_notify = None, datafreq = 'd', freq = 1, windows = [4, 8], max_pos = [4], trail_loss = [2.0]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.data_func = [ 
-                (datafreq, BaseObject(name = 'ATR', sfunc=fcustom(data_handler.ATR, n=windows[1]), rfunc=fcustom(data_handler.atr, n=windows[1]))), \
-                (datafreq, BaseObject(name = 'DONCH_L10', sfunc=fcustom(data_handler.DONCH_L, n=windows[0]), rfunc=fcustom(data_handler.donch_l, n=windows[0]))),\
-                (datafreq, BaseObject(name = 'DONCH_H10', sfunc=fcustom(data_handler.DONCH_H, n=windows[0]), rfunc=fcustom(data_handler.donch_h, n=windows[0]))),\
-                (datafreq, BaseObject(name = 'DONCH_L20', sfunc=fcustom(data_handler.DONCH_L, n=windows[1]), rfunc=fcustom(data_handler.donch_l, n=windows[1]))),\
-                (datafreq, BaseObject(name = 'DONCH_H20', sfunc=fcustom(data_handler.DONCH_H, n=windows[1]), rfunc=fcustom(data_handler.donch_h, n=windows[1]))),\
+                (datafreq, BaseObject(name = 'ATR_' + str(windows[1]), sfunc=fcustom(data_handler.ATR, n=windows[1]), rfunc=fcustom(data_handler.atr, n=windows[1]))), \
+                (datafreq, BaseObject(name = 'DONCH_L' + str(windows[0]), sfunc=fcustom(data_handler.DONCH_L, n=windows[0]), rfunc=fcustom(data_handler.donch_l, n=windows[0]))),\
+                (datafreq, BaseObject(name = 'DONCH_H' + str(windows[0]), sfunc=fcustom(data_handler.DONCH_H, n=windows[0]), rfunc=fcustom(data_handler.donch_h, n=windows[0]))),\
+                (datafreq, BaseObject(name = 'DONCH_L' + str(windows[1]), sfunc=fcustom(data_handler.DONCH_L, n=windows[1]), rfunc=fcustom(data_handler.donch_l, n=windows[1]))),\
+                (datafreq, BaseObject(name = 'DONCH_H' + str(windows[1]), sfunc=fcustom(data_handler.DONCH_H, n=windows[1]), rfunc=fcustom(data_handler.donch_h, n=windows[1]))),\
                 #(freq, BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=windows[2]), rfunc=fcustom(data_handler.donch_l, n=windows[2]))),\
                 #(freq, BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=windows[2]), rfunc=fcustom(data_handler.donch_h, n=windows[2]))),\
                 ]    
@@ -22,9 +22,16 @@ class TurtleTrader(Strategy):
         self.exit_high  = [0.0] * len(underliers)
         self.exit_low   = [0.0] * len(underliers)
         self.tick_base  = [0.0] * len(underliers)
-        self.trail_loss   = [2.0] * len(underliers)
+        if len(trail_loss) > 1:
+            self.trail_loss = trail_loss
+        elif len(trail_loss) == 1:
+            self.trail_loss = trail_loss * len(underliers)
         self.channels = windows
         self.freq = freq
+        if len(max_pos) > 1:
+            self.max_pos = max_pos
+        elif len(max_pos) == 1:
+            self.max_pos = max_pos * len(underliers)
     
     def initialize(self):
         self.load_state()
@@ -106,7 +113,7 @@ class TurtleTrader(Strategy):
             if exit_pos:
                 self.save_state()
                 return
-            if  units < 4 and (self.curr_prices[idx] - self.positions[idx][-1].entry_price)*buysell >= self.curr_atr[idx]/2.0:
+            if  units < self.max_pos[idx] and (self.curr_prices[idx] - self.positions[idx][-1].entry_price)*buysell >= self.curr_atr[idx]*self.trail_loss[idx]/self.max_pos[idx]:
                 last_entry = self.positions[idx][-1].entry_price
                 for pos in self.positions[idx]:
                     pos.entry_target = self.curr_prices[idx]                
