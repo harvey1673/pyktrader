@@ -44,8 +44,8 @@ def fisher_swing_sim( df, xdf, config):
     start_equity = config['capital']
     tcost = config['trans_cost']
     unit = config['unit']
-    fisher = dh.FISHER(xdf, win[0]).shift(1)
-    xdf['FISHER_I'] = fisher['FISHER_I']
+    fisher = dh.FISHER(xdf, win[0])
+    xdf['FISHER_I'] = fisher['FISHER_I'].shift(1)
     xdf = xdf.join(dh.BBANDS_STOP(xdf, win[1], 1.0).shift(1))
     ha_df = dh.HEIKEN_ASHI(xdf, win[2]).shift(1)
     xdf['HAopen'] = ha_df['HAopen']
