@@ -47,10 +47,11 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     return 
 
 def dual_thrust_sim( mdf, config):
-	ll = mdf.shape[0]
-	mdf['min_idx'] = pd.Series(1, index = mdf.index)
-	mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
-	
+    ll = mdf.shape[0]
+    mdf['min_idx'] = pd.Series(1, index = mdf.index)
+    mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
+    g = mdf.groupby([mdf['date_idx'], mdf['min_idx']])
+    ddf = g.agg(ohlcsum)
     close_daily = config['close_daily']
     marginrate = config['marginrate']
     offset = config['offset']
