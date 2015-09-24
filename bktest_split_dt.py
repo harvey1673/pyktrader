@@ -1,21 +1,17 @@
 import sys
-import misc
-import agent
-import data_handler as dh
+#import misc
+#import agent
+#import data_handler as dh
 import pandas as pd
 import numpy as np
-import strategy as strat
+#import strategy as strat
 import datetime
-import backtest
+#import backtest
 
 def ohlcsum(df):
     df = df.sort()
-    return {
-       'open': df['open'][0],
-       'high': df['high'].max(),
-       'low': df['low'].min(),
-       'close': df['close'][-1],
-       'volume': df['volume'].sum() }
+    return pd.Series([df.index[0], df['open'][0], df['high'].max(), df['low'].min(), df['close'][-1], df['volume'].sum()],
+				  index = ['datetime', 'open','high','low','close','volume'])
 	  
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
@@ -47,11 +43,6 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     return 
 
 def dual_thrust_sim( mdf, config):
-    ll = mdf.shape[0]
-    mdf['min_idx'] = pd.Series(1, index = mdf.index)
-    mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
-    g = mdf.groupby([mdf['date_idx'], mdf['min_idx']])
-    ddf = g.agg(ohlcsum)
     close_daily = config['close_daily']
     marginrate = config['marginrate']
     offset = config['offset']
@@ -65,23 +56,32 @@ def dual_thrust_sim( mdf, config):
     SL = config['stoploss']
     min_rng = config['min_range']
     ma_fast = config['MA_fast']
+    ll = mdf.shape[0]
+    mdf['min_idx'] = pd.Series(1, index = mdf.index)
+    mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
+	mdf['date_idx'] = mdf.date()
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(ohlcsum).reset_index().set_index('datetime')
+
+
     if win == -1:
-        tr= pd.concat([ddf.high - ddf.low, abs(ddf.close - ddf.close.shift(1))], 
+        tr= pd.concat([xdf.high - xdf.low, abs(xdf.close - xdf.close.shift(1))], 
                        join='outer', axis=1).max(axis=1).shift(1)
     elif win == -2:
-        tr= pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.low, 2)                       
+        tr= pd.rolling_max(xdf.high, 2) - pd.rolling_min(xdf.low, 2)                       
     elif win == 0:
-        tr = pd.concat([(pd.rolling_max(ddf.high, 2) - pd.rolling_min(ddf.close, 2))*multiplier, 
-                        (pd.rolling_max(ddf.close, 2) - pd.rolling_min(ddf.low, 2))*multiplier,
-                        ddf.high - ddf.close, 
-                        ddf.close - ddf.low], 
+        tr = pd.concat([(pd.rolling_max(xdf.high, 2) - pd.rolling_min(xdf.close, 2))*multiplier, 
+                        (pd.rolling_max(xdf.close, 2) - pd.rolling_min(xdf.low, 2))*multiplier,
+                        xdf.high - xdf.close, 
+                        xdf.close - xdf.low], 
                         join='outer', axis=1).max(axis=1).shift(1)
     else:
-        tr= pd.concat([pd.rolling_max(ddf.high, win) - pd.rolling_min(ddf.close, win), 
-                       pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
+        tr= pd.concat([pd.rolling_max(xdf.high, win) - pd.rolling_min(xdf.close, win), 
+                       pd.rolling_max(xdf.close, win) - pd.rolling_min(xdf.low, win)], 
                        join='outer', axis=1).max(axis=1).shift(1)
-    ddf['TR'] = tr
-    ddf['MA'] = pd.rolling_mean(ddf.close, ma_fast).shift(1)    
+    xdf['TR'] = tr
+    xdf['MA'] = pd.rolling_mean(xdf.close, ma_fast).shift(1)  
+	xdf.drop(['min_idx', 'open', ], inplace=True, axis=1)
+	mdf.join(xdf, how = 'left').fillna(method='ffill')	
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
     curr_pos = []
