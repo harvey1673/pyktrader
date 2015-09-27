@@ -1,18 +1,18 @@
 import sys
-#import misc
-#import agent
-#import data_handler as dh
+import misc
+import agent
+import data_handler as dh
 import pandas as pd
 import numpy as np
-#import strategy as strat
+import strategy as strat
 import datetime
-#import backtest
+import backtest
 
 def ohlcsum(df):
     df = df.sort()
     return pd.Series([df.index[0], df['open'][0], df['high'].max(), df['low'].min(), df['close'][-1], df['volume'].sum()],
-				  index = ['datetime', 'open','high','low','close','volume'])
-	  
+                  index = ['datetime', 'open','high','low','close','volume'])
+
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -59,10 +59,8 @@ def dual_thrust_sim( mdf, config):
     ll = mdf.shape[0]
     mdf['min_idx'] = pd.Series(1, index = mdf.index)
     mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
-	mdf['date_idx'] = mdf.date()
+    mdf['date_idx'] = mdf.index.date
     xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(ohlcsum).reset_index().set_index('datetime')
-
-
     if win == -1:
         tr= pd.concat([xdf.high - xdf.low, abs(xdf.close - xdf.close.shift(1))], 
                        join='outer', axis=1).max(axis=1).shift(1)
@@ -79,9 +77,9 @@ def dual_thrust_sim( mdf, config):
                        pd.rolling_max(xdf.close, win) - pd.rolling_min(xdf.low, win)], 
                        join='outer', axis=1).max(axis=1).shift(1)
     xdf['TR'] = tr
-    xdf['MA'] = pd.rolling_mean(xdf.close, ma_fast).shift(1)  
-	xdf.drop(['min_idx', 'open', ], inplace=True, axis=1)
-	mdf.join(xdf, how = 'left').fillna(method='ffill')	
+    xdf['MA'] = pd.rolling_mean(xdf.close, ma_fast).shift(1)
+    ddf = pd.concat([xdf['TR'], xdf['MA'], xdf['open'], xdf['date_idx']], axis=1, keys=['TR','MA','dopen', 'date']).fillna(0)
+    mdf = mdf.join(ddf, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
     curr_pos = []
@@ -93,31 +91,28 @@ def dual_thrust_sim( mdf, config):
     for dd in mdf.index:
         mslice = mdf.ix[dd]
         min_id = agent.get_min_id(dd)
-        d = dd.date()
-        dslice = ddf.ix[d]
         if len(curr_pos) == 0:
             pos = 0
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos    
-        if np.isnan(dslice.TR) or np.isnan(dslice.MA):
+        if mslice.TR == 0 or mslice.MA == 0:
             continue
-        d_open = dslice.open
+        d_open = mslice.dopen
         #if (prev_d < d):
         #    d_open = mslice.open
         #else:
         #    d_open = dslice.open
-        rng = max(min_rng * d_open, dslice.TR)
+        rng = max(min_rng * d_open, k * mslice.TR)
         if (d_open <= 0):
             continue
-        #prev_d = d
         buytrig  = d_open + k * rng
         selltrig = d_open - k * rng
-        if dslice.MA > mslice.close:
+        if mslice.MA > mslice.close:
             buytrig  += f * k * rng
-        elif dslice.MA < mslice.close:
+        elif mslice.MA < mslice.close:
             selltrig -= f * k * rng      
-        if (min_id >= config['exit_min']) and (close_daily or (d == end_d)):
+        if (min_id >= config['exit_min']) and (close_daily or (mslice.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
@@ -185,13 +180,13 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['y', 'p', 'm', 'RM', 'TA', 'jd', 'SR', 'a', 'i', 'TF', 'j', 'MA', 'OI', 'ru', 'rb', 'l', 'pp']
+    sim_list = [ 'y', 'm', 'RM', 'MA', 'TA', 'a', 'rb', 'ru', 'i', 'j', 'jm']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'DT_MA10_'
+    file_prefix = test_folder + 'test\\DT_split_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -203,14 +198,13 @@ def run_sim(start_date, end_date, daily_close = False):
               'close_daily': daily_close, 
               'unit': 1,
               'stoploss': 0.0,
-              'min_range': 0.01,
+              'min_range': 0.004,
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.4, -1, 0.5, 0.5), (0.5, -1, 0.5, 0.5), (0.6, -1, 0.5, 0.5), (0.7, -1, 0.5, 0.5), \
-                  (0.5, 0, 0.5, 0.5), (0.6, 0, 0.5, 0.5), (0.7, 0, 0.5, 0.5), (0.8, 0, 0.5, 0.5), \
-                  (0.5, 1, 0.5, 0.5), (0.6, 1, 0.5, 0.5), (0.7, 1, 0.5, 0.5), (0.8, 1, 0.5, 0.5), (0.9, 1, 0.5, 0.5), \
-                  (0.25, 2, 0.5, 0.5), (0.3, 2, 0.5, 0.5), (0.4, 2, 0.5, 0.5), \
-                  (0.2, 4, 0.5, 0.5), (0.25, 4, 0.5, 0.5), (0.3, 4, 0.5, 0.5)]
+    scenarios = [ (0.3, -1, 0.5, 0.0), (0.4, -1, 0.5, 0.0), (0.5, -1, 0.5, 0.0), (0.6, -1, 0.5, 0.0), \
+                  (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0),\
+                  (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), \
+                  (0.3, 2, 0.5, 0.0), (0.4, 2, 0.5, 0.0), (0.5, 2, 0.5, 0.0), (0.6, 2, 0.5, 0.0)]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
