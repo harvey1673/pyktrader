@@ -180,13 +180,13 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = [ 'y', 'm', 'RM', 'MA', 'TA', 'a', 'rb', 'ru', 'i', 'j', 'jm']
+    sim_list = [ 'y', 'm', 'p', 'RM', 'MA', 'TA', 'a', 'rb', 'ru', 'i', 'j', 'jm', 'cu', 'al', 'zn', 'ag', 'SR', 'CF']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test\\DT_split_'
+    file_prefix = test_folder + 'test/DT_split_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -201,10 +201,15 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.004,
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.3, -1, 0.5, 0.0), (0.4, -1, 0.5, 0.0), (0.5, -1, 0.5, 0.0), (0.6, -1, 0.5, 0.0), \
-                  (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0),\
-                  (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), \
-                  (0.3, 2, 0.5, 0.0), (0.4, 2, 0.5, 0.0), (0.5, 2, 0.5, 0.0), (0.6, 2, 0.5, 0.0)]
+    scenarios = [ (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0),\
+                  (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), (1.2, 0, 0.5, 0.0),\
+                  (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0),\
+                  (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), (1.2, 1, 0.5, 0.0),\
+                  (0.2, 2, 0.5, 0.0), (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.4, 2, 0.5, 0.0),\
+                  (0.5, 2, 0.5, 0.0), (0.6, 2, 0.5, 0.0), (0.7, 2, 0.5, 0.0), (0.8, 2, 0.5, 0.0), \
+                  (0.2, 2, 0.5, 0.0), (0.25,4, 0.5, 0.0), (0.3, 4, 0.5, 0.0), (0.4, 4, 0.5, 0.0),\
+                  (0.5, 2, 0.5, 0.0), (0.6, 4, 0.5, 0.0), (0.7, 4, 0.5, 0.0), (0.8, 4, 0.5, 0.0), \
+                  ]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
