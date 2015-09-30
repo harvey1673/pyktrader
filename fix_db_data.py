@@ -15,7 +15,7 @@ def filter_main_cont(sdate):
             main_insts.append(inst)
     return main_insts
     
-def fix_daily_data(contlist, sdate, edate):
+def fix_daily_data(contlist, sdate, edate, is_forced=False):
     for inst in contlist:
         ddf = mysqlaccess.load_daily_data_to_df('fut_daily', inst, sdate, edate)
         mdf = mysqlaccess.load_min_data_to_df('fut_min', inst, sdate, edate, minid_start=300, minid_end = 2115)
@@ -23,7 +23,7 @@ def fix_daily_data(contlist, sdate, edate):
         for dd in dailydata.index:
             d = dd.date()
             dslice = dailydata.ix[dd]
-            if d not in ddf.index:
+            if (d not in ddf.index) or is_forced:
                 ddata = {}
                 ddata['date'] = d
                 ddata['open'] = float(dslice.open)
@@ -33,7 +33,7 @@ def fix_daily_data(contlist, sdate, edate):
                 ddata['volume'] = int(dslice.volume)
                 ddata['openInterest'] = int(dslice.openInterest)
                 print inst, ddata
-                mysqlaccess.insert_daily_data(inst, ddata)
+                mysqlaccess.insert_daily_data(inst, ddata, is_forced)
                 
 def fix_daily_by_tick(contlist, sdate, edate, is_forced=False):
     res = {}
@@ -43,7 +43,7 @@ def fix_daily_by_tick(contlist, sdate, edate, is_forced=False):
         end_tick  = 2100000
         if product in misc.night_session_markets:
             start_tick = 300000
-        elif product in ['IF','TF']:
+        elif product in ['IF','TF','IC','IH','T']:
             start_tick = 1515000
             end_tick   = 2115000
         ddf = mysqlaccess.load_daily_data_to_df('fut_daily', inst, sdate, edate)
