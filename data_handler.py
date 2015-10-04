@@ -3,6 +3,11 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
+def ohlcsum(df):
+    df = df.sort()
+    return pd.Series([df.index[0], df['open'][0], df['high'].max(), df['low'].min(), df['close'][-1], df['volume'].sum()],
+                  index = ['datetime', 'open','high','low','close','volume'])
+
 def conv_ohlc_freq(df, freq):
     highcol = pd.DataFrame(df['high']).resample(freq, how ='max').dropna()
     lowcol  = pd.DataFrame(df['low']).resample(freq, how ='min').dropna()

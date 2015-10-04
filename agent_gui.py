@@ -236,7 +236,7 @@ class DTStratGui(StratGui):
                             'MaWin': 'int',
                             'OrderType': 'str',
                             'MinRng': 'float'}
-                        
+
 class RBStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
@@ -565,7 +565,7 @@ class Gui(tk.Tk):
     
         for strat_name in self.app.agent.strategies:
             strat = self.app.agent.strategies[strat_name]
-            if strat.__class__.__name__ == 'DTTrader':
+            if (strat.__class__.__name__ == 'DTTrader') or (strat.__class__.__name__ == 'DTSplitTrader'):
                 self.strat_gui[strat_name] = DTStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
                 self.strat_gui[strat_name] = RBStratGui(strat, app, self)

@@ -4,6 +4,7 @@ import logging
 import base
 import sys
 import strat_dual_thrust as strat_dt
+import strat_dt_split as dt_split
 import strat_rbreaker as strat_rb
 import strat_turtle as strat_tl
 from agent_gui import *
@@ -87,6 +88,31 @@ def prod_test(tday, name='prod_test'):
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, 
                                  email_notify = [])
+
+    ins_setup = {'m1601':(0,0.7, 0.0, 8, False),
+                'RM601': (-1,0.5, 0.0, 8, False),
+                'rb1601':(0,0.7, 0.0, 8, False),
+                'TA601' :(-1,0.4, 0.0, 4, False),
+                'ru1601':(0, 0.7, 0.0, 1, False),
+                'SR601' :(0, 0.7, 0.0, 4, False),
+                'MA601' :(0, 0.7, 0.0, 3, False),
+                'ag1512':(0, 0.7, 0.0, 1, False),
+                'i1601' :(2, 0.4, 0.0, 1, False),
+                'y1601': (0,0.7, 0.0, 4, False),
+                'p1601': (0,0.7, 0.0, 4, False),
+                }
+    insts = ins_setup.keys()
+    units_dt = [ins_setup[inst][3] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][4] for inst in insts]
+    dtsplit_strat = dt_split.DTSplitTrader('DTSplit', under_dt, vol_dt, trade_unit = units_dt,
+                                 ratios = ratios, lookbacks = lookbacks,
+                                 agent = None, daily_close = daily_close, ma_win = 10,
+                                 email_notify = [])
+
     ins_setup = {'i1601': [2, 2, 2],
                  #'jm1601': [1, 1, 1],
                  'TF1512': [1, 1, 1],
@@ -124,12 +150,12 @@ def prod_test(tday, name='prod_test'):
                                     windows = [10, 20],
                                     max_pos = max_pos,
                                     trail_loss = trail_loss )
-    strategies = [rb_strat, dt_strat, dtma_strat, tl_strat, tl_strat2 ]
+    strategies = [rb_strat, dt_strat, dtma_strat, tl_strat, tl_strat2, dtsplit_strat]
     folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
                  'folder': folder, \
                  'daily_data_days':21, \
-                 'min_data_days':1 }
+                 'min_data_days':4 }
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
     myGui = Gui(myApp)
     #myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')

@@ -99,8 +99,8 @@ def dual_thrust_sim( ddf, mdf, config):
         if (d_open <= 0):
             continue
         prev_d = d
-        buytrig  = d_open + max(min_rng, dslice.TR * k)
-        selltrig = d_open - max(min_rng, dslice.TR * k)
+        buytrig  = d_open + max(min_rng * d_open, dslice.TR * k)
+        selltrig = d_open - max(min_rng * d_open, dslice.TR * k)
         #d_high = max(d_high, dslice.prev_high)
         #d_low  = min(d_low, dslice.prev_low)
         if (min_id >= config['exit_min']):
@@ -171,13 +171,13 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'RM', 'y', 'p', 'a', 'TA', 'MA', 'rb', 'SR', 'ru', 'CF', 'i', 'j', 'jm', 'cu', 'al', 'zn', 'ag', 'au']
+    sim_list = ['SR', 'ru', 'CF', 'i', 'j', 'jm', 'cu', 'al', 'zn', 'ag', 'au', 'IF', 'TF']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DT15_'
+    file_prefix = test_folder + 'test2/DTmin_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -187,7 +187,7 @@ def run_sim(start_date, end_date, daily_close = False):
               'close_daily': daily_close, 
               'unit': 1,
               'stoploss': 0.0,
-              'min_range': 0.0,
+              'min_range': 0.004,
               'file_prefix': file_prefix}
     
     scenarios = [ (0.5, 0, 0.5), (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), \

@@ -842,6 +842,7 @@ class Agent(object):
                     continue
                 min_start = int(self.instruments[inst].start_tick_id/1000)
                 min_end = int(self.instruments[inst].last_tick_id/1000)+1
+                #print "loading inst = %s" % inst
                 mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
                 self.min_data[inst][1] = mindata
                 if len(mindata)>0:
@@ -1087,9 +1088,6 @@ class Agent(object):
         self.cur_day[inst]['volume'] = tick.volume
         self.cur_day[inst]['date'] = tick.timestamp.date()
 
-        for strat_name in self.inst2strat[inst]:
-            self.strategies[strat_name].run_tick(tick)
-                
         if (tick_min == self.cur_min[inst]['min_id']):
             self.tick_data[inst].append(tick)
             self.cur_min[inst]['close'] = tick.price
@@ -1118,6 +1116,9 @@ class Agent(object):
             self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
             if ((tick_min>0) and (tick.price>0)): 
                 self.tick_data[inst].append(tick)
+
+        for strat_name in self.inst2strat[inst]:
+            self.strategies[strat_name].run_tick(tick)
         return True  
     
     def min_switch(self, inst):
@@ -1185,6 +1186,8 @@ class Agent(object):
             etrade.update()
             if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
                 etrade.status = order.ETradeStatus.Cancelled
+                strat = self.strategies[etrade.strategy]
+                strat.on_trade(etrade)
             elif etrade.status == order.ETradeStatus.PFilled:
                 etrade.status = order.ETradeStatus.Cancelled
                 self.logger.warning('Still partially filled after close. trade id= %s' % trade_id)
@@ -1357,6 +1360,8 @@ class Agent(object):
                         ((v<0) and (-v > pos.can_close.short + pos.can_yclose.short + pos.can_open.short)):
                     self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
                     exec_trade.status = order.ETradeStatus.Cancelled
+                    strat = self.strategies[exec_trade.strategy]
+                    strat.on_trade(exec_trade)
                     return False
 
                 if v>0:
@@ -1414,7 +1419,9 @@ class Agent(object):
                 
             if required_margin + self.locked_margin > self.margin_cap:
                 self.logger.warning("ETrade %s is cancelled due to margin cap: %s" % (exec_trade.id, inst))
-                exec_trade.status = order.ETradeStatus.Cancelled                
+                exec_trade.status = order.ETradeStatus.Cancelled
+                strat = self.strategies[exec_trade.strategy]
+                strat.on_trade(exec_trade)
                 return False
 
             exec_trade.order_dict = all_orders
@@ -1440,6 +1447,8 @@ class Agent(object):
         if exec_trade.status == order.ETradeStatus.Pending:
             if exec_trade.valid_time < self.tick_id:
                 exec_trade.status = order.ETradeStatus.Cancelled
+                strat = self.strategies[exec_trade.strategy]
+                strat.on_trade(exec_trade)
             else:
                 pending_orders = self.process_trade(exec_trade)
         elif (exec_trade.status == order.ETradeStatus.Processed) or (exec_trade.status == order.ETradeStatus.PFilled):
@@ -1565,6 +1574,7 @@ class Agent(object):
         if (mytrade.status == order.ETradeStatus.Done) or (mytrade.status == order.ETradeStatus.Cancelled):            
             strat = self.strategies[mytrade.strategy]
             strat.on_trade(mytrade)
+            self.save_state()
         else:
             if len(pending_orders) > 0:
                 for order_ref in pending_orders:
@@ -1628,6 +1638,7 @@ class Agent(object):
             self.qry_pos[instID][key][idx] = pposition.Position
             self.qry_pos[instID]['yday'][idx] = pposition.YdPosition
         if isLast:
+            print self.qry_pos
             pass
         # need to cross check position accuracy
 
