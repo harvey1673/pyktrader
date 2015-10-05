@@ -5,7 +5,16 @@ import data_handler as dh
 from strategy import *
  
 class DTSplitTrader(Strategy):
-    def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None, ma_win = 10, open_period = [300, 1500, 2115]):
+    def __init__(self, name, underliers, volumes,
+                 agent = None,
+                 trade_unit = [],
+                 ratios = [],
+                 lookbacks=[],
+                 daily_close = False,
+                 email_notify = None,
+                 ma_win = 10,
+                 open_period = [300, 1500, 2115],
+                 min_rng = [0.00]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.lookbacks = lookbacks
         numAssets = len(underliers)
@@ -33,7 +42,11 @@ class DTSplitTrader(Strategy):
             self.close_tday = daily_close * numAssets 
         self.ma_win = ma_win
         self.num_tick = 1
-        self.min_rng = 0.01
+        self.min_rng = [0.0] * numAssets
+        if len(min_rng) > 1:
+            self.min_rng = min_rng
+        elif len(min_rng) == 1:
+            self.min_rng = min_rng * numAssets
 
     def initialize(self):
         self.load_state()
@@ -132,12 +145,13 @@ class DTSplitTrader(Strategy):
         elif num_pos == 1:
             buysell = self.positions[idx][0].direction
         tick_base = self.tick_base[idx]
-        rng = max(self.cur_rng[idx] * self.ratios[idx][0], self.tday_open[idx] * self.min_rng)
-        buy_trig  = self.tday_open[idx] + rng
-        sell_trig = self.tday_open[idx] - rng
-        if self.cur_ma[idx] > self.tday_open[idx]:
+        t_open = self.tday_open[idx]
+        rng = max(self.cur_rng[idx] * self.ratios[idx][0], t_open * self.min_rng[idx])
+        buy_trig  = t_open + rng
+        sell_trig = t_open - rng
+        if self.cur_ma[idx] > t_open:
             buy_trig += self.ratios[idx][1] * rng
-        elif self.cur_ma[idx] < self.tday_open[idx]:
+        elif self.cur_ma[idx] < t_open:
             sell_trig -= self.ratios[idx][1] * rng
 
         if (min_id >= self.last_min_id[idx]):
@@ -152,7 +166,7 @@ class DTSplitTrader(Strategy):
         if ((self.curr_prices[idx] >= buy_trig) and (buysell <=0)) or ((self.curr_prices[idx] <= sell_trig) and (buysell >=0)):
             if buysell!=0:
                 msg = 'DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
-                                    % (inst, self.tday_open[idx], buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
+                                    % (inst, t_open, buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
                 self.close_tradepos(idx, self.positions[idx][0], self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
             if self.trade_unit[idx] <= 0:
@@ -162,7 +176,7 @@ class DTSplitTrader(Strategy):
             else:
                 buysell = -1
             msg = 'DT to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
-                                    % (inst, self.tday_open[idx], buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
+                                    % (inst, t_open, buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
             self.open_tradepos(idx, buysell, self.curr_prices[idx] + buysell * self.num_tick * tick_base)
             self.status_notifier(msg)
             self.save_state()

@@ -222,7 +222,7 @@ class DTStratGui(StratGui):
         StratGui.__init__(self, strat, app, master)
         self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'MaWin', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
         self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'CurMa'] 
-        self.shared_fields = ['NumTick', 'OrderType', 'MinRng', 'MaWin']
+        self.shared_fields = ['NumTick', 'OrderType', 'MaWin']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
                             'Lookbacks':'int', 

@@ -8,11 +8,6 @@ import strategy as strat
 import datetime
 import backtest
 
-def ohlcsum(df):
-    df = df.sort()
-    return pd.Series([df.index[0], df['open'][0], df['high'].max(), df['low'].min(), df['close'][-1], df['volume'].sum()],
-                  index = ['datetime', 'open','high','low','close','volume'])
-
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -60,7 +55,7 @@ def dual_thrust_sim( mdf, config):
     mdf['min_idx'] = pd.Series(1, index = mdf.index)
     mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
     mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(ohlcsum).reset_index().set_index('datetime')
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
     if win == -1:
         tr= pd.concat([xdf.high - xdf.low, abs(xdf.close - xdf.close.shift(1))], 
                        join='outer', axis=1).max(axis=1).shift(1)
@@ -106,12 +101,12 @@ def dual_thrust_sim( mdf, config):
         rng = max(min_rng * d_open, k * mslice.TR)
         if (d_open <= 0):
             continue
-        buytrig  = d_open + k * rng
-        selltrig = d_open - k * rng
+        buytrig  = d_open + rng
+        selltrig = d_open - rng
         if mslice.MA > mslice.close:
-            buytrig  += f * k * rng
+            buytrig  += f * rng
         elif mslice.MA < mslice.close:
-            selltrig -= f * k * rng      
+            selltrig -= f * rng
         if (min_id >= config['exit_min']) and (close_daily or (mslice.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -180,13 +175,13 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = [ 'y', 'm', 'p', 'RM', 'MA', 'TA', 'a', 'rb', 'ru', 'i', 'j', 'jm', 'cu', 'al', 'zn', 'ag', 'SR', 'CF']
+    sim_list = [ 'm','y', 'p', 'RM', 'a', 'ru', 'rb', 'ag', 'TA', 'MA',  'SR', 'CF', 'i', 'j', 'au', 'cu']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DT_split_'
+    file_prefix = test_folder + 'test/DTMA10_split_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -201,14 +196,13 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.004,
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0),\
-                  (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), (1.2, 0, 0.5, 0.0),\
-                  (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0),\
-                  (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), (1.2, 1, 0.5, 0.0),\
-                  (0.2, 2, 0.5, 0.0), (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.4, 2, 0.5, 0.0),\
-                  (0.5, 2, 0.5, 0.0), (0.6, 2, 0.5, 0.0), (0.7, 2, 0.5, 0.0), (0.8, 2, 0.5, 0.0), \
-                  (0.2, 2, 0.5, 0.0), (0.25,4, 0.5, 0.0), (0.3, 4, 0.5, 0.0), (0.4, 4, 0.5, 0.0),\
-                  (0.5, 2, 0.5, 0.0), (0.6, 4, 0.5, 0.0), (0.7, 4, 0.5, 0.0), (0.8, 4, 0.5, 0.0), \
+    scenarios = [ (0.5, 0, 0.5, 0.5), (0.6, 0, 0.5, 0.5), (0.7, 0, 0.5, 0.5), (0.8, 0, 0.5, 0.5), \
+                  (0.9, 0, 0.5, 0.5), (1.0, 0, 0.5, 0.5), \
+                  (0.5, 1, 0.5, 0.5), (0.6, 1, 0.5, 0.5), (0.7, 1, 0.5, 0.5), (0.8, 1, 0.5, 0.5), \
+                  (0.9, 1, 0.5, 0.5), (1.0, 1, 0.5, 0.5), \
+                  (0.4, 2, 0.5, 0.5), (0.5, 2, 0.5, 0.5), (0.6, 2, 0.5, 0.5), (0.7, 2, 0.5, 0.5), (0.8, 2, 0.5, 0.5), \
+                  (0.25, 4, 0.5,0.5), (0.3, 4, 0.5, 0.5), (0.35,4, 0.5, 0.5), (0.4, 4,0.5, 0.5),  (0.45,4, 0.5, 0.5),\
+                  (0.15, 8, 0.5, 0.5),(0.2, 8, 0.5, 0.5),(0.25, 8, 0.5, 0.5), (0.3, 8, 0.5, 0.5),\
                   ]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 

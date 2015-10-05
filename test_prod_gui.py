@@ -36,22 +36,22 @@ def prod_test(tday, name='prod_test'):
     rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
                                  ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = freq, 
                                  agent = None, email_notify = [])
-    ins_setup = {'m1601':(0,0.7, 0.0, 8, False),
-                'RM601': (-1,0.5, 0.0, 8, False),
-                'rb1601':(0,0.7, 0.0, 8, False), 
-                'l1601': (0,0.7, 0.0, 2, False),
-                'pp1601':(0,0.7, 0.0, 2, False),
-                'TA601' :(-1,0.4, 0.0, 4, False),
-                'ru1601':(0, 0.7, 0.0, 1, False),
-                'SR601' :(0, 0.7, 0.0, 4, False),
-                'MA601' :(0, 0.7, 0.0, 3, False),
-                'au1512':(0, 0.7, 0.0, 1, False),
-                'i1601' :(2, 0.4, 0.0, 1, False),
-                'IF1510':(0, 0.6, 0.0, 1, False),
-                'IH1510':(0, 0.6, 0.0, 1, False),
-                'y1601': (0,0.7, 0.0, 4, False),
-                'p1601': (0,0.7, 0.0, 4, False),
-                 'TF1512':(2, 0.5, 0.0, 1, False),
+    ins_setup = {'m1601':(0,0.7, 0.0, 8, False, 0.004),
+                'RM601': (-1,0.5, 0.0, 8, False, 0.004),
+                'rb1601':(0,0.7, 0.0, 8, False, 0.004),
+                'l1601': (0,0.7, 0.0, 2, False, 0.004),
+                'pp1601':(0,0.7, 0.0, 2, False, 0.004),
+                'TA601' :(-1,0.4, 0.0, 4, False, 0.004),
+                'ru1601':(0, 0.7, 0.0, 1, False, 0.004),
+                'SR601' :(0, 0.7, 0.0, 4, False, 0.004),
+                'MA601' :(0, 0.7, 0.0, 3, False, 0.004),
+                'au1512':(0, 0.7, 0.0, 1, False, 0.004),
+                'i1601' :(2, 0.4, 0.0, 1, False, 0.004),
+                'IF1510':(0, 0.6, 0.0, 1, False, 0.004),
+                'IH1510':(0, 0.6, 0.0, 1, False, 0.004),
+                'y1601': (0,0.7, 0.0, 4, False, 0.004),
+                'p1601': (0,0.7, 0.0, 4, False, 0.004),
+                 'TF1512':(2, 0.5, 0.0, 1, False, 0.0),
                 }
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
@@ -60,22 +60,23 @@ def prod_test(tday, name='prod_test'):
     ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
     lookbacks = [ins_setup[inst][0] for inst in insts]
     daily_close = [ins_setup[inst][4] for inst in insts]
+    min_rng = [ins_setup[inst][5] for inst in insts]
     dt_strat = strat_dt.DTTrader('ProdDT', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, ma_win = 10,
-                                 email_notify = [])
-    ins_setup = {'rb1601':(1,0.6, 0.5, 4, False),
-                'l1601' :(0,0.5, 0.5, 1, False),
-                'pp1601':(0,0.5, 0.5, 1, False),
-                'TA601' :(0,0.4, 0.5, 2, False),
-                'MA601' :(-1,0.5, 0.5, 2, False),
-                'jd1601':(2,0.4, 0.5, 2, False),
-                'a1601' :(2,0.4, 0.5, 2, False),
-                'SR601' :(1,0.6, 0.5, 1, False),
-                'm1601':(2,0.3, 0.5, 2, False),
-                'RM601' :(-1,0.3, 0.5, 2, False),
-                'i1601' :(4, 0.3, 0.5, 1, False),
-                'TF1512':(2, 0.4, 0.5, 1, False),
+                                 email_notify = [], min_rng = min_rng)
+    ins_setup = {'rb1601':(1,0.6, 0.5, 4, False, 0.004),
+                'l1601' :(0,0.5, 0.5, 1, False, 0.004),
+                'pp1601':(0,0.5, 0.5, 1, False, 0.004),
+                'TA601' :(0,0.4, 0.5, 2, False, 0.004),
+                'MA601' :(-1,0.5, 0.5, 2, False, 0.004),
+                'jd1601':(2,0.4, 0.5, 2, False, 0.004),
+                'a1601' :(2,0.4, 0.5, 2, False, 0.004),
+                'SR601' :(1,0.6, 0.5, 1, False, 0.004),
+                'm1601':(2,0.3, 0.5, 2, False, 0.004),
+                'RM601' :(-1,0.3, 0.5, 2, False, 0.004),
+                'i1601' :(4, 0.3, 0.5, 1, False, 0.004),
+                'TF1512':(2, 0.4, 0.5, 1, False, 0.0),
                 }
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
@@ -84,10 +85,11 @@ def prod_test(tday, name='prod_test'):
     ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
     lookbacks = [ins_setup[inst][0] for inst in insts]
     daily_close = [ins_setup[inst][4] for inst in insts]
+    min_rng = [ins_setup[inst][5] for inst in insts]
     dtma_strat = strat_dt.DTTrader('DTMA10', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, 
-                                 email_notify = [])
+                                 email_notify = [], min_rng = min_rng)
 
     ins_setup = {'m1601':(0,0.7, 0.0, 8, False),
                 'RM601': (-1,0.5, 0.0, 8, False),
@@ -111,7 +113,7 @@ def prod_test(tday, name='prod_test'):
     dtsplit_strat = dt_split.DTSplitTrader('DTSplit', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks,
                                  agent = None, daily_close = daily_close, ma_win = 10,
-                                 email_notify = [])
+                                 email_notify = [], min_rng = [0.004])
 
     ins_setup = {'i1601': [2, 2, 2],
                  #'jm1601': [1, 1, 1],

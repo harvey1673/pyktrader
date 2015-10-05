@@ -4,7 +4,7 @@ from misc import *
 from strategy import *
  
 class DTTrader(Strategy):
-    def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None, ma_win = 10):
+    def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None, ma_win = 10, min_rng = [0.00]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.lookbacks = lookbacks
         numAssets = len(underliers)
@@ -30,7 +30,11 @@ class DTTrader(Strategy):
             self.close_tday = daily_close * numAssets 
         self.ma_win = ma_win
         self.num_tick = 1
-        self.min_rng = 0.01
+        self.min_rng = [0.0] * numAssets
+        if len(min_rng) > 1:
+            self.min_rng = min_rng
+        elif len(min_rng) == 1:
+            self.min_rng = min_rng * numAssets
 
     def initialize(self):
         self.load_state()
@@ -45,8 +49,7 @@ class DTTrader(Strategy):
                 self.cur_rng[idx] = max(max(ddf.ix[-2:,'high'])- min(ddf.ix[-2:,'close']), max(ddf.ix[-2:,'close']) - min(ddf.ix[-2:,'low']))
                 self.cur_rng[idx] = max(self.cur_rng[idx] * 0.5, ddf.ix[-1,'high']-ddf.ix[-1,'close'],ddf.ix[-1,'close']-ddf.ix[-1,'low'])
             else:
-                self.cur_rng[idx] = max(ddf.ix[-1,'high']- ddf.ix[-1,'low'], abs(ddf.ix[-1,'close'] - ddf.ix[-2,'close']))             
-            self.cur_rng[idx] = max(self.cur_rng[idx], ddf.ix[-1, 'close']*self.min_rng)
+                self.cur_rng[idx] = max(ddf.ix[-1,'high']- ddf.ix[-1,'low'], abs(ddf.ix[-1,'close'] - ddf.ix[-2,'close']))
             self.cur_ma[idx] = ddf.ix[-self.ma_win:, 'close'].mean() 
             min_id = self.agent.instruments[inst].last_tick_id/1000
             min_id = int(min_id/100)*60 + min_id % 100 - self.daily_close_buffer
@@ -86,12 +89,14 @@ class DTTrader(Strategy):
         elif num_pos == 1:
             buysell = self.positions[idx][0].direction
         tick_base = self.tick_base[idx]
-        buy_trig  = self.tday_open[idx] + self.ratios[idx][0] * self.cur_rng[idx]
-        sell_trig = self.tday_open[idx] - self.ratios[idx][0] * self.cur_rng[idx]
-        if self.cur_ma[idx] > self.tday_open[idx]:
-            buy_trig += self.ratios[idx][1] * self.ratios[idx][0] * self.cur_rng[idx]
-        elif self.cur_ma[idx] < self.tday_open[idx]:
-            sell_trig -= self.ratios[idx][1] * self.ratios[idx][0] * self.cur_rng[idx]
+        t_open = self.tday_open[idx]
+        c_rng = max(self.cur_rng[idx] * self.ratios[idx][0], t_open * self.min_rng[idx])
+        buy_trig  = t_open + c_rng
+        sell_trig = t_open - c_rng
+        if self.cur_ma[idx] > t_open:
+            buy_trig  += self.ratios[idx][1] * c_rng
+        elif self.cur_ma[idx] < t_open:
+            sell_trig -= self.ratios[idx][1] * c_rng
 
         if (min_id >= self.last_min_id[idx]):
             if (buysell!=0) and (self.close_tday[idx]):
