@@ -91,17 +91,17 @@ def prod_test(tday, name='prod_test'):
                                  agent = None, daily_close = daily_close, 
                                  email_notify = [], min_rng = min_rng)
 
-    ins_setup = {'m1601':(0,0.7, 0.0, 8, False),
-                'RM601': (-1,0.5, 0.0, 8, False),
-                'rb1601':(0,0.7, 0.0, 8, False),
-                'TA601' :(-1,0.4, 0.0, 4, False),
-                'ru1601':(0, 0.7, 0.0, 1, False),
-                'SR601' :(0, 0.7, 0.0, 4, False),
-                'MA601' :(0, 0.7, 0.0, 3, False),
-                'ag1512':(0, 0.7, 0.0, 1, False),
-                'i1601' :(2, 0.4, 0.0, 1, False),
-                'y1601': (0,0.7, 0.0, 4, False),
-                'p1601': (0,0.7, 0.0, 4, False),
+    ins_setup = {'m1601': (0, 0.8, 0.0, 2, False),
+                 'RM601':  (0, 0.8, 0.0, 2, False),
+                 'y1601':  (0, 0.9, 0.0, 2, False),
+                 'p1601':  (1, 1.0, 0.0, 2, False),
+                 'a1601':  (1, 0.9, 0.0, 3, False),
+                 'rb1601': (2, 0.5, 0.0, 5, False),
+                 'TA601' : (1, 0.7, 0.0, 3, False),
+                 'MA601' : (1, 0.7, 0.0, 5, False),
+                 'SR601' : (2, 0.9, 0.0, 3, False),
+                 'i1601' : (4, 0.4, 0.0, 1, False),
+                 'ag1512': (1, 0.8, 0.0, 2, False),
                 }
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
@@ -110,7 +110,30 @@ def prod_test(tday, name='prod_test'):
     ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
     lookbacks = [ins_setup[inst][0] for inst in insts]
     daily_close = [ins_setup[inst][4] for inst in insts]
-    dtsplit_strat = dt_split.DTSplitTrader('DTSplit', under_dt, vol_dt, trade_unit = units_dt,
+    dtsplit_strat1 = dt_split.DTSplitTrader('DTSp1', under_dt, vol_dt, trade_unit = units_dt,
+                                 ratios = ratios, lookbacks = lookbacks,
+                                 agent = None, daily_close = daily_close, ma_win = 10,
+                                 email_notify = [], min_rng = [0.004])
+    ins_setup = {'m1601':  (0, 1.0, 0.0, 2, False),
+                 'RM601':  (0, 1.0, 0.0, 2, False),
+                 'y1601':  (0, 1.0, 0.0, 2, False),
+                 'p1601':  (1, 1.1, 0.0, 2, False),
+                 'a1601':  (1, 1.1, 0.0, 3, False),
+                 'rb1601': (0, 0.9, 0.0, 5, False),
+                 'TA601' : (1, 0.9, 0.0, 3, False),
+                 'MA601' : (1, 0.9, 0.0, 5, False),
+                 'SR601' : (4,0.45, 0.0, 3, False),
+                 'i1601' : (4, 0.5, 0.0, 1, False),
+                 'ag1512': (1, 1.1, 0.0, 2, False),
+                }
+    insts = ins_setup.keys()
+    units_dt = [ins_setup[inst][3] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][4] for inst in insts]
+    dtsplit_strat2 = dt_split.DTSplitTrader('DTSp2', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks,
                                  agent = None, daily_close = daily_close, ma_win = 10,
                                  email_notify = [], min_rng = [0.004])
@@ -152,7 +175,7 @@ def prod_test(tday, name='prod_test'):
                                     windows = [10, 20],
                                     max_pos = max_pos,
                                     trail_loss = trail_loss )
-    strategies = [rb_strat, dt_strat, dtma_strat, tl_strat, tl_strat2, dtsplit_strat]
+    strategies = [rb_strat, dt_strat, dtma_strat, tl_strat, tl_strat2, dtsplit_strat1, dtsplit_strat2]
     folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
                  'folder': folder, \

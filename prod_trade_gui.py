@@ -1,105 +1,34 @@
 #-*- coding:utf-8 -*-
 import sys
 import misc
+import base
 import logging
 import strat_dual_thrust as strat_dt
-import strat_rbreaker as strat_rb
+import strat_dt_split as dt_split
+#import strat_rbreaker as strat_rb
 import strat_turtle as strat_tl
 from agent_gui import *
-   
-def prod_test(tday, name='prod_test'):
-    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    trader_cfg = None
-    user_cfg = misc.PROD_USER
-    ins_setup = {'IF1506': [[0.35, 0.07, 0.25], 1,  30],
-                'ru1509':  [[0.35, 0.07, 0.25], 1,  120],
-                'rb1510':  [[0.35, 0.07, 0.25], 10, 20],
-                'RM509' :  [[0.35, 0.07, 0.25], 8,  20],
-                'm1509' :  [[0.35, 0.07, 0.25], 8,  30],
-                'ag1506': [[0.35, 0.07, 0.25], 8,  40],
-                'y1509' : [[0.35, 0.07, 0.25], 8,  60]}
-    insts = ins_setup.keys()
-    units_rb = [ins_setup[inst][1] for inst in insts]
-    under_rb = [[inst] for inst in insts]
-    vol_rb = [[1] for inst in insts]
-    ratios = [ins_setup[inst][0] for inst in insts]
-    min_rng = [ins_setup[inst][2] for inst in insts]
-    stop_loss = 0.015
-    rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
-                                 ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 1, 
-                                 agent = None, email_notify = ['harvey_wwu@hotmail.com'])
-    ins_setup = {'m1509':(0,0.4, 0.5, 8, False),
-                'RM509':(0, 0.4, 0.5, 10, False),
-                'rb1510':(0,0.4, 0.5, 10, False),
-                'y1509':(0, 0.4, 0.5, 4, False), 
-                'l1509':(0, 0.4, 0.5, 4, False),
-                'pp1509':(0,0.4, 0.5, 4, False),
-                'ru1509':(0,0.4, 0.5, 1, False),
-                'SR509' :(0,0.5, 0.5, 8, False),
-                'TA509' :(0,0.5, 0.5, 4, False),
-                'ag1506':(0,0.4, 0.5, 6, False),
-                'au1506':(0,0.4, 0.5, 1, False),
-                'i1509' :(0,0.4, 0.5, 1, False),
-                'IF1506':(0,0.4, 0.5, 1, False)}
-    insts = ins_setup.keys()
-    units_dt = [ins_setup[inst][3] for inst in insts]
-    under_dt = [[inst] for inst in insts]
-    vol_dt = [[1] for inst in insts]
-    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
-    lookbacks = [ins_setup[inst][0] for inst in insts]
-    daily_close = [ins_setup[inst][4] for inst in insts]
-    dt_strat = strat_dt.DTTrader('ProdDT', under_dt, vol_dt, trade_unit = units_dt,
-                                 ratios = ratios, lookbacks = lookbacks, 
-                                 agent = None, daily_close = daily_close, 
-                                 email_notify = ['harvey_wwu@hotmail.com'])
-    strategies = [rb_strat, dt_strat]
-    strat_cfg = {'strategies': strategies, \
-                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':5, \
-                 'min_data_days':1 }
-
-    myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
-    myGui = Gui(myApp)
-    #myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')
-    myGui.mainloop()
 
 def prod_trade(tday, name='prod_trade'):
-    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
-    trader_cfg = misc.PROD_TRADER
-    user_cfg = misc.PROD_USER
-#    ins_setup = {'ag1506': [[0.4, 0.1, 0.3], 1,  40],
-#                 'ru1509':  [[0.35, 0.07, 0.25], 1,  120],
-#                 'rb1510':  [[0.35, 0.07, 0.25], 10, 20],
-#                 'RM509' :  [[0.35, 0.07, 0.25], 8,  20],
-#                 'm1509' :  [[0.35, 0.07, 0.25], 8,  30],
-#                 'ag1506': [[0.35, 0.07, 0.25], 8,  40],
-#                 'y1509' : [[0.35, 0.07, 0.25], 8,  60]
-#                   }
-#    insts = ins_setup.keys()
-#    units_rb = [ins_setup[inst][1] for inst in insts]
-#    under_rb = [[inst] for inst in insts]
-#    vol_rb = [[1] for inst in insts]
-#    ratios = [ins_setup[inst][0] for inst in insts]
-#    min_rng = [ins_setup[inst][2] for inst in insts]
-#    stop_loss = 0.015
-#    rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
-#                                 ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 5, 
-#                                 agent = None, email_notify = [])
-    ins_setup = {'m1509':(0,0.7, 0.0, 4, False),
-                'RM509': (-1,0.5, 0.0, 4, False),
-                'rb1510':(0,0.7, 0.0, 4, False),
-                'p1509': (0,0.7, 0.0, 2, False),
-                'y1509': (0,0.7, 0.0, 2, False), 
-                'l1509': (0,0.7, 0.0, 1, False),
-                'pp1509':(0,0.7, 0.0, 1, False),
-                'TA509' :(-1,0.4, 0.0, 2, False),
-                'MA509' :(-1,0.5, 0.5, 2, False),
-                'jd1509':(2,0.4, 0.5, 2, False),
-                'a1509' :(2,0.4, 0.5, 2, False),
-                #'SR509' :(1,0.6, 0.5, 1, False),                
-#                'ru1509':(0, 0.5, 1, False),
-#                'SR509' :(0, 0.7, 8, False),
-#                'i1509' :(2, 0.3, 1, False),
+    base.config_logging("ctp_" + name + ".log", level=logging.DEBUG,
+                   format = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s',
+                   to_console = True,
+                   console_level = logging.INFO)
+    trader_cfg = misc.HT_DN_TD
+    user_cfg = misc.HT_DN_MD
+    ins_setup = {'m1605':(1, 0.7, 0.0, 2, False),
+                'RM605': (1, 0.6, 0.0, 2, False),
+                'y1605': (0, 0.8, 0.0, 1, False),
+                'p1605': (1, 0.9, 0.0, 1, False),
+                'OI601': (0, 0.7, 0.0, 0, False),
+                'a1601': (0, 1.0, 0.0, 2, False),
+                'rb1605':(0, 0.6, 0.0, 4, False),
+                'l1605': (0, 0.7, 0.0, 1, False),
+                'pp1601':(4, 0.3, 0.0, 1, False),
+                'TA601' :(1, 0.6, 0.0, 1, False),
+                'MA601' :(1, 0.8, 0.0, 2, False),
+                'jd1601':(1 ,0.8, 0.0, 1, False),
+                'SR605': (1, 0.8, 0.0, 1, False),
                 }
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
@@ -111,85 +40,39 @@ def prod_trade(tday, name='prod_trade'):
     dt_strat = strat_dt.DTTrader('ProdDT', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, 
-                                 email_notify = [])
-#     ins_setup = {'rb1510':(1,0.6, 0.5, 4, False),
-#                 'l1509' :(0,0.5, 0.5, 1, False),
-#                 'pp1509':(0,0.5, 0.5, 1, False),
-#                 'TA509' :(0,0.4, 0.5, 2, False),
-#                 'MA509' :(-1,0.5, 0.5, 2, False),
-#                 'jd1509':(2,0.4, 0.5, 2, False),
-#                 'a1509' :(2,0.4, 0.5, 2, False),
-#                 'SR509' :(1,0.6, 0.5, 1, False),
-#                 #'m1509':(2,0.3, 0.5, 2, False),
-#                 #'RM509' :(-1,0.3, 0.5, 2, False),                
-# #                'ru1509':(0, 0.5, 1, False),
-# #                'i1509' :(2, 0.3, 1, False),
-#                 }
-    ins_setup = {'m1509':2,
-                'RM509': 2,
-                'rb1510':2,
-                #'y1509': 1, 
-                #'l1509': 1,
-                #'pp1509':1,
-                #'ru1509':1,
-                'TA509' :1,
-                #'MA509' :1,
-                #'au1506':1,
-                'i1509' :1}
-    insts = ins_setup.keys()
-    units_tl = [ins_setup[inst] for inst in insts]
-    under_tl = [[inst] for inst in insts]
-    vol_tl = [[1] for inst in insts]
-    tl_strat = strat_tl.TurtleTrader('ProdTL', under_tl, vol_tl, trade_unit = units_tl,
-                                 agent = None, email_notify = []) 
-    strategies = [dt_strat, tl_strat]
+                                 email_notify = [], ma_win = 10)
+    strategies = [dt_strat]
+    folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
-                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':21, \
+                 'folder': folder, \
+                 'daily_data_days':4, \
                  'min_data_days':1 }
-
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
     myGui = Gui(myApp)
-    #myGui.iconbitmap(r'c:\Python27\DLLs\thumbs-up-emoticon.ico')
     myGui.mainloop()
 
 def prod_trade2(tday, name='prod_trade2'):
-    logging.basicConfig(filename="ctp_" + name + ".log",level=logging.DEBUG,format='%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s')
+    base.config_logging("ctp_" + name + ".log", level=logging.DEBUG,
+                   format = '%(name)s:%(funcName)s:%(lineno)d:%(asctime)s %(levelname)s %(message)s',
+                   to_console = True,
+                   console_level = logging.INFO)
     trader_cfg = misc.HT_PROD_TD
     user_cfg = misc.HT_PROD_MD
-#    ins_setup = {'ag1506': [[0.4, 0.1, 0.3], 1,  40],
-#                 'ru1509':  [[0.35, 0.07, 0.25], 1,  120],
-#                 'rb1510':  [[0.35, 0.07, 0.25], 10, 20],
-#                 'RM509' :  [[0.35, 0.07, 0.25], 8,  20],
-#                 'm1509' :  [[0.35, 0.07, 0.25], 8,  30],
-#                 'ag1506': [[0.35, 0.07, 0.25], 8,  40],
-#                 'y1509' : [[0.35, 0.07, 0.25], 8,  60]
-#                   }
-#    insts = ins_setup.keys()
-#    units_rb = [ins_setup[inst][1] for inst in insts]
-#    under_rb = [[inst] for inst in insts]
-#    vol_rb = [[1] for inst in insts]
-#    ratios = [ins_setup[inst][0] for inst in insts]
-#    min_rng = [ins_setup[inst][2] for inst in insts]
-#    stop_loss = 0.015
-#    rb_strat = strat_rb.RBreakerTrader('ProdRB', under_rb, vol_rb, trade_unit = units_rb,
-#                                 ratios = ratios, min_rng = min_rng, trail_loss = stop_loss, freq = 5, 
-#                                 agent = None, email_notify = [])
-    ins_setup = {'m1509':(0,0.7, 0.0, 4, False),
-                'RM509': (-1,0.5, 0.0, 4, False),
-                'rb1510':(0,0.7, 0.0, 4, False),
-                'p1509': (0,0.7, 0.0, 2, False),
-                'y1509': (0,0.7, 0.0, 2, False), 
-                'l1509': (0,0.7, 0.0, 1, False),
-                'pp1509':(0,0.7, 0.0, 1, False),
-                'TA509' :(-1,0.4, 0.0, 2, False),
-                'MA509' :(-1,0.5, 0.5, 2, False),
-                'jd1509':(2,0.4, 0.5, 2, False),
-                'a1509' :(2,0.4, 0.5, 2, False),
-                #'SR509' :(1,0.6, 0.5, 1, False),                
-#                'ru1509':(0, 0.5, 1, False),
-#                'SR509' :(0, 0.7, 8, False),
-#                'i1509' :(2, 0.3, 1, False),
+
+    ins_setup ={'m1601': (0,0.7, 0.0, 2, False, 0.004),
+                'RM601': (0,0.8, 0.0, 2, False, 0.004),
+                'y1601': (0,0.7, 0.0, 1, False, 0.004),
+                'p1601': (0,0.8, 0.0, 1, False, 0.004),
+                'a1601' :(0,0.9, 0.0, 1, False, 0.004),
+                'rb1601':(0,0.7, 0.5, 2, False, 0.004),
+                'l1601': (2,0.4, 0.0, 3, False, 0.004),
+                'pp1601':(2,0.3, 0.0, 2, False, 0.004),
+                'TA601' :(0, 0.6, 0.0, 2, False, 0.004),
+                'MA601' :(0, 0.8, 0.0, 3, False, 0.004),
+                'jd1601':(4, 0.4, 0.0, 3, False, 0.004),
+                'SR601': (1, 0.9, 0.0, 1, False, 0.004),
+                'TF1512':(2, 0.5, 0.0, 1, False, 0.0),
+                'i1601' :(2, 0.45,0.0, 1, False, 0.004),
                 }
     insts = ins_setup.keys()
     units_dt = [ins_setup[inst][3] for inst in insts]
@@ -198,45 +81,121 @@ def prod_trade2(tday, name='prod_trade2'):
     ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
     lookbacks = [ins_setup[inst][0] for inst in insts]
     daily_close = [ins_setup[inst][4] for inst in insts]
-    dt_strat = strat_dt.DTTrader('ProdDT', under_dt, vol_dt, trade_unit = units_dt,
+    min_rng = [ins_setup[inst][5] for inst in insts]
+    dt_strat1 = strat_dt.DTTrader('DT1', under_dt, vol_dt, trade_unit = units_dt,
                                  ratios = ratios, lookbacks = lookbacks, 
                                  agent = None, daily_close = daily_close, 
-                                 email_notify = [])
-#     ins_setup = {'rb1510':(1,0.6, 0.5, 4, False),
-#                 'l1509' :(0,0.5, 0.5, 1, False),
-#                 'pp1509':(0,0.5, 0.5, 1, False),
-#                 'TA509' :(0,0.4, 0.5, 2, False),
-#                 'MA509' :(-1,0.5, 0.5, 2, False),
-#                 'jd1509':(2,0.4, 0.5, 2, False),
-#                 'a1509' :(2,0.4, 0.5, 2, False),
-#                 'SR509' :(1,0.6, 0.5, 1, False),
-#                 #'m1509':(2,0.3, 0.5, 2, False),
-#                 #'RM509' :(-1,0.3, 0.5, 2, False),                
-# #                'ru1509':(0, 0.5, 1, False),
-# #                'i1509' :(2, 0.3, 1, False),
-#                 }
-    ins_setup = {'m1509':2,
-                'RM509': 2,
-                'rb1510':2,
-                #'y1509': 1, 
-                #'l1509': 1,
-                #'pp1509':1,
-                #'ru1509':1,
-                'TA509' :1,
-                #'MA509' :1,
-                #'au1506':1,
-                'i1509' :1}
+                                 email_notify = [], ma_win = 10, min_rng = min_rng)
+
+    ins_setup ={'m1601':  (0, 0.7, 0.0, 2, False, 0.004),
+                'RM601':  (0, 0.6, 0.0, 2, False, 0.004),
+                'y1601':  (0, 0.6, 0.0, 1, False, 0.004),
+                'p1601':  (0, 0.9, 0.0, 1, False, 0.004),
+                'a1601' : (0, 0.8, 0.0, 2, False, 0.004),
+                'rb1601': (0, 0.6, 0.0, 3, False, 0.004),
+                'l1601':  (0, 0.7, 0.0, 3, False, 0.004),
+                'pp1601': (0, 0.6, 0.0, 2, False, 0.004),
+                'TA601' : (0, 1.0, 0.0, 2, False, 0.004),
+                'MA601' : (0, 0.8, 0.0, 3, False, 0.004),
+                'jd1601': (4, 0.3, 0.0, 3, False, 0.004),
+                'SR601':  (1, 0.8, 0.0, 1, False, 0.004),
+                'TF1512': (2, 0.6, 0.0, 1, False, 0.0),
+                'i1601' : (2, 0.45,0.0, 1, False, 0.004),
+                }
     insts = ins_setup.keys()
-    units_tl = [ins_setup[inst] for inst in insts]
+    units_dt = [ins_setup[inst][3] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][4] for inst in insts]
+    min_rng = [ins_setup[inst][5] for inst in insts]
+    dt_strat2 = strat_dt.DTTrader('DT2', under_dt, vol_dt, trade_unit = units_dt,
+                                 ratios = ratios, lookbacks = lookbacks,
+                                 agent = None, daily_close = daily_close,
+                                 email_notify = [], ma_win = 10, min_rng = min_rng)
+    ins_setup = {'m1601': (0, 0.8, 0.0, 2, False),
+                 'RM601':  (0, 0.8, 0.0, 2, False),
+                 'y1601':  (0, 0.9, 0.0, 2, False),
+                 'p1601':  (1, 1.0, 0.0, 2, False),
+                 'a1601':  (1, 0.9, 0.0, 3, False),
+                 'rb1601': (2, 0.5, 0.0, 5, False),
+                 'TA601' : (1, 0.7, 0.0, 3, False),
+                 'MA601' : (1, 0.7, 0.0, 5, False),
+                 'SR601' : (2, 0.9, 0.0, 3, False),
+                 'i1601' : (4, 0.4, 0.0, 1, False),
+                 'ag1512': (1, 0.8, 0.0, 2, False),
+                }
+    insts = ins_setup.keys()
+    units_dt = [ins_setup[inst][3] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][4] for inst in insts]
+    dtsplit_strat1 = dt_split.DTSplitTrader('DTSp1', under_dt, vol_dt, trade_unit = units_dt,
+                                 ratios = ratios, lookbacks = lookbacks,
+                                 agent = None, daily_close = daily_close, ma_win = 10,
+                                 email_notify = [], min_rng = [0.004])
+    ins_setup = {'m1601':  (0, 1.0, 0.0, 2, False),
+                 'RM601':  (0, 1.0, 0.0, 2, False),
+                 'y1601':  (0, 1.0, 0.0, 2, False),
+                 'p1601':  (1, 1.1, 0.0, 2, False),
+                 'a1601':  (1, 1.1, 0.0, 3, False),
+                 'rb1601': (0, 0.9, 0.0, 5, False),
+                 'TA601' : (1, 0.9, 0.0, 3, False),
+                 'MA601' : (1, 0.9, 0.0, 5, False),
+                 'SR601' : (4,0.45, 0.0, 3, False),
+                 'i1601' : (4, 0.5, 0.0, 1, False),
+                 'ag1512': (1, 1.1, 0.0, 2, False),
+                }
+    insts = ins_setup.keys()
+    units_dt = [ins_setup[inst][3] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][4] for inst in insts]
+    dtsplit_strat2 = dt_split.DTSplitTrader('DTSp2', under_dt, vol_dt, trade_unit = units_dt,
+                                 ratios = ratios, lookbacks = lookbacks,
+                                 agent = None, daily_close = daily_close, ma_win = 10,
+                                 email_notify = [], min_rng = [0.004])
+    ins_setup = {'i1601': [1, 1, 2],
+                 'TA601': [2, 2, 2],
+                 #'bu1512':[2, 1, 1],
+                 }
+    insts = ins_setup.keys()
+    units_tl = [ins_setup[inst][2] for inst in insts]
     under_tl = [[inst] for inst in insts]
     vol_tl = [[1] for inst in insts]
-    tl_strat = strat_tl.TurtleTrader('ProdTL', under_tl, vol_tl, trade_unit = units_tl,
-                                 agent = None, email_notify = []) 
-    strategies = [dt_strat, tl_strat]
+    trail_loss = [ins_setup[inst][0] for inst in insts]
+    max_pos = [ins_setup[inst][1] for inst in insts]
+    tl_strat1 = strat_tl.TurtleTrader('TL1', under_tl, vol_tl, trade_unit = units_tl,
+                                    agent = None, email_notify = [],
+                                     windows = [5, 15],
+                                     max_pos = max_pos,
+                                     trail_loss = trail_loss)
+    ins_setup = {'j1601': [1, 2, 1],
+                 'TC601': [2, 4, 1],
+                 #'bu1512' :[2, 1, 1],
+                 }
+    insts = ins_setup.keys()
+    units_tl = [ins_setup[inst][2] for inst in insts]
+    under_tl = [[inst] for inst in insts]
+    vol_tl = [[1] for inst in insts]
+    trail_loss = [ins_setup[inst][0] for inst in insts]
+    max_pos = [ins_setup[inst][1] for inst in insts]
+    tl_strat2 = strat_tl.TurtleTrader('TL2', under_tl, vol_tl, trade_unit = units_tl,
+                                    agent = None, email_notify = [],
+                                    windows = [10, 20],
+                                    max_pos = max_pos,
+                                    trail_loss = trail_loss )
+    strategies = [dt_strat1, dt_strat2, tl_strat1, tl_strat2]
+    folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
-                 'folder': 'C:\\dev\\src\\ktlib\\pythonctp\\pyctp\\', \
-                 'daily_data_days':21, \
-                 'min_data_days':1 }
+                 'folder': folder, \
+                 'daily_data_days':22, \
+                 'min_data_days':5 }
 
     myApp = MainApp(name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = False)
     myGui = Gui(myApp)
