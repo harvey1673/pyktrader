@@ -1,0 +1,264 @@
+/*[[
+	Name := ASCTrend2
+	Author := C0Rpus - big thanks CHANGE2002, STEPAN and SERSH
+	Notes := ASCTrend2 3.0 Open Source
+	Separate Window := No
+	First Color := Aqua
+	First Draw Type := Symbol
+	First Symbol := 160
+	Use Second Data := Yes
+	Second Color := Fuchsia
+	Second Draw Type := Symbol
+	Second Symbol := 160
+]]*/
+
+Inputs: RISK(3),MONYRISK(2.0),AllBars(500);
+Variables: value2(1),value3(18),value4(0),value5(0),value6(0),value7(0),value8(0),value9(0);
+Variables: value10(10),value11(10000),value12(0),value13(0),value14(0),value19(0);
+Variables: value4_1(0),value4_2(0),value9_1(0),value10_1(0),value11_1(0),value12_1(0);
+Variables: TrueCount(0),Counter(0),DCounter(0),Range(0),AvgRange(0),AvgRange_1(0),AvgRange_2(0);
+Variables: MRO1(0),MRO2(0),MRO3(0),MRO4(0);
+Variables: val1(0),val2(0),shift(0),NumBars(0);
+// 576
+
+SetLoopCount(0);
+
+If Bars<AllBars Then NumBars=Bars-11 Else NumBars=AllBars;
+
+For shift=NumBars DownTo 0 Begin
+	// -----
+	Counter=shift;
+	Range=0;
+	AvgRange=0;
+	For Counter=shift To shift+9
+		{AvgRange=AvgRange+Abs(High[Counter]-Low[Counter]);};
+	Range=AvgRange/10;
+	// -----
+	If shift=AllBars Then
+		{value2=1; value3=18; value10=10000; value10_1=0;
+		value19=MONYRISK*Range*Point;
+		value2=RISK;
+		value3=18+3*value2;
+		value9=0;
+		};
+	// -----
+	//value11=UserFunction("AverageClose",9,shift);
+	Counter=shift;
+	AvgRange=0;
+	For Counter=shift To shift+9-1
+		{AvgRange=AvgRange+Close[Counter];};
+	value11=AvgRange/9;
+	// -----
+	//value12=UserFunction("AverageClose",value3,shift);
+	Counter=shift;
+	AvgRange=0;
+	For Counter=shift To shift+value3-1
+		{AvgRange=AvgRange+Close[Counter];};
+	value12=AvgRange/value3;
+	// -----
+	value13=Range;
+	// -----
+	//value4=UserFunction("JESSD",High[shift],Low[shift],High[shift+value2],Low[shift+value2],Close[shift+value2]);
+	AvgRange=(High[shift]+Low[shift])/2.0;
+	If Close[shift+value2]<AvgRange Then
+		{value4=2*AvgRange-Low[shift+value2];}
+	Else
+		{value4=2*AvgRange-High[shift+value2];};
+	// -----
+	Counter=shift;
+	TrueCount=0;
+	While Counter<shift+2 And TrueCount<1
+		{//value4=UserFunction("JESSD",High[Counter],Low[Counter],High[Counter+value2],Low[Counter+value2],Close[Counter+value2]);
+		 AvgRange=(High[Counter]+Low[Counter])/2.0;
+		 If Close[Counter+value2]<AvgRange Then
+		 	{value4=2*AvgRange-Low[Counter+value2];}
+		 Else
+		 	{value4=2*AvgRange-High[Counter+value2];};
+		 value4=Normalize(value4,2);
+		 //value4_1=UserFunction("JESSD",High[Counter+1],Low[Counter+1],High[Counter+value2],Low[Counter+value2],Close[Counter+value2]);
+		 AvgRange_1=(High[Counter+1]+Low[Counter+1])/2.0;
+		 If Close[Counter+1+value2]<AvgRange_1 Then
+		 	{value4_1=2*AvgRange_1-Low[Counter+1+value2];}
+		 Else
+		 	{value4_1=2*AvgRange_1-High[Counter+1+value2];};
+		 value4_1=Normalize(value4_1,2);
+		 //value4_2=UserFunction("JESSD",High[Counter+2],Low[Counter+2],High[Counter+value2],Low[Counter+value2],Close[Counter+value2]);
+		 AvgRange_2=(High[Counter+2]+Low[Counter+2])/2.0;
+		 If Close[Counter+2+value2]<AvgRange_2 Then
+		 	{value4_2=2*AvgRange_2-Low[Counter+2+value2];}
+		 Else
+		 	{value4_2=2*AvgRange_2-High[Counter+2+value2];};
+		 value4_2=Normalize(value4_2,2);
+		If (value4>value4_1 And value4_1<value4_2) Then TrueCount=TrueCount+1;
+		Counter=Counter+1;
+		};
+	If TrueCount>=1 Then MRO1=Counter-shift-1 Else MRO1=-1;
+	// -----
+	Counter=shift;
+	TrueCount=0;
+	While Counter<shift+2 And TrueCount<1
+		{//value4=UserFunction("JESSD",High[Counter],Low[Counter],High[Counter+value2],Low[Counter+value2],Close[Counter+value2]);
+		 AvgRange=(High[Counter]+Low[Counter])/2.0;
+		 If Close[Counter+value2]<AvgRange Then
+		 	{value4=2*AvgRange-Low[Counter+value2];}
+		 Else
+		 	{value4=2*AvgRange-High[Counter+value2];};
+		 value4=Normalize(value4,2);
+		 //value4_1=UserFunction("JESSD",High[Counter+1],Low[Counter+1],High[Counter+value2],Low[Counter+value2],Close[Counter+value2]);
+		 AvgRange_1=(High[Counter+1]+Low[Counter+1])/2.0;
+		 If Close[Counter+1+value2]<AvgRange_1 Then
+		 	{value4_1=2*AvgRange_1-Low[Counter+1+value2];}
+		 Else
+		 	{value4_1=2*AvgRange_1-High[Counter+1+value2];};
+		 value4_1=Normalize(value4_1,2);
+		 //value4_2=UserFunction("JESSD",High[Counter+2],Low[Counter+2],High[Counter+value2],Low[Counter+value2],Close[Counter+value2]);
+		 AvgRange_2=(High[Counter+2]+Low[Counter+2])/2.0;
+		 If Close[Counter+2+value2]<AvgRange_2 Then
+		 	{value4_2=2*AvgRange_2-Low[Counter+2+value2];}
+		 Else
+		 	{value4_2=2*AvgRange_2-High[Counter+2+value2];};
+		 value4_2=Normalize(value4_2,2);
+		If (value4<value4_1 And value4_1>value4_2) Then TrueCount=TrueCount+1;
+		Counter=Counter+1;
+		};
+	If TrueCount>=1 Then MRO2=Counter-shift-1 Else MRO2=-1;
+	// -----
+	//value4_1=UserFunction("JESSD",High[shift+1],Low[shift+1],High[shift+1+value2],Low[shift+1+value2],Close[shift+1+value2]);
+	AvgRange_1=(High[shift+1]+Low[shift+1])/2.0;
+	If Close[shift+1+value2]<AvgRange_1 Then
+		{value4_1=2*AvgRange_1-Low[shift+1+value2];}
+	Else
+		{value4_1=2*AvgRange_1-High[shift+1+value2];};
+	// -----
+	If (MRO1>-1 And Low[shift+1]>value4_1) Then value5=value4_1-value13;
+	If (MRO2>-1 And High[shift+1]<value4_1) Then value6=value4_1+value13;
+	// -----
+	//value11_1=UserFunction("AverageClose",9,shift+1);
+	Counter=shift;
+	AvgRange=0;
+	For Counter=shift+1 To shift+1+9-1
+		{AvgRange=AvgRange+Close[Counter];};
+	value11_1=AvgRange/9;
+	// -----
+	//value12_1=UserFunction("AverageClose",value3,shift+1);
+	Counter=shift;
+	AvgRange=0;
+	For Counter=shift+1 To shift+1+value3-1
+		{AvgRange=AvgRange+Close[Counter];};
+	value12_1=AvgRange/value3;
+	// -----
+	If (value11_1<value12_1 And value11>value12) Then
+		{//value5=UserFunction("TrueLow",shift)-value13;
+		If Close[shift+1]<Low[shift] Then
+			{value5=Close[shift+1]-value13;}
+		Else
+			{value5=Low[shift]-value13;};
+		};
+	If (value11_1>value12_1 And value11<value12) Then
+		{//value5=UserFunction("TrueHigh",shift)+value13;
+		If Close[shift+1]>High[shift] Then
+			{value5=Close[shift+1]+value13;}
+		Else
+			{value5=High[shift]+value13;};
+		};
+	// -----
+	If Abs(Open[shift]-Close[shift+1])>=1.618*value13 Then
+		{If value11>value12 Then value5=Low[shift]-value13;
+		 If value11<value12 Then value14=High[shift]+value13;
+		};
+	// -----
+	//value7=UserFunction("BS105",Low[shift],2.40,value13,value9);
+	If Low[shift]-2.40*value13<value9 Then
+		{value7=value9;}
+	Else
+		{value7=Low[shift]-2.40*value13;};
+	// -----
+	//value8=UserFunction("SS105",High[shift],2.40,value13,value10);
+	If High[shift]+2.40*value13>value10 Then
+		{value8=value10;}
+	Else
+		{value8=High[shift]+2.40*value13;};
+	// -----
+	//value9=UserFunction("BS0",Low[shift],60,value7,RISK,value19);
+	value9=value7;
+	// -----
+	//value10=UserFunction("SS0",High[shift],60,value8,RISK,value19);
+	value10=value8;
+	// -----
+	If Low[shift]-value9>value19/Point Then value9=Low[shift]-(1.50+0.1*Risk)*value13;
+	If value10-High[shift]>value19/Point Then value10=High[shift]+(1.50+0.1*Risk)*value13;
+	If value11>=value12 And value5>=value9 Then value9=value5;
+	If value11<=value12 And value6<=value10 Then value10=value6;
+	If value11<=value12 And value5<=value9 Then value9=value5;
+	If value11>=value12 And value6>=value10 Then value10=value6;
+	// -----
+	Counter=shift;
+	TrueCount=0;
+	While Counter<shift+2 And TrueCount<2
+		{//value11=UserFunction("AverageClose",9,Counter);
+		DCounter=Counter;
+		AvgRange=0;
+		For DCounter=Counter To Counter+9-1
+			{AvgRange=AvgRange+Close[DCounter];};
+		value11=AvgRange/9;
+		//value12=UserFunction("AverageClose",value3,Counter);
+		DCounter=Counter;
+		AvgRange=0;
+		For DCounter=Counter To Counter+value3-1
+			{AvgRange=AvgRange+Close[DCounter];};
+		value12=AvgRange/value3;
+		If value11>=value12 Then TrueCount=TrueCount+1;
+		Counter=Counter+1;
+		};
+	If TrueCount>=2 Then MRO3=Counter-shift-1 Else MRO3=-1;
+	// -----
+	Counter=shift;
+	TrueCount=0;
+	While Counter<shift+2 And TrueCount<2
+		{//value11=UserFunction("AverageClose",9,Counter);
+		DCounter=Counter;
+		AvgRange=0;
+		For DCounter=Counter To Counter+9-1
+			{AvgRange=AvgRange+Close[DCounter];};
+		value11=AvgRange/9;
+		//value12=UserFunction("AverageClose",value3,Counter);
+		DCounter=Counter;
+		AvgRange=0;
+		For DCounter=Counter To Counter+value3-1
+			{AvgRange=AvgRange+Close[DCounter];};
+		value12=AvgRange/value3;
+		If value11<=value12 Then TrueCount=TrueCount+1;
+		Counter=Counter+1;
+		};
+	If TrueCount>=2 Then MRO4=Counter-shift-1 Else MRO4=-1;
+	// -----
+	If (MRO3>-1 And value9<=value9_1) Then value9=value9_1;
+	If (MRO4>-1 And value10>=value10_1) Then value10=value10_1;
+	// -----
+	//value11=UserFunction("AverageClose",9,shift);
+	Counter=shift;
+	AvgRange=0;
+	For Counter=shift To shift+9-1
+		{AvgRange=AvgRange+Close[Counter];};
+	value11=AvgRange/9;
+	// -----
+	//value12=UserFunction("AverageClose",value3,shift);
+	Counter=shift;
+	AvgRange=0;
+	For Counter=shift To shift+value3-1
+		{AvgRange=AvgRange+Close[Counter];};
+	value12=AvgRange/value3;
+	// -----
+	val1=0;
+	val2=0;
+	If (value9>0 And value11>=value12 And value9<=High[shift]) Then
+		{val1=value9;};
+	If (value10>0 And value10<1000000000 And value11<=value12 And value10>=Low[shift]) Then
+		{val2=value10;};
+	// -----
+	value9_1=value9;
+	value10_1=value10;
+	SetIndexValue(shift,val1);
+	SetIndexValue2(shift,val2);
+	// -----
+End;
