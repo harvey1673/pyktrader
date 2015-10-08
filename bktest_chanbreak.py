@@ -44,19 +44,23 @@ def chanbreak_sim( mdf, config):
     tcost = config['trans_cost']
     unit = config['unit']
     k = config['scaler']
+    d_close = config['daily_close']
     marginrate = config['marginrate']
     offset = config['offset']
     win = config['win']
     chan_func = config['channel_func']
+    no_trade_set = config['no_trade_set']
     upper_chan_func = chan_func[0]
     lower_chan_func = chan_func[1]
     entry_chan = win    
     exit_chan = int(entry_chan/k[1])
     xdf['H1'] = upper_chan_func(xdf, entry_chan).shift(1)
     xdf['L1'] = lower_chan_func(xdf, entry_chan).shift(1)
-    xdf['ATR'] = dh.ATR(xdf, exit_chan).shift(1)
-	df = mdf.join(xdf, how = 'left').fillna(method='ffill')
-	df['date'] = df.index.date
+    xdf['H2'] = upper_chan_func(xdf, exit_chan).shift(1)
+    xdf['L2'] = lower_chan_func(xdf, exit_chan).shift(1)
+    xdf['ATR'] = dh.ATR(xdf, entry_chan).shift(1)
+    df = mdf.join(xdf, how = 'left').fillna(method='ffill')
+    df['date'] = df.index.date
     ll = df.shape[0]
     df['pos'] = pd.Series([0]*ll, index = df.index)
     df['cost'] = pd.Series([0]*ll, index = df.index)
@@ -76,7 +80,7 @@ def chanbreak_sim( mdf, config):
         if np.isnan(mslice.ATR):
             continue
         if (min_id >=config['exit_min']):
-            if (pos!=0) and (d == end_d):
+            if (pos!=0) and ((d == end_d) or (d_close)):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
@@ -120,7 +124,7 @@ def chanbreak_sim( mdf, config):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
     
-def run_sim(start_date, end_date):
+def run_sim(start_date, end_date, daily_close):
     commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,10,1)] * 12 + \
                 [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
@@ -145,6 +149,7 @@ def run_sim(start_date, end_date):
               'unit': 1,
               'scaler': (0.5, 2),
               'channel_func': [dh.DONCH_H, dh.DONCH_L],
+              'daily_close': daily_close,
               'file_prefix': file_prefix}        
     freqs = [3, 5, ]
     windows = [20, 40, 60, 120, 270]
@@ -154,17 +159,26 @@ def run_sim(start_date, end_date):
         config['nearby'] = 1 
         config['start_min'] = 1600
         config['exit_min'] = 2055
+        config['no_trade_set'] = range(300, 302) + range(1500, 1502) + range(2058, 2100)
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
-        elif asset in ['IF']:
-            config['start_min'] = 1520
-            config['exit_min'] = 2112
-            config['rollrule'] = '-1b'    
+        elif asset in ['IF', 'IH', 'IC']:
+            config['rollrule'] = '-2b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+        elif asset in ['au', 'ag']:
+            config['rollrule'] = '-25b'
+        elif asset in ['TF', 'T']:
+            config['rollrule'] = '-20b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
         chanbreak( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
     args = sys.argv[1:]
+    if len(args) < 3:
+        d_close = False
+    else:
+        d_close = (int(args[2])>0)
     if len(args) < 2:
         end_d = datetime.date(2015,1,23)
     else:
@@ -173,5 +187,4 @@ if __name__=="__main__":
         start_d = datetime.date(2013,1,2)
     else:
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-    run_sim(start_d, end_d)
-    pass
+    run_sim(start_d, end_d, d_close)

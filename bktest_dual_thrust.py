@@ -50,6 +50,7 @@ def dual_thrust_sim( ddf, mdf, config):
     unit = config['unit']
     SL = config['stoploss']
     min_rng = config['min_range']
+    no_trade_set = config['no_trade_set']
     if win == -1:
         tr= pd.concat([ddf.high - ddf.low, ddf.close - ddf.close.shift(1)], 
                        join='outer', axis=1).max(axis=1).shift(1)
@@ -80,13 +81,14 @@ def dual_thrust_sim( ddf, mdf, config):
         min_id = agent.get_min_id(dd)
         d = dd.date()
         dslice = ddf.ix[d]
+        if min_id in no_trade_set or np.isnan(dslice.TR):
+            continue
+
         if len(curr_pos) == 0:
             pos = 0
         else:
             pos = curr_pos[0].pos
-        mdf.ix[dd, 'pos'] = pos    
-        if np.isnan(dslice.TR):
-            continue
+        mdf.ix[dd, 'pos'] = pos
         d_open = dslice.open
         if (prev_d < d):
             d_open = mslice.open
@@ -171,13 +173,13 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['SR', 'ru', 'CF', 'i', 'j', 'jm', 'cu', 'al', 'zn', 'ag', 'au', 'IF', 'TF']
+    sim_list = ['m', 'RM', 'y', 'p', 'a', 'l', 'pp', 'TA', 'SR', 'rb', 'TF', 'i']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test2/DTmin_'
+    file_prefix = test_folder + 'test/DT_nontrade_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -187,29 +189,30 @@ def run_sim(start_date, end_date, daily_close = False):
               'close_daily': daily_close, 
               'unit': 1,
               'stoploss': 0.0,
-              'min_range': 0.004,
+              'min_range': 0.00,
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.5, 0, 0.5), (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), \
-                  (0.9, 0, 0.5), (1.0, 0, 0.5), (1.1, 0, 0.5), (1.2, 0, 0.5), \
-                  (0.5, 1, 0),   (0.6, 1, 0),   (0.7, 1, 0),   (0.8, 1, 0),   \
-                  (0.9, 1, 0),   (1.0, 1, 0),   (1.1, 1, 0),   (1.2, 1, 0),   \
-                  (0.25, 2, 0),  (0.3, 2, 0),   (0.4, 2, 0),   (0.5, 2, 0),   \
-                  (0.2, 4, 0),   (0.25, 4, 0),  (0.3, 4, 0),   (0.4, 4, 0) ]
+    scenarios = [ (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), (0.9, 0, 0.5), (1.0, 0, 0.5), (1.1, 0, 0.5), (1.2, 0, 0.5),\
+                  (0.6, 1, 0.0), (0.7, 1, 0.0), (0.8, 1, 0.0), (0.9, 1, 0.0), (1.0, 1, 0.0), (1.1, 1, 0.0), (1.2, 1, 0.0),\
+                  (0.25, 2, 0),  (0.3, 2, 0),   (0.35, 2, 0),  (0.4, 2, 0),   (0.45, 2, 0),  (0.5, 2, 0),   (0.6, 2, 0),  \
+                  (0.2, 4, 0),   (0.25,4, 0),   (0.3,  4, 0),  (0.35,4, 0),   (0.4,  4, 0) ]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
         config['rollrule'] = '-50b'
         config['exit_min'] = 2055
+        config['no_trade_set'] = range(300, 302) + range(1500, 1502) + range(2058, 2100)
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
         elif asset in ['IF', 'IH', 'IC']:
             config['rollrule'] = '-2b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
         elif asset in ['au', 'ag']:
             config['rollrule'] = '-25b'
         elif asset in ['TF', 'T']:
             config['rollrule'] = '-20b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
         dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config)
     return
 
