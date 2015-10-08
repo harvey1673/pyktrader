@@ -1,0 +1,356 @@
+Params
+	Bool bInitStatus(false);//初始化标志，修改初始仓位时需设置为True
+	Numeric InitMyRealMp(0);//初始当前时段仓位，正数表示空单，负数表示多单
+	Numeric InitPreMyRealMp(0);//初始上一时段仓位，正数表示空单，负数表示多单
+	Numeric FirstGrid(5);//第一格的间距，点数
+	Numeric TotalGrids(10);//总网格数，即最大持仓数
+	Numeric GridInterval(5);//网格间距，点数
+	Numeric WinGrid(5);//盈利点数
+	Numeric EveryLots(1);//每次开仓手数
+	Numeric OffSet(1);//委托价偏差，默认买卖价偏差1个滑点
+	Numeric ExitOnCloseMins(14.55);//收盘平仓时间
+	Numeric StyleChangeGrid(3);//默认震荡行情（含三格）为网格交易，四格及以上为反网格交易
+
+Vars
+	NumericSeries MidLine;
+	Numeric MinPoint;
+	Numeric Askline;
+	Numeric BidLine;
+	Numeric RealMidLine;
+	Numeric MyRealMp(0);
+	Numeric TmpGridIndex;
+	Numeric qcbz;//1可以清仓，0不再清仓
+	Bool tradetime;
+	Numeric TmpLots;
+	Numeric PreRealMidLine;
+	Numeric PreMyRealMp;
+	Numeric myBuyPosition;
+	Numeric mySellPosition;
+	
+Begin
+	MyRealMp=GetGlobalVar(0);
+	qcbz=GetGlobalVar(1);
+	PreRealMidLine=GetGlobalVar(2);
+	PreMyRealMp=GetGlobalVar(3);
+	
+	If(BarStatus==0 And (MyRealMp==InvalidNumeric||bInitStatus))
+	{
+		MyRealMp=InitMyRealMp;
+		PreMyRealMp=InitPreMyRealMp;
+	}
+	
+	If(Time==0.090000 or Time==0.091500 or Time==0.093000 or Time==0.094500
+	or Time==0.100000 or Time==0.103000 or Time==0.104500 or Time==0.110000
+	or Time==0.111500 or Time==0.133000 or Time==0.134500 or Time==0.140000
+	or Time==0.142000 or Time==0.144000)
+	{
+		MidLine=Open;
+		PreRealMidLine=MidLine[1];
+	}Else{
+		MidLine=MidLine[1];
+	}
+	
+	RealMidLine=MidLine;
+	MinPoint=MinMove*PriceScale;
+	Askline=Q_AskPrice;
+	BidLine=Q_BidPrice;
+	myBuyPosition=A_BuyPosition;
+	mySellPosition=A_SellPosition;
+	
+	If(Left(ExchangeName,4)=="上海")
+	{
+		tradetime=(Q_LastTime>=0.090000 And CurrentTime>0.090000 And CurrentTime<0.101500)
+		or (CurrentTime>0.103000 And CurrentTime<0.113000)
+		or (CurrentTime>0.133000 And CurrentTime<0.141000)
+		or (CurrentTime>0.142000 and CurrentTime<0.150000);
+	}Else{
+		tradetime=(Q_LastTime>=0.090000 And CurrentTime>0.090000 And CurrentTime<0.101500)
+		or (CurrentTime>0.103000 And CurrentTime<0.113000)
+		or (CurrentTime>0.133000 And CurrentTime<0.150000);
+	}
+	
+	
+	If(BarStatus==2 && A_AccountID<>"" && tradetime)
+	{
+		If(Q_AskPrice<=0||Q_BidPrice<=0) Return;
+		If(Q_BidPrice==Q_UpperLimit||Q_AskPrice==Q_LowerLimit) Return;
+		If(High==Low) Return;
+		//定时清仓，重置中线值
+		If(Time==0.091500 or Time==0.093000 or Time==0.094500
+		or Time==0.100000 or Time==0.103000 or Time==0.104500
+		or Time==0.110000 or Time==0.111500 or Time==0.133000
+		or Time==0.134500 or Time==0.140000 or Time==0.142000
+		or Time==0.144000)
+		{
+			If(qcbz==1)
+			{
+				If(mySellPosition>0 And MyRealMp>0 And A_SellProfitLoss>0)
+				{
+					TmpLots=mySellPosition;
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					If(PreMyRealMp>0) MyRealMp=MyRealMp+PreMyRealMp-IntPart(TmpLots/EveryLots);
+					Else If(PreMyRealMp<=0 And MyRealMp>0) MyRealMp=MyRealMp-IntPart(TmpLots/EveryLots);
+					mySellPosition=mySellPosition-TmpLots;
+				}
+				If(myBuyPosition>0 And MyRealMp<0 And A_BuyProfitLoss>0)
+				{
+					TmpLots=myBuyPosition;
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					If(PreMyRealMp<0) MyRealMp=MyRealMp+PreMyRealMp+IntPart(TmpLots/EveryLots);
+					Else If(PreMyRealMp>=0 And MyRealMp<0) MyRealMp=MyRealMp+IntPart(TmpLots/EveryLots);
+					myBuyPosition=myBuyPosition-TmpLots;
+				}
+				
+				If(mySellPosition>0 And PreMyRealMp>0)
+				{
+					TmpLots=Min(mySellPosition,PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					MyRealMp=MyRealMp+PreMyRealMp-IntPart(TmpLots/EveryLots);
+					mySellPosition=mySellPosition-TmpLots;
+				}
+				
+				If(mySellPosition>0 And PreMyRealMp<0)
+				{
+					TmpLots=Min(myBuyPosition,-1*PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					MyRealMp=MyRealMp+PreMyRealMp+IntPart(TmpLots/EveryLots);
+					mySellPosition=mySellPosition-TmpLots;
+				}
+				
+				PreMyRealMp=MyRealMp;
+				MyRealMp=0;
+				qcbz=0;//清仓后设置清仓标志为0，不再重复清仓
+			}
+		}Else qcbz=1;//其余时间，恢复允许清仓
+		
+		If(CurrentTime<ExitOnCloseMins/100 And qcbz<>0)
+		{
+			//上一时段留仓的处理---Start---
+			
+			//震荡与趋势交换，清仓---Start---
+			If(mySellPosition>0 And PreMyRealMp>0)
+			{
+				TmpGridIndex=Abs(BidLine-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And Askline>PreRealMidLine+FirstGrid*MinPoint)
+				//中线上方，震荡变趋势，清网格空单
+				{
+					TmpLots=Min(mySellPosition,PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp-IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(PreRealMidLine-Askline)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid And Askline<PreRealMidLine-FirstGrid*MinPoint)
+				//中线下方，趋势变震荡，清反网格空单
+				{
+					TmpLots=Min(mySellPosition,PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp-IntPart(TmpLots/EveryLots);
+				}
+			}Else If(myBuyPosition>0 And PreMyRealMp<0)
+			{
+				TmpGridIndex=Abs(BidLine-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid And Bidline>PreRealMidLine+FirstGrid*MinPoint)
+				//中线上方，趋势变震荡，清反网格空单
+				{
+					TmpLots=Min(myBuyPosition,-1*PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp+IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(PreRealMidLine-Askline)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And Bidline<PreRealMidLine-FirstGrid*MinPoint)
+				//中线下方，震荡变趋势，清网格空单
+				{
+					TmpLots=Min(myBuyPosition,-1*PreMyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					PreMyRealMp=PreMyRealMp+IntPart(TmpLots/EveryLots);
+				}
+			}
+			//震荡与趋势交换，清仓---End---
+			
+			//震荡行情的网格，止盈---Start---
+			If(PreMyRealMp>0 && Askline>PreRealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(AskLine-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=PreMyRealMp-1 And TmpGridIndex<=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					
+				}
+			}Else If(PreMyRealMp<0 && Bidline<PreRealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(PreRealMidLine-Bidline)/(GridInterval*MinPoint);
+				If(-1*TmpGridIndex>=PreMyRealMp+1 And TmpGridIndex<=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp+1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}
+			//震荡行情的网格，止盈---End---
+			
+			//趋势行情的反网格，止损---Start---
+			If(PreMyRealMp<0 And Bidline>PreRealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(Bidline-MinPoint-PreRealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=-1*PreMyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}Else If(PreMyRealMp>0 And AskLine<PreRealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(PreRealMidLine-AskLine+MinPoint)/(GridInterval);
+				If(TmpGridIndex<=PreMyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					PreMyRealMp=PreMyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}
+			//趋势行情的反网格，止损---End---
+			//上一时段留仓的处理---End---
+			
+			//震荡与趋势交换，清仓---Start---
+			If(mySellPosition>0 And MyRealMp>0)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And AskLine>RealMidLine+FirstGrid*MinPoint)
+				//中线上方，震荡变趋势，清网格空单
+				{
+					TmpLots=Min(mySellPosition,MyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					MyRealMp=MyRealMp-IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid And AskLine<RealMidLine-FirstGrid*MinPoint)
+				//中线下方，趋势变震荡，清反网格空单
+				{
+					TmpLots=Min(mySellPosition,MyRealMp*EveryLots);
+					A_SendOrder(Enum_Buy,Enum_Exit,TmpLots,Q_AskPrice+OffSet*MinPoint);
+					MyRealMp=MyRealMp-IntPart(TmpLots/EveryLots);
+				}
+			}Else If(myBuyPosition>0 And MyRealMp<0)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=StyleChangeGrid+1 And Bidline>RealMidLine+FirstGrid*MinPoint)
+				//中线上方，趋势变震荡，清反网格空单
+				{
+					TmpLots=Min(myBuyPosition,-1*MyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					MyRealMp=MyRealMp+IntPart(TmpLots/EveryLots);
+				}
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=StyleChangeGrid+1 And BidLine<RealMidLine-FirstGrid*MinPoint)
+				//中线下方，震荡变趋势，清网格空单
+				{
+					TmpLots=Min(myBuyPosition,-1*MyRealMp*EveryLots);
+					A_SendOrder(Enum_Sell,Enum_Exit,TmpLots,Q_BidPrice-OffSet*MinPoint);
+					MyRealMp=MyRealMp+IntPart(TmpLots/EveryLots);
+				}
+			}
+			//震荡与趋势交换，清仓---End---
+			
+			//震荡行情的网格，止盈---Start---
+			If(MyRealMp>0 && AskLine>RealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(AskLine-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=MyRealMp-1 And TmpGridIndex<=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}Else If(MyRealMp<0 && Bidline<RealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(RealMidLine-Bidline)/(GridInterval*MinPoint);
+				If(-1*TmpGridIndex>=MyRealMp+1 And TmpGridIndex<= StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}
+			//震荡行情的网格，止盈---End---
+			
+			//趋势行情的反网格，止损---Start---
+			If(MyRealMp<0 And Bidline>RealMidLine+FirstGrid*MinPoint And myBuyPosition>0)
+			{
+				TmpGridIndex=Abs(Bidline-MinPoint-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=-1*MyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Exit,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}Else If(MyRealMp>0 And AskLine<RealMidLine-FirstGrid*MinPoint And mySellPosition>0)
+			{
+				TmpGridIndex=Abs(RealMidLine-AskLine+MinPoint)/(GridInterval*MinPoint);
+				If(TmpGridIndex<=MyRealMp-1 And TmpGridIndex>=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Exit,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}
+			//趋势行情的反网格，止损---End---
+			
+			//震荡行情的网格，开仓---Start---
+			If(MyRealMp>=0 && Bidline>=RealMidLine+FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=MyRealMp+1 && MyRealMp<TotalGrids And TmpGridIndex<=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Entry,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}Else If(MyRealMp<=0 && AskLine<=RealMidLine-FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=-1*MyRealMp+1 && -1*MyRealMp<TotalGrids And TmpLots<=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Entry,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}
+			//震荡行情的网格，开仓---End---
+			
+			//趋势行情的反网格，开仓---Start---
+			If(MyRealMp<=0 && Bidline>RealMidLine+FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(Bidline-RealMidLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=-1*MyRealMp+1 && -1*MyRealMp<TotalGrids And TmpGridIndex>=StyleChangeGrid)
+				{
+					MyRealMp=MyRealMp-1;
+					A_SendOrder(Enum_Buy,Enum_Entry,EveryLots,Q_AskPrice+OffSet*MinPoint);
+				}
+			}Else If(MyRealMp>=0 && AskLine<RealMidLine-FirstGrid*MinPoint)
+			{
+				TmpGridIndex=Abs(RealMidLine-AskLine)/(GridInterval*MinPoint);
+				If(TmpGridIndex>=MyRealMp+1 && MyRealMp<TotalGrids And TmpLots>=StyleChangeGrid+1)
+				{
+					MyRealMp=MyRealMp+1;
+					A_SendOrder(Enum_Sell,Enum_Entry,EveryLots,Q_BidPrice-OffSet*MinPoint);
+				}
+			}
+			//趋势行情的反网格，开仓---End---
+			
+		}Else If(CurrentTime>ExitOnCloseMins/100)
+		{
+			If(mySellPosition>0)
+			{
+				A_SendOrder(Enum_Buy,Enum_Exit,mySellPosition,Q_AskPrice+OffSet*MinPoint);
+			}Else If(myBuyPosition>0)
+			{
+				A_SendOrder(Enum_Sell,Enum_Exit,myBuyPosition,Q_BidPrice-OffSet*MinPoint);
+			}
+			MyRealMp=0;
+			PreMyRealMp=0;
+		}
+	} 
+		
+	SetGlobalVar(0,MyRealMp);
+	SetGlobalVar(1,qcbz);
+	SetGlobalVar(2,PreRealMidLine);
+	SetGlobalVar(3,PreMyRealMp);
+	Commentary("本时段中线="+Text(RealMidLine));
+	Commentary("上时段中线="+Text(PreRealMidLine));
+	Commentary("本时段仓位="+Text(MyRealMp*EveryLots));
+	Commentary("上时段仓位="+Text(PreMyRealMp*EveryLots));
+	Commentary("当前时间="+TimeToString(CurrentTime));
+	Commentary("清仓标志="+Text(qcbz));
+End

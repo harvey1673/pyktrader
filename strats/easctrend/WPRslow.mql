@@ -1,0 +1,34 @@
+/*[[
+	Name := WPRslow
+	Author := OlegVS
+	Link := http://www.company.com/
+	Separate Window := Yes
+	First Color := Blue
+	First Draw Type := Histogram
+	First Symbol := 217
+	Use Second Data := Yes
+	Second Color := Red
+	Second Draw Type := Histogram
+	Second Symbol := 218
+	Minimum Chart Limits := -1.000000
+	Maximum Chart Limits := 1.000000
+]]*/
+inputs :P(54),n1(9),n2(49);
+
+Variable : shift(0);
+Variable : V1(0);
+Variable : V2(0);
+
+
+SetLoopCount(0);
+// loop from first bar to current bar (with shift=0)
+For shift = Bars-1 Downto 0 Begin
+V1=iWPR(P,shift)*iWPR(P,shift)/100;
+V2=Ceil(V1);
+If V2<n1 then
+	SetIndexValue(shift, V2);
+If V2>n2 then
+	SetIndexValue2(shift, -(V2));
+	
+End;
+

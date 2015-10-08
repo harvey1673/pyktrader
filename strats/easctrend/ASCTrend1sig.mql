@@ -1,0 +1,90 @@
+/*[[
+	Name := ASCTrend1sig
+	Author := C0Rpus - big thanks CHANGE2002, STEPAN and SERSH
+	Notes := ASCTrend1sig 3.0 Open Source
+	Separate Window := No
+	First Color := Fuchsia
+	First Draw Type := Symbol
+	First Symbol := 108
+	Use Second Data := Yes
+	Second Color := Aqua
+	Second Draw Type := Symbol
+	Second Symbol := 108
+]]*/
+Inputs: RISK(3),AllBars(500);
+Variables: value2(0),value3(0),value10(10),value11(0),x1(70),x2(30),i1(0);
+Variables: TrueCount(0),Counter(0),Range(0),AvgRange(0),MRO1(0),MRO2(0);
+Variables: val1(0),val2(0),shift(0),NumBars(500),AlertTime(0);
+Array: Table_value2[500,2](0);
+SetLoopCount(0);
+value10=3+RISK*2;
+x1=67+RISK;
+x2=33-RISK;
+value11=value10;
+If Bars<AllBars Then NumBars=Bars-11 Else NumBars=AllBars;
+//For shift=0 To AllBars Begin
+For shift=NumBars DownTo 0 Begin
+	Counter=shift;
+	Range=0;
+	AvgRange=0;
+	For Counter=shift To shift+9
+		{AvgRange=AvgRange+Abs(High[Counter]-Low[Counter]);
+		};
+	Range=AvgRange/10;
+	Counter=shift;
+	TrueCount=0;
+	While (Counter<shift+9 And TrueCount<1)
+		{If Abs(Open[Counter]-Close[Counter+1])>=Range*2.0 Then TrueCount=TrueCount+1;
+		Counter=Counter+1;
+		};
+	If TrueCount>=1 Then MRO1=Counter Else MRO1=-1;
+	Counter=shift;
+	TrueCount=0;
+	While (Counter<shift+6 And TrueCount<1)
+		{If Abs(Close[Counter+3]-Close[Counter])>=Range*4.6 Then TrueCount=TrueCount+1;
+		Counter=Counter+1;
+		};
+	If TrueCount>=1 Then MRO2=Counter Else MRO2=-1;
+	If MRO1>-1 Then value11=3 Else value11=value10;
+	If MRO2>-1 Then value11=4 Else value11=value10;
+	value2=100-Abs(iWPR(value11,shift)); // PercentR(value11=9)
+	Table_value2[shift,1]=shift;
+	Table_value2[shift,2]=value2;
+	val1=0;
+	val2=0;
+	value3=0;
+	If value2<x2 Then
+		{i1=1;
+		While (Table_value2[shift+i1,2]>=x2 And Table_value2[shift+i1,2]<=x1)
+			{i1=i1+1;};
+		If Table_value2[shift+i1,2]>x1 Then
+			{value3=High[shift]+Range*0.5;
+			val1=value3;
+			};
+		};
+	If value2>x1 Then
+		{i1=1;
+		While (Table_value2[shift+i1,2]>=x2 And Table_value2[shift+i1,2]<=x1)
+			{i1=i1+1;};
+		If Table_value2[shift+i1,2]<x2 Then
+			{value3=Low[shift]-Range*0.5;
+			val2=value3;
+			};
+		};
+	SetIndexValue(shift,val1);
+	SetIndexValue2(shift,val2);
+End;
+
+if CurTime > AlertTime then 
+{ 
+if val1 > 0 then 
+{ 
+Alert(Symbol, ", M", Period, ": SELL Signal."); 
+AlertTime = CurTime + (Period - mod(Minute, Period))*60; 
+}; 
+if val2 > 0 then 
+{ 
+Alert(Symbol, ", M", Period, ": BUY Signal."); 
+AlertTime = CurTime + (Period - mod(Minute, Period))*60; 
+}; 
+};

@@ -1,0 +1,293 @@
+日内交易头脑风暴低频策略汇总
+
+1、空中花园；
+
+2、日内分时段的处理，根据微观市场结构确定具体应用策略；
+
+3、日内区间突破系统；
+
+4、量化统计分时线与实时价格的最大乖离、辅助成交量；
+
+5、开盘10分钟突破；
+
+6、好几个突破模型，根据行情不同特点做不同的出场处理，做日内组合（详见日内百变万能）；
+
+7、轴心点系统；
+
+8、基于震荡思路的次日开、平仓不同阀值的振荡+突破系统；
+
+9、跨周期、共振系统，类似于三重滤网；
+
+10、形态分析、以日内前期高低点为压力、支撑，捕捉振荡反转；
+
+11、以波动性循环理论为依据，前几天振荡，赌单边；
+
+12、分时均价黄线系统；
+
+13、开盘价格毛刺套利系统，类似于夹板系统；
+
+14、开平全随机系统；
+
+15、随机开仓、根据盈亏比平仓；
+
+16、根据开盘、收盘均线差，是否大于N，决定入市；
+
+17、类似于隔山打牛的动量交易法；
+
+18、相关品种、外盘、热冷月或指数联动；
+
+19、流动性差的合约的钓鱼系统；
+
+20、陶醉与绝望结构；
+
+21、收敛盘整后的突破
+
+22、牛回头，也就是《天才机械操盘术》中的海浪交易系统，抓顺势回调；
+
+23、波动性突破；
+
+24、找笨大象；
+
+25、盈利时增加风险的反等价鞅系统，也就是浮盈不断加仓；
+
+26、成交量异常放大时、配合价格顶底分形的反向交易；
+
+27、有风控的网格交易法，最好是做价差或低波动性品种；
+
+28、经典技术形态的量化策略，比如：N形突破、K线形态的组合；
+
+29、策略有了，每次下注多少、品种策略之间如何布局？可以考虑采用等风险决定头寸法、可以考虑等合约价值法、可以考虑最佳收益风险比法、可以参考TB头寸系数、可以考虑等波动性百分比法；
+
+30、真正的交易圣杯，就在你的后院，日内交易的成功最终并不取决于你的策略，而是取决于科学的投资组合。在倡导程序化交易革命的同时，我们从来不曾否认交易的艺术性，建立市况监测指标体系，在适合的市场、适合的品种、适合的时机下、应用适合的策略，是最终实现稳定盈利，并由金融农民华丽转身为金融工业家的唯一路径
+
+
+炒单系统模式触发设计纲要十条
+
+炒单系统模式触发设计纲要十条
+
+一、陶醉与绝望结构（可选是否顺势）
+
+人性的弱点莫过于恐惧与贪婪，“秒杀”，往往是期市大炒手利用盘口的惯用伎俩，此时，很多人因贪婪而追涨，很多人因恐惧而止损，与此同时，主力炒手乘势止盈、甚至反做，再起一波反向行情。
+
+衡量陶醉与绝望结构，主要是以成交量的突兀与价格的快速行走速率为标准。流动性的缺失，即盘口报价出现脱档的现象，也是其中的一个非常易于鉴定的临床表现。
+
+二、基于盘口的大单减少
+
+据说，很多期市炒手，只看盘口，最多偶尔再关注一下裸K线。是否发生的盘口的大单减少，具体计算标准如下：
+
+⒈如果买、卖盘的报价未变，则分别累加买、卖盘的减少量，增加不计；
+
+⒉上述买卖盘的减少量，须与当时的成交量进行同步对比，并取最小值；理由是有些报单的减少，是因为撤单造成的，并非真实的盘口大单减少；
+
+⒊如果买、卖盘的报价上移或下移，则应当加上下移后的卖单，做为买盘大单减少量、应当加上上移后的买单，做为卖盘大单减少量，因此类挂单性质属于主动攻击盘。
+
+两档对冲时，可以考虑对比两档对冲的速度和力度，以衡量多、空方向。
+
+三、大单虚挂
+
+畸高的买、卖盘对比，往往更多时候给你带来的是一种错觉。比如，一个畸高的买单挂量，很有可能是主力炒手的诱多行为，而真正的方向是向下。具体的标准，因品种而异。此时的最佳交易策略，应当是追随主力炒手，在高位挂出卖单，等待其撤单落轿下行的后续动作。
+
+四、单向趋势炒单
+
+当某一方向的趋势明确、斜率适当时（我们往往以稳健的走势，来确认这是主力精明资金的行为），操作会变得异常简单。如果是升势，则不断地逢低多、逢高平；如果是跌势，则不断地逢高空、逢低平。此时，顺势陶醉与绝望结构只能作为平仓信号，而逆势的陶醉与绝望结构，则将构成千载难逢的绝佳高胜率建仓机会。
+
+五、平衡市的高抛低吸
+
+当价格不再连续创出新高、新低时，我们将确认平衡市况。此时的操作取决于震荡幅度的宽窄，如果太窄，则交易变得失去意义；如果稍宽，则可以预先挂单的形式，进行高抛低吸，中轨可作为获利平仓的位置。平衡市持续时间的长短，会决定阶段操作的成败，由平衡市重新发展为趋势市时，止损是必须的，也是必然的。
+
+六、动态高低点的波动性突破
+
+线性的高低点突破，较为呆板，其逻辑基础是期望市场的波动性水平与其预设的固定参数吻合，这本身就是一种不切实际的奢望。而动态高低点，则依据市场实际的波动性水平，动态调整参数，显然更具科学性。
+
+七、小区间窄幅突破
+
+趋势与振荡的价格波动性循环规律，应当是最靠谱的一种技术分析方法。可以视为是第六条的增强版。什么是窄幅的波动，需要根据不同品种的波动性水平，量身定制具体的标准。
+
+八、关键价格突破
+
+关键价格，在心理上具有绑定效应，也是主力资金制造价格波动的最大源动力。在一些很妖的品种上，如白糖，我们经常会发现这样一种现象，价格的高低点会被不断地突破，以期摧毁交易者的心理底线或触发止损。什么是关键价格：昨天、今天的开、高、低、收。对于当下的交易而言，最近的一次高、低点位置当然也非常重要。
+
+九、技术图表的形态分析
+
+技术图表的形态，可能真实的意义在于反映了参与市场各方的心理活动。比如：单针探底、双底或者其它类似于两阳一阴的K线组合。持仓量的增减，配合行情的走势，也可以构成各种鉴定行情性质的依据。
+
+十、无限深度行情的利用
+
+如果可以预知开盘前的集合竞价数据，我们则可以充分利用开盘前各方信息不对称的冲突，获得一个难得的套利交易机会，甚至获得单品种畸高、畸低的开盘价，以期在开盘后瞬间获利。
+
+如果可以清晰地获取盘口动态的无限深度行情，我们则可以根据买、卖盘的报量厚薄，依托实力雄厚的一边作为后盾，甚至以网格交易法布局下单，有侍无恐，何愁不胜？很多算法交易策略，也可因此应运而生，假如卖单很薄，我们则可以扫单的方式，一次打穿全部卖单，以获得卖方流动性缺失后，而带来的暴涨获利机会。
+
+
+Params   
+        Numeric endTime(14.55);                    //结束交易时间
+       Numeric RiskRatio(1);                       //风险率(0-100)
+       Numeric boLength(18);                       //突破周期
+       Numeric ATRLength(20);                      //平均波动周期
+        Numeric Quitlength(10);                     //离市周期
+        Numeric weightnumber(1);                    //加权参数
+        Numeric Limitednumber(3);                   //交易限制次数(能交易的次数为limitednumber+1次)
+    Bool Filtercondition(True);                 //入市过滤条件
+Vars
+    Numeric Minpoint;                           //最小变动单位
+        NumericSeries AvgTR;                        //ATR
+        Numeric F;                                  //表示市场波动性的F值
+        Numeric Capital;                            //入市资本
+        Numeric scale;                              //买卖规模
+        NumericSeries Passwayhi;                    //通道上轨
+        NumericSeries Passwaylo;                    //通道下轨
+        NumericSeries quithighprice;                //离市时判断需要的离市周期最高价
+        NumericSeries quitlowprice;                 //离市时判断需要的离市周期最低价
+        Numeric myEntryPrice;                       //开仓价格
+        Numeric myExitPrice;                        //平仓价格
+        NumericSeries tempnum(0);                   //临时计数器
+        Bool Sendorderthisbar(False);               //当前Bar是否有过交易
+        NumericSeries preEntryprice(0);             //前一次开仓的价格
+Begin
+        Minpoint=Minmove*PriceScale;
+        AvgTR=XAverage(TrueRange,ATRlength);
+        F=weightnumber*AvgTR[1];
+        Capital=Portfolio_CurrentCapital()+Portfolio_UsedMargin();
+        scale=(Capital*RiskRatio/100)/(F*ContractUnit()*BigPointValue());
+        scale=IntPart(scale);
+        
+        Passwayhi=HighestFC(High[1],boLength);
+        Passwaylo=LowestFC(Low[1],boLength);
+        
+        quitlowprice=LowestFC(Low[1],Quitlength);
+        quithighprice=HighestFC(High[1],Quitlength);
+        
+        Commentary("scale="+Text(scale));
+        Commentary("preEntryprice="+Text(preEntryprice));
+               
+        
+        If(Date!=currentdate)                       //只限于当日交易
+        {return;}                                 
+        If((Date!=Date[1])or(CurrentBar==0))
+        {
+        //当日的第一个Bar
+        preEntryprice=InvalidNumeric;
+        tempnum=Limitednumber;
+        return;
+        }
+        
+        If(tempnum[1]<1)
+        {
+        tempnum=limitednumber;
+        }
+        
+        //开仓
+If(time<endtime/100)
+{        
+        If(MarketPosition==0 And Filtercondition)
+        {
+            If(High>Passwayhi And scale>=1)
+                {
+                myEntryPrice=Min(high,passwayhi+minpoint);
+                myentryprice=IIF(myentryprice<open,open,myentryprice);
+                preentryprice=myentryprice;
+                Buy(scale,myentryprice);
+                sendorderthisbar=True;
+                }
+               
+                If(Low<passwaylo And scale>=1)
+                {
+                myentryprice=Max(low,passwaylo-Minpoint);
+                myentryprice=IIF(myentryprice>open,open,myentryprice);
+                preentryprice=myentryprice;
+                SellShort(scale,myentryprice);
+                sendorderthisbar=True;
+                }
+        }
+        
+        
+        If(Marketposition==1)
+        {
+            Commentary("quitlowprice="+Text(quitlowprice));
+                If(Low<quitlowprice)
+                {
+                    myexitprice=Max(low,quitlowprice-Minpoint);
+                        myexitprice=IIF(myexitprice>open,open,myexitprice);
+                        Sell(0,myexitprice);
+                        tempnum=limitednumber;
+                }Else
+                {
+                    tempnum=tempnum[1];
+                        If(preentryprice!=Invalidnumeric And scale>=1)
+                        {
+                            If((open>=preentryprice+0.5*F) And (tempnum>=1))
+                                {
+                                    myentryprice=open;
+                                        preentryprice=myentryprice;
+                                        Buy(scale,myentryprice);
+                                        sendorderthisbar=True;
+                                        tempnum=tempnum-1;
+                                }
+                                
+                                While((High>=preentryprice+0.5*F) And (tempnum>=1))
+                                {
+                                    myentryprice=preentryprice+0.5*F;
+                                        preentryprice=myentryprice;
+                                        Buy(scale,myentryprice);
+                                        sendorderthisbar=true;
+                                        tempnum=tempnum-1;
+                                }
+                        }
+                        
+                        If(low<=preentryprice-2*F And sendorderthisbar==false)
+                        {
+                        myexitprice=preentryprice-2*F;
+                        Sell(0,myexitprice);
+                        tempnum=limitednumber;
+                        }
+                }
+        }Else If(marketposition==-1)
+        {
+            Commentary("quithighprice="+Text(quithighprice));
+                If(high>quithighprice)
+                {
+                    myexitprice=Min(High,quithighprice+Minpoint);
+                        myexitprice=IIF(myexitprice<open,open,myexitprice);
+                        BuyToCover(0,myexitprice);
+                        tempnum=limitednumber;
+                }Else
+                {   tempnum=tempnum[1];
+                    If(preentryprice!=Invalidnumeric And scale>=1)
+                        {
+                            If((open<=preentryprice-0.5*F) And (tempnum>=1))
+                                {
+                                    myentryprice=Open;
+                                        preentryprice=myentryprice;
+                                        SellShort(scale,myentryprice);
+                                        sendorderthisbar=True;
+                                        tempnum=tempnum-1;
+                                }
+                                
+                                While((Low<=preentryprice-0.5*F) And (tempnum>=1))
+                                {
+                                    myentryprice=preentryprice-0.5*F;
+                                        preentryprice=myentryprice;
+                                        SellShort(scale,myentryprice);
+                                        sendorderthisbar=True;
+                                        tempnum=tempnum-1;
+                                }
+                        }
+                        
+                        
+                        If(High>=preentryprice+2*F And sendorderthisbar==False)
+                        {
+                            myexitprice=preentryprice+2*F;
+                                BuyToCover(0,myexitprice);
+                                tempnum=limitednumber;
+                        }
+                }
+        }
+}
+
+
+        If(Time==0.145500 && /*CurrentTime>0.145800 &&*/ MarketPosition<>0)  //收盘平仓用于5Min
+        {
+                Sell(0,Close);
+                BuyToCover(0,Close);
+        
+        }
+End

@@ -1,0 +1,60 @@
+/*[[
+	Name := NRTR 
+	Author := Copyright © 2003, Company
+	Link := http://www.company.com/
+	Separate Window := No
+	First Color := Red
+	First Draw Type := Line
+	First Symbol := 160
+	Use Second Data := Yes
+	Second Color := LimeGreen
+	Second Draw Type := Line
+	Second Symbol := 160
+]]*/
+
+//-----------------------------------------------------------------------
+Input : AveragePeriod(21);
+//----------------------------------------------------------------------
+Variable : bar(0);
+Variable : value(0);
+Variable : price(0);
+Variable : trend(0),dK(0), AvgRange(0),i(0);
+SetLoopCount(0);
+AvgRange=0;
+for i=1 To AveragePeriod {
+    AvgRange=AvgRange+Abs(High[i]-Low[i]);
+    };
+dK = AvgRange/AveragePeriod;
+if Close[Bars-1] > Open[Bars-1] then {
+   value = Close[Bars - 1] * (1 - dK);
+   trend = 1;
+   SetIndexValue2(Bars - 1, value);
+   };
+if Close[Bars-1] < Open[Bars-1] then {
+   value = Close[Bars - 1] * (1 + dK);
+   trend = -1;
+   SetIndexValue(Bars - 1, value);
+   };
+for bar = Bars - 2 downto 0 {
+    if trend = 1 then {
+       if Close[bar] > price then price = Close[bar];
+       value = price * (1 - dK);
+       if Close[bar] < value then {
+          price = Close[bar];
+          value = price * (1 + dK);
+          trend = -1;
+          };
+       };
+    if trend = -1 then {
+       if Close[bar] < price then price = Close[bar];
+       value = price * (1 + dK);
+       if Close[bar] > value then {
+          price = Close[bar];
+          value = price * (1 - dK);
+          trend = 1;
+          };
+       };
+if trend = -1 then SetIndexValue(bar, value);
+if trend = 1 then SetIndexValue2(bar, value);
+}; 
+// ----------------------

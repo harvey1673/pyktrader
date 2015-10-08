@@ -1,0 +1,104 @@
+/*[[
+Name := NRTR_WATR
+Author := Namux
+Notes := Trend indicator based on break of the price channel from KonKop
+Separate Window := No
+First Color := White
+First Draw Type := Line
+First Symbol := 160
+Use Second Data := Yes
+Second Color := Yellow
+Second Draw Type := Line
+Second Symbol := 160
+]]*/
+
+Input : ATRPeriod( 14 );
+Input : Coefficient( 4 );
+
+Variable : StartBar( 1000 );
+Variable : Shift( 0 );
+Variable : TrendUP( true );
+Variable : Extremum( 0 );
+Variable : ChannelWidth( 0 );
+Variable : TR( 0 );
+Array : Values[ 100 ]( 0 );
+Variable : Head( 0 );
+Variable : ATR( 0 );
+Variable : J( 0 );
+Variable : Weight( 0 );
+Variable : Curr( 0 );
+
+SetLoopCount( 0 );
+
+if close[ StartBar - 2 ] > close[ StartBar - 1 ] then
+TrendUP = true
+else
+TrendUP = false;
+
+Extremum = close[ StartBar - 2 ];
+
+For Shift = StartBar - 3 Downto 0 Begin
+
+TR = High[ Shift ] - Low[ Shift ];
+
+if ( abs( High[ Shift ] - Close[ Shift + 1 ]) > TR ) then TR = abs( High[ Shift ] - Close[ Shift + 1 ]);
+
+if ( abs( low[ Shift ] - Close[ Shift + 1 ]) > TR ) then TR = abs( low[ Shift ] - Close[ Shift + 1 ]);
+
+if Shift == StartBar - 3 then
+for J = 0 to ATRPeriod - 1
+{
+Values[ J ] = TR;
+};
+
+Values[ Head ] = TR;
+
+ATR = 0;
+Weight = ATRPeriod;
+Curr = Head;
+
+for J = 0 to ATRPeriod - 1
+{
+Atr += Values[ Curr ] * Weight;
+
+Weight -= 1;
+
+Curr -= 1;
+
+if Curr = -1 then Curr = ATRPeriod - 1;
+}
+
+ATR = ( 2 * ATR ) / ( ATRPeriod * ( ATRPeriod + 1 ));
+
+Head += 1;
+
+if Head = ATRPeriod then Head = 0;
+
+ChannelWidth = Coefficient * ATR;
+
+if TrendUP and ( low[ Shift ] < ( Extremum - ChannelWidth )) then begin
+TrendUP = false;
+Extremum = high[ Shift ];
+end;
+
+if ( not TrendUP ) and ( high[ Shift ] > ( Extremum + ChannelWidth )) then begin
+TrendUP = true;
+Extremum = low[ Shift ];
+End;
+
+if TrendUP and ( low[ Shift ] > Extremum ) then Extremum = low[ Shift ];
+if ( not TrendUP ) and ( high[ Shift ] < Extremum ) then Extremum = high[ Shift ];
+
+if TrendUP then
+{
+SetIndexValue( Shift, Extremum - ChannelWidth );
+SetIndexValue2( Shift, -1 );
+}
+else
+{
+SetIndexValue2( Shift, Extremum + ChannelWidth );
+SetIndexValue( Shift, -1 );
+};
+
+End;
+
