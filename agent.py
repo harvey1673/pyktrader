@@ -1227,6 +1227,14 @@ class Agent(object):
         if not self.eod_flag:
             self.run_eod()
         self.scur_day = newday
+        for inst in self.instruments:
+            d_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
+            df = self.day_data[inst]
+            self.day_data[inst] = df[df.index >= d_start]
+            m_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
+            for m in self.min_data[inst]:
+                mdf = self.min_data[inst][m]
+                self.min_data[inst][m] = mdf[mdf.index.date >= m_start]
         self.tick_id = 0
         self.timer_count = 0
         for inst in self.instruments:
@@ -1617,7 +1625,8 @@ class Agent(object):
                 self.trade_update(myorder) 
         else:
             self.qry_commands.append(self.fetch_order)
-    
+            self.qry_commands.append(self.fetch_order)
+
     ###辅助   
     def rsp_qry_position(self, event):
         pposition = event.dict['data']

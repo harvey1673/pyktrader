@@ -4,7 +4,6 @@ import pandas as pd
 import scipy.stats as stats
 
 def ohlcsum(df):
-    df = df.sort()
     return pd.Series([df.index[0], df['open'][0], df['high'].max(), df['low'].min(), df['close'][-1], df['volume'].sum()],
                   index = ['datetime', 'open','high','low','close','volume'])
 

@@ -127,7 +127,7 @@ def dual_thrust_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-            if (mslice.close >= buytrig) and (pos <=0 ):
+            if (mslice.high >= buytrig) and (pos <=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close+offset, dd)
                     tradeid += 1
@@ -142,7 +142,7 @@ def dual_thrust_sim( mdf, config):
                 curr_pos.append(new_pos)
                 pos = unit
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif (mslice.close <= selltrig) and (pos >=0 ):
+            elif (mslice.low <= selltrig) and (pos >=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close-offset, dd)
                     tradeid += 1
@@ -181,7 +181,7 @@ def run_sim(start_date, end_date, daily_close = False):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test2/DTsplit_cl_'
+    file_prefix = test_folder + 'test2/DTsplit_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'

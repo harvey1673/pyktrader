@@ -69,7 +69,7 @@ class DTSplitTrader(Strategy):
                     else:
                         pid = i
                 df = mdf[(mdf.index.date <= last_date)|(mdf['min_id'] < self.open_period[pid])]
-                post_df = mdf[(mdf.index.date >= last_date) & (mdf['min_id'] >= self.open_period[pid])]
+                post_df = mdf[(mdf.index.date > last_date) & (mdf['min_id'] >= self.open_period[pid])]
                 self.open_idx[idx] = pid
                 self.tday_open[idx] = post_df['open'][0]
             else:
@@ -119,7 +119,7 @@ class DTSplitTrader(Strategy):
     def on_bar(self, idx, freq):
         inst = self.underliers[idx][0]
         min_id = self.agent.cur_min[inst]['min_id']
-        curr_min = self.instruments[inst].last_update/1000
+        curr_min = self.agent.instruments[inst].last_update/1000
         pid = self.open_idx[idx]
         if pid < len(self.open_period)-1:
             if (self.open_period[pid+1] > min_id) and (self.open_period[pid+1] <= curr_min):

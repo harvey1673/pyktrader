@@ -201,7 +201,7 @@ def run_sim(start_date, end_date, daily_close = False):
         config['nearby'] = 1
         config['rollrule'] = '-50b'
         config['exit_min'] = 2055
-        config['no_trade_set'] = range(300, 302) + range(1500, 1502) + range(2058, 2100)
+        config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2058, 2100)
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
