@@ -545,11 +545,14 @@ class Gui(tk.Tk):
         self.strat_gui = {}
         self.volgrid_gui = {}
         self.volgrid_frame = {}
-        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap']
-        self.status_fields = ['Positions', 'Orders', 'Trades', 'Insts', 'ScurDay', 'EodFlag', 'Initialized', 'ProcLock', \
+        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap', \
+                             'TotalSubmittedLimit', 'SubmittedLimitPerInst', 'FailedOrderLimit']
+        self.status_fields = ['Positions', 'Orders', 'Trades', 'Insts', 'ScurDay', 'TickId', 'EodFlag', \
+                              'Initialized', 'ProcLock', 'TotalSubmitted', 'TotalCancelled', \
                               'CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
         self.field_types = {'ProcLock': 'bool',
                             'ScurDay' : 'date',
+                            'TickId'  : 'int',
                             'EodFlag' : 'bool',
                             'MarketOrderTickMultiple': 'int', 
                             'CancelProtectPeriod': 'int', 
@@ -561,7 +564,13 @@ class Gui(tk.Tk):
                             'Available':'float', 
                             'PnlTotal':'float',
                             'Initialized': 'bool',
-                            'QryInst': 'string'}
+                            'QryInst': 'string',
+                            'TotalSubmittedLimit': 'int',
+                            'SubmittedLimitPerInst': 'int',
+                            'FailedOrderLimit': 'int',
+                            'TotalSubmitted': 'int',
+                            'TotalCancelled': 'int',
+                            }
     
         for strat_name in self.app.agent.strategies:
             strat = self.app.agent.strategies[strat_name]
@@ -660,8 +669,9 @@ class Gui(tk.Tk):
         return
             
     def config_settings(self):
-        entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap']
-        label_fields = ['ScurDay', 'EodFlag', 'Initialized' ]
+        entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap', \
+                        'TotalSubmittedLimit', 'SubmittedLimitPerInst', 'FailedOrderLimit']
+        label_fields = ['ScurDay', 'TickId', 'EodFlag', 'Initialized', 'TotalSubmitted', 'TotalCancelled' ]
         lbl_frame = ttk.Labelframe(self.settings_win)
         row_idx = 0
         for field1, field2 in zip(entry_fields, label_fields):

@@ -719,6 +719,12 @@ class Agent(object):
         self.cancel_protect_period = 200
         self.market_order_tick_multiple = 5
 
+        self.order_stats = dict([(inst,{'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }) for inst in self.instruments])
+        self.total_submitted = 0
+        self.total_cancelled = 0
+        self.total_submitted_limit = 1000
+        self.submitted_limit_per_inst = 100
+        self.failed_order_limit = 200
         ##查询命令队列
         self.qry_commands = []  #每个元素为查询命令，用于初始化时查询相关数据
         self.init_init()    #init中的init,用于子类的处理
@@ -1208,6 +1214,9 @@ class Agent(object):
         self.ref2trade = {}
         self.ref2order = {}
         self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
+        self.order_stats = dict([(inst,{'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }) for inst in self.instruments])
+        self.total_submitted = 0
+        self.total_cancelled = 0
         self.prev_capital = self.curr_capital
         for inst in self.positions:
             self.positions[inst].pos_yday.long = eod_pos[inst][0] 
@@ -1508,6 +1517,11 @@ class Agent(object):
         '''
         self.logger.debug(u'A_CC:开仓平仓命令: order_ref = %s' % iorder.order_ref)
         inst = iorder.instrument
+        if not self.order_stats[inst]['status']:
+            self.logger.warning('Canceling order = %s for instrument = %s is disabled for trading due to position control' % (iorder.order_ref, inst))
+            iorder.on_cancel()
+            self.trade_update(iorder)
+            return
         # 上期所不支持市价单
         if (iorder.price_type == OPT_MARKET_ORDER):
             if (inst.exchange == 'SHFE' or inst.exchange == 'CFFEX'):
@@ -1520,15 +1534,25 @@ class Agent(object):
                     iorder.limit_price = max(inst.down_limit, inst.bid_price1 - inst.tick_base * self.market_order_tick_multiple)
             else:
                 iorder.limit_price = 0.0
-        iorder.status = order.OrderStatus.Sent        
+        iorder.status = order.OrderStatus.Sent
         self.trader.send_order(iorder)
-        
+        self.order_stats[inst]['submitted'] += 1
+        self.total_submitted += 1
+        if self.order_stats[inst]['submitted'] >= self.submitted_limit_per_inst:
+            self.order_stats[inst]['status'] = False
+        if self.total_submitted >= self.total_submitted_limit:
+            for inst in self.instruments:
+                self.order_stats[inst]['status'] = False
+        return
 
     def cancel_order(self,iorder):
         '''发出撤单指令  
         '''
         self.logger.info(u'A_CC:发出撤单指令: order_ref = %s' % iorder.order_ref)
         self.trader.cancel_order(iorder)
+        inst = iorder.instrument
+        self.order_stats[inst]['cancelled'] += 1
+        self.total_cancelled += 1
          
     ###回应
     def rtn_trade(self, event):
@@ -1599,15 +1623,19 @@ class Agent(object):
         else:
             self.logger.debug('trade update: %s' % porder)
         order_ref = int(porder.OrderRef)
-        instrument_id = porder.InstrumentID
+        inst = porder.InstrumentID
         error = event.dict['error']
         if order_ref in self.ref2order:
             myorder = self.ref2order[order_ref]
             myorder.on_cancel()
             self.trade_update(myorder)
-            self.logger.warning(u'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
+            self.logger.warning(u'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s' % (order_ref, inst, error.ErrorMsg))
         else:
-            self.logger.info(u'OrderInsert error from other programs, order_ref=%s, instrument=%s, error=%s' % (order_ref, instrument_id, error.ErrorMsg))
+            self.logger.info(u'OrderInsert error from other programs, order_ref=%s, instrument=%s, error=%s' % (order_ref, inst, error.ErrorMsg))
+        self.order_stats[inst]['failed'] += 1
+        if self.order_stats[inst]['failed'] >= self.failed_order_limit:
+            self.order_stats[inst]['status'] = False
+            self.logger.warning('failed order reaches the limit, disable instrument = %s' % inst)
 
     def err_order_action(self, event):
         '''
@@ -1626,6 +1654,11 @@ class Agent(object):
         else:
             self.qry_commands.append(self.fetch_order)
             self.qry_commands.append(self.fetch_order)
+        inst = porder.InstrumentID
+        self.order_stats[inst]['failed'] += 1
+        if self.order_stats[inst]['failed'] >= self.failed_order_limit:
+            self.order_stats[inst]['status'] = False
+            self.logger.warning('failed order reaches the limit, disable instrument = %s' % inst)
 
     ###辅助   
     def rsp_qry_position(self, event):
