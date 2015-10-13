@@ -71,6 +71,24 @@ class TradePos(object):
     def cancel_close(self):
         self.exit_tradeid = 0
 
+class ParSARTradePos(TradePos):
+	def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1, af = 0.02, incr = 0.02, cap = 0.2):
+		TradePos.__init__(self, insts, vols, pos, entry_target, exit_target, price_unit)
+		self.af = af
+		self.af_incr = incr
+		self.af_cap = cap
+		self.ep = entry_target
+	
+	def trail_update(self, curr_bar):
+		if self.direction == 1:
+			curr_ep = curr_bar.high
+		else:
+			curr_ep = curr_bar.low
+		self.exit_target = self.exit_target + self.af_incr * (self.ep - self.exit_target)
+		if (curr_ep - self.ep)*self.direction > 0:
+			self.af += self.af_incr
+			self.ep = curr_ep
+				
 def tradepos2dict(tradepos):
     trade = {}
     trade['insts'] = ' '.join(tradepos.insts)
