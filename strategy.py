@@ -85,8 +85,8 @@ class ParSARTradePos(TradePos):
 		else:
 			curr_ep = curr_bar.low
 		self.exit_target = self.exit_target + self.af_incr * (self.ep - self.exit_target)
-		if (curr_ep - self.ep)*self.direction > 0:
-			self.af += self.af_incr
+		if (curr_ep - self.ep) * self.direction > 0:
+			self.af = max(self.af_cap, self.af + self.af_incr)
 			self.ep = curr_ep
 				
 def tradepos2dict(tradepos):
