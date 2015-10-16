@@ -21,7 +21,7 @@ def calibrate(model, helpers, l, name):
     print(rule)
 
     method = Simplex(l);
-    model.calibrate(helpers, method, EndCriteria(1000, 250, 1e-7, 1e-7, 1e-7))
+    model.calibrate(helpers, method, EndCriteria(1000, 250, 1e-4, 1e-4, 1e-4))
 
     print('Parameters: %s' % model.params())
     print(rule)
@@ -33,7 +33,7 @@ def calibrate(model, helpers, l, name):
     for swaption, helper in zip(swaptionVols, helpers):
         maturity, length, vol = swaption
         NPV = helper.modelValue()
-        implied = helper.impliedVolatility(NPV, 1.0e-4, 1000, 0.05, 0.80)
+        implied = helper.impliedVolatility(NPV, 1.0e-4, 1000, 0.25, 0.70)
         error = implied - vol
         totalError += abs(error)
         print(format % (maturity, length,
@@ -47,10 +47,10 @@ def calibrate(model, helpers, l, name):
     print(dblrule)
 
 # global data
-calendar = TARGET()
-todaysDate = Date(16, 10, 2015);
+calendar = UnitedStates()
+todaysDate = Date(15, 10, 2015);
 Settings.instance().evaluationDate = todaysDate
-settlementDate = Date(18, 10, 2015);
+settlementDate = Date(19, 10, 2015);
 
 # market quotes
 deposits = { (1,Weeks):  0.002749,
@@ -64,31 +64,31 @@ deposits = { (1,Weeks):  0.002749,
 #         (6,9): 0.037125,
 #         (9,12): 0.037125 }
 
-futures = { Date(14,12,2015): 99.6375,
-            Date(14, 3,2016): 99.5575,
-            Date(13, 6,2016): 99.4575,
-            Date(19, 9,2016): 99.3325,
-            Date(19,12,2016): 99.1875,
-            Date(13, 3,2017): 99.0675,
-            Date(19, 6,2017): 98.9375,
-            Date(18, 9,2017): 98.8175,
-            Date(18,12,2017): 98.6875,	
-            Date(13, 3,2018): 98.5775,
-            Date(19, 6,2018): 98.4675,
-            Date(18, 9,2018): 98.3675 }
+futures = { Date(16,12,2015): 99.6375,
+            Date(16, 3,2016): 99.5575,
+            Date(15, 6,2016): 99.4575,
+            Date(21, 9,2016): 99.3325,
+            Date(21,12,2016): 99.1875,
+            Date(15, 3,2017): 99.0675,
+            Date(21, 6,2017): 98.9375,
+            Date(20, 9,2017): 98.8175,
+            Date(20,12,2017): 98.6875,
+            Date(21, 3,2018): 98.5775,
+            Date(20, 6,2018): 98.4675,
+            Date(19, 9,2018): 98.3675 }
 
-swaps = { (4,Years): 0.01070383,
-          (5,Years): 0.01290898,
-          (6,Years): 0.01480271,
-          (7,Years): 0.01669643,
-		  (8,Years): 0.01778255,
-		  (9,Years): 0.01886868,
-		  (10,Years):0.01995480,
-          (12,Years):0.02081077,
-          (15,Years):0.02209472,
-          (20,Years):0.02423464,
-          (25,Years):0.02637456,
-          (30,Years):0.02851449 }
+swaps = { (4,Years): 0.0114274,
+          (5,Years): 0.0132988,
+          (6,Years): 0.0149687,
+          (7,Years): 0.0163994,
+		  (8,Years): 0.0176033,
+		  (9,Years): 0.0186200,
+		  (10,Years):0.0194827,
+          (12,Years):0.0202205,
+          (15,Years):0.0223418,
+          (20,Years):0.0237100,
+          (25,Years):0.0243868,
+          (30,Years):0.0248008 }
 
 # convert them to Quote objects
 for n,unit in deposits.keys():
@@ -138,7 +138,7 @@ floatingLegAdjustment = ModifiedFollowing
 swapHelpers = [ SwapRateHelper(QuoteHandle(swaps[(n,unit)]),
                                Period(n,unit), calendar,
                                fixedLegFrequency, fixedLegAdjustment,
-                               fixedLegDayCounter, USDLibor())
+                               fixedLegDayCounter, USDLibor(Period(3, Months)))
                 for n, unit in swaps.keys() ]
 
 # term structure handles
@@ -159,9 +159,11 @@ depoFuturesSwapCurve = PiecewiseFlatForward(settlementDate, helpers,
 
 swapEngine = DiscountingSwapEngine(discountTermStructure)
 discountTermStructure.linkTo(depoFuturesSwapCurve)
-nominal = 1000
-length = 5
-maturity = calendar.advance(settlementDate,length,Years)
+swapType = VanillaSwap.Payer
+nominal = 10000000
+for_len = 1
+to_len = 5
+maturity = calendar.advance(settlementDate, for_len+to_len, Years)
 payFixed = True
 
 fixedLegFrequency = Semiannual
@@ -172,7 +174,7 @@ fixedRate = 0.015
 floatingLegFrequency = Quarterly
 spread = 0.0
 fixingDays = 2
-index = USDLibor(forecastTermStructure)
+index = USDLibor(Period(3, Months), discountTermStructure)
 floatingLegAdjustment = ModifiedFollowing
 floatingLegDayCounter = index.dayCounter()
 
@@ -185,13 +187,14 @@ floatingSchedule = Schedule(settlementDate, maturity,
                             floatingLegAdjustment, floatingLegAdjustment,
                             DateGeneration.Forward, False)
 
-spot = VanillaSwap(VanillaSwap.Payer, nominal,
+spot = VanillaSwap(swapType, nominal,
                    fixedSchedule, fixedRate, fixedLegDayCounter,
                    floatingSchedule, index, spread,
                    floatingLegDayCounter)
 spot.setPricingEngine(swapEngine)
-forwardStart = calendar.advance(settlementDate,1,Years)
-forwardEnd = calendar.advance(forwardStart,length,Years)
+print "spot = %s" % (spot.fairRate())
+forwardStart = calendar.advance(settlementDate,for_len, Years)
+forwardEnd = calendar.advance(forwardStart, to_len,Years)
 fixedSchedule = Schedule(forwardStart, forwardEnd,
                          fixedLegTenor, calendar,
                          fixedLegAdjustment, fixedLegAdjustment,
@@ -201,22 +204,21 @@ floatingSchedule = Schedule(forwardStart, forwardEnd,
                             floatingLegAdjustment, floatingLegAdjustment,
                             DateGeneration.Forward, False)
 
-forward = VanillaSwap(VanillaSwap.Payer, nominal,
+forward = VanillaSwap(swapType, nominal,
                       fixedSchedule, fixedRate, fixedLegDayCounter,
                       floatingSchedule, index, spread,
                       floatingLegDayCounter)
 forward.setPricingEngine(swapEngine)
 atmRate = forward.fairRate()
-
-atmSwap = VanillaSwap(VanillaSwap.Payer, nominal,
+atmSwap = VanillaSwap(swapType, nominal,
                       fixedSchedule, atmRate, fixedLegDayCounter,
                       floatingSchedule, index, spread,
                       floatingLegDayCounter)
-otmSwap = VanillaSwap(VanillaSwap.Payer, nominal,
+otmSwap = VanillaSwap(swapType, nominal,
                       fixedSchedule, atmRate*1.2, fixedLegDayCounter,
                       floatingSchedule, index, spread,
                       floatingLegDayCounter)
-itmSwap = VanillaSwap(VanillaSwap.Payer, nominal,
+itmSwap = VanillaSwap(swapType, nominal,
                       fixedSchedule, atmRate*0.8, fixedLegDayCounter,
                       floatingSchedule, index, spread,
                       floatingLegDayCounter)
@@ -224,33 +226,33 @@ atmSwap.setPricingEngine(swapEngine)
 otmSwap.setPricingEngine(swapEngine)
 itmSwap.setPricingEngine(swapEngine)
 
+vv = 0.46
 swaptionVols = [ # maturity,          length,             volatility
-                 (Period(1.00, Years), Period(5.00, Years), 0.52300),
-				 (Period(1.25, Years), Period(4.75, Years), 0.52464),
-				 (Period(1.50, Years), Period(4.50, Years), 0.52628),
-				 (Period(1.75, Years), Period(4.25, Years), 0.52807),
-				 (Period(2.00, Years), Period(4.00, Years), 0.53007),
-				 (Period(2.25, Years), Period(3.75, Years), 0.53328),
-				 (Period(2.50, Years), Period(3.50, Years), 0.53466),
-				 (Period(2.75, Years), Period(3.25, Years), 0.53380),
-				 (Period(3.00, Years), Period(3.00, Years), 0.53003),
-				 (Period(3.25, Years), Period(2.75, Years), 0.53360),
-				 (Period(3.50, Years), Period(2.50, Years), 0.53585),
-				 (Period(3.75, Years), Period(2.25, Years), 0.53663),
-				 (Period(4.00, Years), Period(2.00, Years), 0.53547),
-				 (Period(4.25, Years), Period(1.75, Years), 0.52427),
-				 (Period(4.50, Years), Period(1.50, Years), 0.51754),
-                 (Period(4.75, Years), Period(1.25, Years), 0.51632),
-                 (Period(5.00, Years), Period(1.00, Years), 0.52099),
-                 (Period(5.25, Years), Period(0.75, Years), 0.52131),
-				 (Period(5.50, Years), Period(0.50, Years), 0.51954),
-                 (Period(5.75, Years), Period(0.25, Years), 0.51914) ]
+                 (Period(12, Months), Period(60, Months), vv),
+				 (Period(15, Months), Period(57, Months), vv),
+				 (Period(18, Months), Period(54, Months), vv),
+				 (Period(21, Months), Period(51, Months), vv),
+				 (Period(24, Months), Period(48, Months), vv),
+				 (Period(27, Months), Period(45, Months), vv),
+				 (Period(30, Months), Period(42, Months), vv),
+				 (Period(33, Months), Period(39, Months), vv),
+				 (Period(36, Months), Period(36, Months), vv),
+				 (Period(39, Months), Period(33, Months), vv),
+				 (Period(42, Months), Period(30, Months), vv),
+				 (Period(45, Months), Period(27, Months), vv),
+				 (Period(48, Months), Period(24, Months), vv),
+				 (Period(51, Months), Period(21, Months), vv),
+				 (Period(54, Months), Period(18, Months), vv),
+                 (Period(57, Months), Period(15, Months), vv),
+                 (Period(60, Months), Period(12, Months), vv),
+                 (Period(63, Months), Period( 9, Months), vv),
+				 (Period(66, Months), Period( 6, Months), vv),
+                 (Period(69, Months), Period( 3, Months), vv) ]
 
-helpers = [ SwaptionHelper(maturity, length,
-                           QuoteHandle(SimpleQuote(vol)),
-                           index, index.tenor(), index.dayCounter(),
-                           index.dayCounter(), discountTermStructure))
-            for maturity, length, vol in swaptionVols ]
+helpers = [ SwaptionHelper(maturity, length, \
+                           QuoteHandle(SimpleQuote(vol)), \
+                           index, index.tenor(), index.dayCounter(), \
+                           index.dayCounter(), discountTermStructure) for maturity, length, vol in swaptionVols ]
 
 times = {}
 for h in helpers:
@@ -261,10 +263,10 @@ times.sort()
 
 grid = TimeGrid(times, 30)
 
-G2model = G2(discountTermStructure))
-HWmodel = HullWhite(discountTermStructure))
-HWmodel2 = HullWhite(discountTermStructure))
-BKmodel = BlackKarasinski(discountTermStructure))
+G2model = G2(discountTermStructure)
+HWmodel = HullWhite(discountTermStructure)
+HWmodel2 = HullWhite(discountTermStructure)
+BKmodel = BlackKarasinski(discountTermStructure)
 
 print "Calibrating..."
 
@@ -288,6 +290,7 @@ calibrate(BKmodel, helpers, 0.05, "Black-Karasinski (numerical calibration)")
 # price Bermudan swaptions on defined swaps
 
 bermudanDates = [ d for d in floatingSchedule ][4:-1]
+print bermudanDates
 exercise = BermudanExercise(bermudanDates)
 
 format = '%17s |%17s |%17s |%17s'
@@ -295,7 +298,7 @@ header = format % ('model', 'in-the-money', 'at-the-money', 'out-of-the-money')
 rule = '-' * len(header)
 dblrule = '=' * len(header)
 
-print
+print "forward rate = %s, ITM = %s, OTM = %s" % (atmRate, atmRate*0.8, atmRate*1.2)
 print dblrule
 print 'Pricing Bermudan swaptions...'
 print rule
