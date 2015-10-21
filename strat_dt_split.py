@@ -2,6 +2,7 @@
 #from base import *
 from misc import *
 import data_handler as dh
+import copy
 from strategy import *
  
 class DTSplitTrader(Strategy):
@@ -79,12 +80,13 @@ class DTSplitTrader(Strategy):
         self.save_state()
         return
 
-    def recalc_rng(self, idx, mdf):
+    def recalc_rng(self, idx, df):
+        mdf = copy.copy(df)
         inst = self.underliers[idx][0]
-        mdf['min_idx'] = pd.Series(0, index = mdf.index)
+        mdf.loc[:,'min_idx'] = pd.Series(0, index = mdf.index)
         for i in range(1, len(self.open_period)-1):
             mdf.loc[(mdf['min_id']>= self.open_period[i]) & (mdf['min_id']<self.open_period[i+1]), 'min_idx'] = i
-            mdf['date_idx'] = mdf.index.date
+        mdf.loc[:, 'date_idx'] = mdf.index.date
         ddf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
         win = self.lookbacks[idx]
         if win > 0:

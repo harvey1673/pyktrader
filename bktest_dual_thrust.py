@@ -173,7 +173,7 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'RM', 'y', 'p', 'a', 'l', 'pp', 'TA', 'SR', 'rb', 'TF', 'i']
+    sim_list = ['TA', 'SR', 'rb', 'TF', 'i']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:

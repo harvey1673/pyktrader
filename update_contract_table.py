@@ -305,7 +305,7 @@ class MyTraderApi(TraderApi):
 
 
 def main():
-    tradercfg = misc.PROD_TRADER
+    tradercfg = misc.HT_DN_TD
     user = MyTraderApi(broker_id = tradercfg.broker_id, 
                        investor_id = tradercfg.investor_id, 
                        passwd=tradercfg.passwd)

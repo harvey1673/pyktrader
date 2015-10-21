@@ -51,6 +51,7 @@ def dual_thrust_sim( mdf, config):
     SL = config['stoploss']
     min_rng = config['min_range']
     ma_fast = config['MA_fast']
+    no_trade_set = config['no_trade_set']
     ll = mdf.shape[0]
     mdf['min_idx'] = pd.Series(1, index = mdf.index)
     mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
@@ -90,8 +91,8 @@ def dual_thrust_sim( mdf, config):
             pos = 0
         else:
             pos = curr_pos[0].pos
-        mdf.ix[dd, 'pos'] = pos    
-        if mslice.TR == 0 or mslice.MA == 0:
+        mdf.ix[dd, 'pos'] = pos
+        if (min_id in no_trade_set) or (mslice.TR == 0) or (mslice.MA == 0):
             continue
         d_open = mslice.dopen
         #if (prev_d < d):
@@ -175,7 +176,8 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = [ 'm','y', 'p', 'RM', 'a', 'rb', 'ag', 'TA', 'MA', 'SR','i']
+    #sim_list = [ 'm','y', 'p', 'RM', 'a', 'rb', 'ag', 'TA', 'MA', 'SR','i']
+    sim_list = [ 'ag', 'au', 'cu', 'al', 'zn']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -210,15 +212,18 @@ def run_sim(start_date, end_date, daily_close = False):
         config['nearby'] = 1
         config['rollrule'] = '-50b'
         config['exit_min'] = 2112
+        config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2059, 2100)
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
         elif asset in ['IF', 'IH', 'IC']:
             config['rollrule'] = '-2b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
         elif asset in ['au', 'ag']:
             config['rollrule'] = '-25b'
         elif asset in ['TF', 'T']:
             config['rollrule'] = '-20b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
         dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config)
     return
 
