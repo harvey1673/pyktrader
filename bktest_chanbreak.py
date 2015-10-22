@@ -12,12 +12,13 @@ def chanbreak( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
     file_prefix = config['file_prefix'] + '_' + asset + '_'
+    #ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
     mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)    
     mdf = backtest.cleanup_mindata(mdf, asset)
     output = {}
     for ix, freq in enumerate(freqs):
         config['freq'] = freq
-        for iy, win in enumerate(windows): 
+        for iy, win in enumerate(windows):
             idx = ix*10+iy
             config['win'] = win
             (res, closed_trades, ts) = chanbreak_sim( mdf, config)
@@ -44,12 +45,10 @@ def chanbreak_sim( mdf, config):
     tcost = config['trans_cost']
     unit = config['unit']
     k = config['scaler']
-    d_close = config['daily_close']
     marginrate = config['marginrate']
     offset = config['offset']
     win = config['win']
     chan_func = config['channel_func']
-    no_trade_set = config['no_trade_set']
     upper_chan_func = chan_func[0]
     lower_chan_func = chan_func[1]
     entry_chan = win    
@@ -59,63 +58,65 @@ def chanbreak_sim( mdf, config):
     xdf['H2'] = upper_chan_func(xdf, exit_chan).shift(1)
     xdf['L2'] = lower_chan_func(xdf, exit_chan).shift(1)
     xdf['ATR'] = dh.ATR(xdf, entry_chan).shift(1)
-    df = mdf.join(xdf, how = 'left').fillna(method='ffill')
-    df['date'] = df.index.date
-    ll = df.shape[0]
-    df['pos'] = pd.Series([0]*ll, index = df.index)
-    df['cost'] = pd.Series([0]*ll, index = df.index)
+    xdata = pd.concat([xdf['H1'], xdf['L1'], xdf['H2'], xdf['L2'], xdf['ATR'], xdf['high'], xdf['low']], \
+                      axis=1, keys=['H1', 'L1', 'H2', 'L2', 'xhigh', 'xlow'])
+    ll = mdf.shape[0]
+    mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
+    mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
+    mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
     curr_pos = []
     closed_trades = []
-    end_d = df['date'][-1]
+    end_d = mdf.index[-1].date()
     tradeid = 0
-    for idx, dd in enumerate(df.index):
-        mslice = df.ix[dd]
+    x_idx = 0
+    max_idx = len(xdf.index)
+    for idx, dd in enumerate(mdf.index):
+        mslice = mdf.ix[dd]
         min_id = agent.get_min_id(dd)
-        d = mslice.date
         if len(curr_pos) == 0:
             pos = 0
         else:
             pos = curr_pos[0].pos
-        df.ix[dd, 'pos'] = pos
+        mdf.ix[dd, 'pos'] = pos
         if np.isnan(mslice.ATR):
             continue
         if (min_id >=config['exit_min']):
-            if (pos!=0) and ((d == end_d) or (d_close)):
+            if (pos!=0) and (dd.date() == end_d):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
-                df.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
+                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
             continue
         else:
             if (pos !=0):
-                curr_pos[0].trail_update(mslice.close)
-                if curr_pos[0].trail_check(mslice.close, mslice.ATR*k[0]):
+                curr_pos[0].update_bar(mslice)
+                if curr_pos[0].check_exit(mslice.close, mslice.ATR * k[0]):
                     curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
                     closed_trades.append(curr_pos[0])
                     pos = 0
                     curr_pos = []                    
-            if ((mslice.close >= mslice.H2) and (pos<0)) or ((mslice.close <= mslice.L2) and (pos>0)):
+            if ((mslice.high >= mslice.H2) and (pos<0)) or ((mslice.low <= mslice.L2) and (pos>0)):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
-                df.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
                 pos = 0
-            if ((mslice.close>=mslice.H1) and (pos<=0)) or ((mslice.close <= mslice.L1) and (pos>=0)):
+            if ((mslice.high >= mslice.H1) and (pos<=0)) or ((mslice.low <= mslice.L1) and (pos>=0)):
                 if (pos ==0 ):
-                    target_pos = (mslice.close>=mslice.H1) * unit -(mslice.close<=mslice.L1) * unit
-                    new_pos = strat.TradePos([mslice.contract], [1], target_pos, mslice.close, mslice.close)
+                    target_pos = (mslice.close >= mslice.H1) * unit -(mslice.close <= mslice.L1) * unit
+                    new_pos = strat.ParSARTradePos([mslice.contract], [1], target_pos, mslice.close, mslice.close)
                     tradeid += 1
                     new_pos.entry_tradeid = tradeid
                     new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
                     curr_pos.append(new_pos)
-                    df.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
-                    df.ix[dd, 'pos'] = pos
+                    mdf.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
+                    mdf.ix[dd, 'pos'] = pos
                 else:
                     print "something wrong with position=%s, close =%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, xslice.H1, xslice.L1)
             
@@ -124,7 +125,7 @@ def chanbreak_sim( mdf, config):
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
     
-def run_sim(start_date, end_date, daily_close):
+def run_sim(start_date, end_date):
     commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
     start_dates1 = [datetime.date(2010,10,1)] * 12 + \
                 [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
@@ -149,7 +150,6 @@ def run_sim(start_date, end_date, daily_close):
               'unit': 1,
               'scaler': (0.5, 2),
               'channel_func': [dh.DONCH_H, dh.DONCH_L],
-              'daily_close': daily_close,
               'file_prefix': file_prefix}        
     freqs = [3, 5, ]
     windows = [20, 40, 60, 120, 270]
@@ -159,26 +159,17 @@ def run_sim(start_date, end_date, daily_close):
         config['nearby'] = 1 
         config['start_min'] = 1600
         config['exit_min'] = 2055
-        config['no_trade_set'] = range(300, 302) + range(1500, 1502) + range(2058, 2100)
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
-        elif asset in ['IF', 'IH', 'IC']:
-            config['rollrule'] = '-2b'
-            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
-        elif asset in ['au', 'ag']:
-            config['rollrule'] = '-25b'
-        elif asset in ['TF', 'T']:
-            config['rollrule'] = '-20b'
-            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+        elif asset in ['IF']:
+            config['start_min'] = 1520
+            config['exit_min'] = 2112
+            config['rollrule'] = '-1b'    
         chanbreak( asset, start_date, end_date, freqs, windows, config)
 
 if __name__=="__main__":
     args = sys.argv[1:]
-    if len(args) < 3:
-        d_close = False
-    else:
-        d_close = (int(args[2])>0)
     if len(args) < 2:
         end_d = datetime.date(2015,1,23)
     else:
@@ -187,4 +178,5 @@ if __name__=="__main__":
         start_d = datetime.date(2013,1,2)
     else:
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-    run_sim(start_d, end_d, d_close)
+    run_sim(start_d, end_d)
+    pass

@@ -1128,6 +1128,12 @@ class Agent(object):
         return True  
     
     def min_switch(self, inst):
+        if self.cur_min[inst]['close'] == 0:
+            return
+        if self.cur_min[inst]['low'] == 0:
+            self.cur_min[inst]['low'] = self.cur_min[inst]['close']
+        if self.cur_min[inst]['high'] >= MKT_DATA_BIGNUMBER - 1000:
+            self.cur_min[inst]['high'] = self.cur_min[inst]['close']
         min_id = self.cur_min[inst]['min_id']
         min_sn = self.conv_bar_id(min_id)
         df = self.min_data[inst][1]
@@ -1552,7 +1558,7 @@ class Agent(object):
         '''
         self.logger.info(u'A_CC:发出撤单指令: order_ref = %s' % iorder.order_ref)
         self.trader.cancel_order(iorder)
-        inst = iorder.instrument
+        inst = iorder.instrument.name
         self.order_stats[inst]['cancelled'] += 1
         self.total_cancelled += 1
          
@@ -1786,6 +1792,7 @@ class SaveAgent(Agent):
         self.save_flag = True 
         self.live_trading = False
         self.prepare_data_env(mid_day = True)
+        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
 
     def resume(self):
         self.eventEngine.start()

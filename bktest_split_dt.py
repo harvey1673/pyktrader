@@ -92,7 +92,7 @@ def dual_thrust_sim( mdf, config):
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos
-        if (min_id in no_trade_set) or (mslice.TR == 0) or (mslice.MA == 0):
+        if (mslice.TR == 0) or (mslice.MA == 0):
             continue
         d_open = mslice.dopen
         #if (prev_d < d):
@@ -117,7 +117,7 @@ def dual_thrust_sim( mdf, config):
                 curr_pos = []
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
-        else:
+        elif min_id not in no_trade_set:
             if (pos!=0) and (SL>0):
                 curr_pos[0].trail_update(mslice.close)
                 if (curr_pos[0].trail_check(mslice.close, SL*mslice.close)):

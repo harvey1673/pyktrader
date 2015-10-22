@@ -43,6 +43,7 @@ def dual_thrust_sim( ddf, mdf, config):
     marginrate = config['marginrate']
     offset = config['offset']
     k = config['k']
+    ep_enabled = config['EP']
     start_equity = config['capital']
     win = config['win']
     multiplier = config['m']
@@ -81,9 +82,12 @@ def dual_thrust_sim( ddf, mdf, config):
         min_id = agent.get_min_id(dd)
         d = dd.date()
         dslice = ddf.ix[d]
-        if min_id in no_trade_set or np.isnan(dslice.TR):
+        if np.isnan(dslice.TR) or (mslice.close == 0):
             continue
-
+        if (mslice.low == 0):
+            mslice.low = mslice.close
+        if mslice.high >= mslice.open * 1.2:
+            mslice.high = mslice.close
         if len(curr_pos) == 0:
             pos = 0
         else:
@@ -92,20 +96,21 @@ def dual_thrust_sim( ddf, mdf, config):
         d_open = dslice.open
         if (prev_d < d):
             d_open = mslice.open
-            #d_high = mslice.high
-            #d_low =  mslice.low
+            d_high = mslice.high
+            d_low =  mslice.low
         else:
             d_open = dslice.open
-            #d_high = max(d_high, mslice.high)
-            #d_low  = min(d_low, mslice.low)
+            d_high = max(d_high, mslice.high)
+            d_low  = min(d_low, mslice.low)
         if (d_open <= 0):
             continue
         prev_d = d
         buytrig  = d_open + max(min_rng * d_open, dslice.TR * k)
         selltrig = d_open - max(min_rng * d_open, dslice.TR * k)
-        #d_high = max(d_high, dslice.prev_high)
-        #d_low  = min(d_low, dslice.prev_low)
-        if (min_id >= config['exit_min']):
+        if ep_enabled:
+            buytrig = max(buytrig, d_high)
+            selltrig = min(selltrig, d_low)
+        if (min_id >= config['exit_min']) :
             if (pos != 0) and (close_daily or (d == end_d)):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
@@ -114,10 +119,10 @@ def dual_thrust_sim( ddf, mdf, config):
                 curr_pos = []
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
-        else:
+        elif min_id not in no_trade_set:
             if (pos!=0) and (SL>0):
                 curr_pos[0].trail_update(mslice.close)
-                if (curr_pos[0].trail_check(mslice.close, SL*mslice.close)):
+                if curr_pos[0].check_exit(mslice.close, SL*mslice.close):
                     curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
@@ -173,13 +178,13 @@ def run_sim(start_date, end_date, daily_close = False):
                 [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['TA', 'SR', 'rb', 'TF', 'i']
+    sim_list = ['m', 'RM', 'p', 'y', 'l', 'pp', 'TA', 'SR', 'rb', 'TF', 'i', 'rb']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DT_nontrade_'
+    file_prefix = test_folder + 'test/DTwEP_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -190,6 +195,7 @@ def run_sim(start_date, end_date, daily_close = False):
               'unit': 1,
               'stoploss': 0.0,
               'min_range': 0.00,
+              'EP': True,
               'file_prefix': file_prefix}
     
     scenarios = [ (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), (0.9, 0, 0.5), (1.0, 0, 0.5), (1.1, 0, 0.5), (1.2, 0, 0.5),\

@@ -17,6 +17,7 @@ margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'OI': 0.05,
                 'v': 0.05, 'IF': 0.1, 'IF': 0.1, 'FG':0.06, 'IH': 0.1}
 
+
 def turtle( asset, start_date, end_date, systems, config):
     rollrule = config['rollrule']
     nearby   = config['nearby']
@@ -45,6 +46,7 @@ def turtle( asset, start_date, end_date, systems, config):
     res = pd.DataFrame.from_dict(output)
     res.to_csv(fname)
     return 
+
 
 def turtle_sim( ddf, mdf, config ):
     marginrate = config['marginrate']
@@ -105,7 +107,7 @@ def turtle_sim( ddf, mdf, config ):
                 mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
                 curr_pos.append(new_pos)
                 curr_atr = dslice.ATR
-        elif (idx >= len(mdf.index)-NO_OPEN_POS_PROTECT):
+        elif idx >= len(mdf.index)-NO_OPEN_POS_PROTECT:
             if len(curr_pos)>0:
                 for trade_pos in curr_pos:
                     trade_pos.close(mslice.close - misc.sign(trade_pos.pos) * offset, dd)
@@ -118,7 +120,7 @@ def turtle_sim( ddf, mdf, config ):
             direction = curr_pos[0].direction
             if trail_loss:
                 for trade_pos in curr_pos:
-                    trade_pos.trail_update(mslice.close)
+                    trade_pos.update_price(mslice.close)
             #exit position out of channel
             if (direction == 1 and mslice.close <= dslice.CL_1) or \
                     (direction == -1 and mslice.close >= dslice.CS_1):
@@ -130,9 +132,9 @@ def turtle_sim( ddf, mdf, config ):
                     mdf.ix[dd, 'cost'] -= abs(trade_pos.pos) * (offset + mslice.close*tcost)
                 curr_pos = []
             #stop loss position partially
-            elif curr_pos[-1].trail_check( mslice.close, curr_atr * NN ):
+            elif curr_pos[-1].check_exit( mslice.close, curr_atr * NN ):
                 for trade_pos in curr_pos:
-                    if trade_pos.trail_check( mslice.close, curr_atr * NN )>0:
+                    if trade_pos.check_exit( mslice.close, curr_atr * NN ):
                         trade_pos.close(mslice.close - misc.sign(trade_pos.pos) * offset, dd)
                         tradeid += 1
                         trade_pos.exit_tradeid = tradeid
@@ -143,7 +145,7 @@ def turtle_sim( ddf, mdf, config ):
             elif (len(curr_pos) < max_pos) and (mslice.close - curr_pos[-1].entry_price)*direction > curr_atr/max_pos*NN:
                 for trade_pos in curr_pos:
                     #trade.exit_target += curr_atr/max_pos*NN * direction
-                    trade_pos.exit_target = mslice.close
+                    trade_pos.set_exit( mslice.close )
                 new_pos = strat.TradePos([mslice.contract], [1], direction*unit, mslice.close, mslice.close)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
@@ -156,9 +158,10 @@ def turtle_sim( ddf, mdf, config ):
     res_trade = backtest.get_trade_stats( closed_trades )
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
-    
+
+
 def run_sim(start_date, end_date, trail_loss = False):
-    test_folder = backtest.get_bktest_folder() + 'test/'
+    test_folder = backtest.get_bktest_folder()
     postfix = '_'
     if trail_loss:
         postfix = 'Trail_'
@@ -183,17 +186,17 @@ def run_sim(start_date, end_date, trail_loss = False):
                 [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
     commod_list = commod_list1+commod_list2
     start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'y', 'ru', 'TA', 'ag', 'SR','FG', 'jd', 'CF', 'TC', 'RM', 'IF', 'cu', 'zn', 'al']
+    sim_list = ['i', 'j', 'jm', 'TF', 'au', 'TC', 'FG']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
             sdate_list.append(d)
-    systems = [(20, 10,  1, 2, 4), (20, 5, 1, 2, 4), (15, 5, 1, 2, 4), (10, 5, 1, 2, 4), \
-               (20, 10,  1, 2, 3), (20, 5, 1, 2, 3), (15, 5, 1, 2, 3), (10, 5, 1, 2, 3), \
-               (20, 10,  1, 2, 2), (20, 5, 1, 2, 2), (15, 5, 1, 2, 2), (10, 5, 1, 2, 2), \
-               (20, 10,  1, 2, 1), (20, 5, 1, 2, 1), (15, 5, 1, 2, 1), (10, 5, 1, 2, 1), \
-               (20, 10,  1, 1, 2), (20, 5, 1, 1, 2), (15, 5, 1, 1, 2), (10, 5, 1, 1, 2), \
-               (20, 10,  1, 1, 1), (20, 5, 1, 1, 1), (15, 5, 1, 1, 1), (10, 5, 1, 1, 1) ]
+    systems = [(20, 10, 1, 2, 4), (20, 5, 1, 2, 4), (15, 5, 1, 2, 4), (10, 5, 1, 2, 4), \
+               (20, 10, 1, 2, 3), (20, 5, 1, 2, 3), (15, 5, 1, 2, 3), (10, 5, 1, 2, 3), \
+               (20, 10, 1, 2, 2), (20, 5, 1, 2, 2), (15, 5, 1, 2, 2), (10, 5, 1, 2, 2), \
+               (20, 10, 1, 2, 1), (20, 5, 1, 2, 1), (15, 5, 1, 2, 1), (10, 5, 1, 2, 1), \
+               (20, 10, 1, 1, 2), (20, 5, 1, 1, 2), (15, 5, 1, 1, 2), (10, 5, 1, 1, 2), \
+               (20, 10, 1, 1, 1), (20, 5, 1, 1, 1), (15, 5, 1, 1, 1), (10, 5, 1, 1, 1) ]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['nearby'] = 1
@@ -207,7 +210,8 @@ def run_sim(start_date, end_date, trail_loss = False):
             config['rollrule'] = '-25b'  
         turtle( asset, max(sdate, start_date), end_date, systems, config)
     return 
-    
+
+
 if __name__=="__main__":
     args = sys.argv[1:]
     if len(args) < 3:

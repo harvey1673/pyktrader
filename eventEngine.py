@@ -2,7 +2,7 @@
 # 系统模块
 import Queue
 import sys, traceback
-from threading import Timer, Thread
+import threading
 
 # 自己开发的模块
 from eventType import *
@@ -12,11 +12,11 @@ class RepeatTimer():
     def __init__(self,t,hFunction):
         self.t=t
         self.hFunction = hFunction
-        self.thread = Timer(self.t,self.handle_function)
+        self.thread = threading.Timer(self.t,self.handle_function)
 
     def handle_function(self):
         self.hFunction()
-        self.thread = Timer(self.t,self.handle_function)
+        self.thread = threading.Timer(self.t,self.handle_function)
         self.thread.start()
 
     def start(self):
@@ -25,16 +25,25 @@ class RepeatTimer():
     def cancel(self):
         self.thread.cancel()
 
-class RepeatTimer2(Thread):
-    def __init__(self, event, hfunc):
-        Thread.__init__(self)
-        self.hfunc = hfunc
-        self.stopped = event
+class RepeatTimer2(threading.Thread):
+    def __init__(self, interval, callable, *args, **kwargs):
+        threading.Thread.__init__(self)
+        self.interval = interval
+        self.callable = callable
+        self.args = args
+        self.kwargs = kwargs
+        self.event = threading.Event()
+        self.event.set()
 
     def run(self):
-        while not self.stopped.wait(0.5):
-            self.hfunc()
-            # call a function
+        while self.event.is_set():
+            t = threading.Timer(self.interval, self.callable,
+                                self.args, self.kwargs)
+            t.start()
+            t.join()
+
+    def cancel(self):
+        self.event.clear()
 
 ########################################################################
 class EventEngine:
@@ -47,10 +56,10 @@ class EventEngine:
         self.is_active = False
         
         # 事件处理线程
-        self.thread = Thread(target = self.run)
+        self.thread = threading.Thread(target = self.run)
         
         # 计时器，用于触发计时器事件
-        self.timer = RepeatTimer(timerFreq, self.onTimer)
+        self.timer = RepeatTimer2(timerFreq, self.onTimer)
         
         # 这里的__handlers是一个字典，用来保存对应的事件调用关系
         # 其中每个键对应的值是一个列表，列表中保存了对该事件进行监听的函数功能
