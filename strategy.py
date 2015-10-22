@@ -37,18 +37,28 @@ class TradePos(object):
         self.trail_loss = 0
         self.close_comment = ''
     
-    def trail_check(self, curr_price, margin):
+    def check_exit(self, curr_price, margin):
         if (self.direction * (self.exit_target - curr_price) >= margin):
             return True
         return False
     
-    def trail_update(self, curr_price):
+	def set_exit(self, exit_p):
+		self.exit_target = exit_p
+		
+    def update_price(self, curr_price):
         if (curr_price - self.exit_target) * self.direction > 0:
             self.exit_target = curr_price
             return True
-        return False        
-    
-    def check_stop(self, curr_price, margin):
+        return False    
+
+	def update_bar(self, curr_bar):
+		if self.direction > 0:
+			curr_price = curr_bar.high
+		else:
+			curr_price = curr_bar.low
+        return self.update_price(curr_price)
+		
+    def check_profit(self, curr_price, margin):
         if (curr_price - self.entry_price) * sign(margin) * self.direction >= abs(margin):
             return True
         else:
@@ -79,16 +89,26 @@ class ParSARTradePos(TradePos):
 		self.af_cap = cap
 		self.ep = entry_target
 	
-	def trail_update(self, curr_bar):
-		if self.direction == 1:
-			curr_ep = curr_bar.high
-		else:
-			curr_ep = curr_bar.low
+	def update_price(self, curr_ep):
 		self.exit_target = self.exit_target + self.af_incr * (self.ep - self.exit_target)
 		if (curr_ep - self.ep) * self.direction > 0:
 			self.af = max(self.af_cap, self.af + self.af_incr)
 			self.ep = curr_ep
-				
+
+class TargetTrailTradePos(TradePos):
+	def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1, reset_margin = 10):
+		TradePos.__init__(self, insts, vols, pos, entry_target, exit_target, price_unit)
+		self.reset_margin = reser_margin
+		self.trailing = False
+
+	def update_price(self, curr_price):
+		if self.trailing:
+			TradePos.update_price(curr_price)
+		else:
+			if self.check_profit(curr_price, self.reset_margin):
+				self.trailing = True
+				self.exit_target = self.curr_price
+			
 def tradepos2dict(tradepos):
     trade = {}
     trade['insts'] = ' '.join(tradepos.insts)
