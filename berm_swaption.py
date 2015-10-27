@@ -2,12 +2,12 @@ from QuantLib import *
 
 # global data
 calendar = UnitedStates()
-todaysDate = Date(27, 10, 2015);
+todaysDate = Date(26, 10, 2015);
 Settings.instance().evaluationDate = todaysDate
-settlementDate = Date(29, 10, 2015);
+settlementDate = Date(28, 10, 2015);
 
 # market quotes
-deposits = { (1,Weeks):  0.00259231,
+depositsQ = { (1,Weeks):  0.00259231,
              (1,Months): 0.00280159,
              (2,Months): 0.00289735 } 
 #             (6,Months): 0.0353,
@@ -18,41 +18,44 @@ deposits = { (1,Weeks):  0.00259231,
 #         (6,9): 0.037125,
 #         (9,12): 0.037125 }
 
-futures = { Date(16,12,2015): 99.6175,
-            Date(16, 3,2016): 99.5125,
-            Date(15, 6,2016): 99.3925,
-            Date(21, 9,2016): 99.2475,
-            Date(21,12,2016): 99.0975,
-            Date(15, 3,2017): 98.9675,
-            Date(21, 6,2017): 98.8275,
-            Date(20, 9,2017): 98.7025,
-            Date(20,12,2017): 98.57,
-            Date(21, 3,2018): 98.4575,
-            Date(20, 6,2018): 98.3475,
-            Date(19, 9,2018): 98.2425 }
+futuresQ = { Date(16,12,2015): 99.6150,
+            Date(16, 3,2016): 99.5175,
+            Date(15, 6,2016): 99.4025,
+            Date(21, 9,2016): 99.265,
+            Date(21,12,2016): 99.1175,
+            Date(15, 3,2017): 98.9975,
+            Date(21, 6,2017): 98.8650,
+            Date(20, 9,2017): 98.7375,
+            Date(20,12,2017): 98.6125,
+            Date(21, 3,2018): 98.5075,
+            Date(20, 6,2018): 98.4025,
+            Date(19, 9,2018): 98.3025 }
 
-swaps = { (4,Years): 0.0123356,
-          (5,Years): 0.0142700,
-          (6,Years): 0.0159304,
-          (7,Years): 0.0173300,
-		  (8,Years): 0.0184974,
-		  (9,Years): 0.0194652,
-		  (10,Years):0.0203015,
-          (12,Years):0.0216600,
-          (15,Years):0.0230245,
-          (20,Years):0.0243405,
-          (25,Years):0.0249750,
-          (30,Years):0.0253399, }
+swapsQ = { (4,Years): 0.0120638,
+          (5,Years): 0.0139721,
+          (6,Years): 0.0156192,
+          (7,Years): 0.0170067,
+		  (8,Years): 0.0181693,
+		  (9,Years): 0.0191169,
+		  (10,Years):0.0199479,
+          (12,Years):0.0213048,
+          (15,Years):0.0226631,
+          (20,Years):0.0239851,
+          (25,Years):0.0246203,
+          (30,Years):0.0249790, }
 
 # convert them to Quote objects
-for n,unit in deposits.keys():
-    deposits[(n,unit)] = SimpleQuote(deposits[(n,unit)])
+deposits = {}
+futures = {}
+swaps = {}
+for n,unit in depositsQ.keys():
+    deposits[(n,unit)] = SimpleQuote(depositsQ[(n,unit)])
 #for n,m in FRAs.keys():
 #    FRAs[(n,m)] = SimpleQuote(FRAs[(n,m)])
-for d in futures.keys():
-    futures[d] = SimpleQuote(futures[d])
-for n,unit in swaps.keys():
-    swaps[(n,unit)] = SimpleQuote(swaps[(n,unit)])
+for d in futuresQ.keys():
+    futures[d] = SimpleQuote(futuresQ[d])
+for n,unit in swapsQ.keys():
+    swaps[(n,unit)] = SimpleQuote(swapsQ[(n,unit)])
 
 # build rate helpers
 
@@ -114,7 +117,7 @@ depoFuturesSwapCurve = PiecewiseFlatForward(settlementDate, helpers,
 swapEngine = DiscountingSwapEngine(discountTermStructure)
 discountTermStructure.linkTo(depoFuturesSwapCurve)
 swapType = VanillaSwap.Payer
-nominal = 100
+nominal = 1000
 for_len = 1
 to_len = 5
 maturity = calendar.advance(settlementDate, for_len+to_len, Years)
@@ -170,11 +173,11 @@ exercise = BermudanExercise(bermudanDates, False)
 target_swaption = Swaption(underlying, exercise)
 #swaptionVols = [ (d, endDate, vv) for d in bermudanDates ]
 swaptionVols = [ # maturity,          length,             volatility
-                 (Period(12, Months), Period(60, Months), 0.49344),
-				 (Period(24, Months), Period(48, Months), 0.48934),
-				 (Period(36, Months), Period(36, Months), 0.51422),
-				 (Period(48, Months), Period(24, Months), 0.50601),
-				 (Period(60, Months), Period(12, Months), 0.49515),
+                 (Period(12, Months), Period(60, Months), SimpleQuote(0.49922)),
+				 (Period(24, Months), Period(48, Months), SimpleQuote(0.50507)),
+				 (Period(36, Months), Period(36, Months), SimpleQuote(0.52428)),
+				 (Period(48, Months), Period(24, Months), SimpleQuote(0.51200)),
+				 (Period(60, Months), Period(12, Months), SimpleQuote(0.54383)),
 				 #(Period(27, Months), Period(45, Months), vv),
 				 #(Period(30, Months), Period(42, Months), vv),
 				 #(Period(33, Months), Period(39, Months), vv),
@@ -191,10 +194,11 @@ swaptionVols = [ # maturity,          length,             volatility
 				 #(Period(66, Months), Period( 6, Months), vv),
                  #(Period(69, Months), Period( 3, Months), vv),
 				 ]
+volQuotes = [vol.value() for exerciseDate, endDate, vol in swaptionVols]
 helpers = [ SwaptionHelper(exerciseDate, endDate, \
-                           QuoteHandle(SimpleQuote(vol)), \
+                           QuoteHandle(vol), \
                            index, index.tenor(), index.dayCounter(), \
-                           index.dayCounter(), discountTermStructure) for exerciseDate, endDate, vol in swaptionVols ]
+                           index.dayCounter(), discountTermStructure, strike) for exerciseDate, endDate, vol in swaptionVols ]
 
 #volQuote= SimpleQuote(vv)
 #swaptionVol = ConstantSwaptionVolatility(0, UnitedStates(), ModifiedFollowing, volQuote, Actual365Fixed())
@@ -216,4 +220,64 @@ method = LevenbergMarquardt()
 ec = EndCriteria(1000, 10, 1E-8, 1E-8, 1E-8)
 gsr.calibrateVolatilitiesIterative(helpers, method, ec)
 target_swaption.setPricingEngine(swaptionEngine)
-print target_swaption.NPV()
+ref_pv = target_swaption.NPV()
+print "spot = %s" % (underlying.fairRate())
+print "ref_price = %s" % ref_pv
+
+shiftSize = 0.0001
+for n,unit in deposits.keys():
+    deposits[(n,unit)].setValue(depositsQ[(n,unit)] + shiftSize)
+for d in futures.keys():
+    futures[d].setValue(futuresQ[d] - shiftSize*100)
+for n,unit in swaps.keys():
+    swaps[(n,unit)].setValue(swapsQ[(n,unit)] + shiftSize)
+
+gsr = Gsr(discountTermStructure, stepDates, sigmas, reversion, 20.0)
+swaptionEngine = Gaussian1dSwaptionEngine(gsr, 64, 7.0, True,False, discountTermStructure)
+for h in helpers:
+	h.setPricingEngine(swaptionEngine)
+gsr.calibrateVolatilitiesIterative(helpers, method, ec)
+target_swaption.setPricingEngine(swaptionEngine)
+pv_up = target_swaption.NPV()
+print "spot = %s" % (underlying.fairRate())
+print "ref_price = %s" % pv_up
+
+for n,unit in deposits.keys():
+    deposits[(n,unit)].setValue(depositsQ[(n,unit)] - shiftSize)
+for d in futures.keys():
+    futures[d].setValue(futuresQ[d] + shiftSize * 100)
+for n,unit in swaps.keys():
+    swaps[(n,unit)].setValue(swapsQ[(n,unit)] - shiftSize)
+
+gsr = Gsr(discountTermStructure, stepDates, sigmas, reversion, 20.0)
+swaptionEngine = Gaussian1dSwaptionEngine(gsr, 64, 7.0, True,False, discountTermStructure)
+for h in helpers:
+	h.setPricingEngine(swaptionEngine)
+gsr.calibrateVolatilitiesIterative(helpers, method, ec)
+target_swaption.setPricingEngine(swaptionEngine)
+pv_down = target_swaption.NPV()
+
+for n,unit in deposits.keys():
+    deposits[(n,unit)].setValue(depositsQ[(n,unit)])
+for d in futures.keys():
+    futures[d].setValue(futuresQ[d])
+for n,unit in swaps.keys():
+    swaps[(n,unit)].setValue(swapsQ[(n,unit)])
+
+volShift = 0.01
+for idx, (exerciseDate, endDate, vol) in enumerate(swaptionVols):
+    vol.setValue( volQuotes[idx] + volShift )
+gsr = Gsr(discountTermStructure, stepDates, sigmas, reversion, 20.0)
+swaptionEngine = Gaussian1dSwaptionEngine(gsr, 64, 7.0, True,False, discountTermStructure)
+for h in helpers:
+	h.setPricingEngine(swaptionEngine)
+gsr.calibrateVolatilitiesIterative(helpers, method, ec)
+target_swaption.setPricingEngine(swaptionEngine)
+pv_vol = target_swaption.NPV()
+
+print "spot = %s" % (underlying.fairRate())
+print "ref_price = %s" % pv_down
+delta = (pv_up-pv_down)/2 * 10000
+gamma = (pv_down + pv_up - ref_pv * 2) * 10000
+vega = -(pv_vol - ref_pv)*10000
+print "delta = %s, gamma = %s, vega = %s" % (delta, gamma, vega)
