@@ -166,24 +166,9 @@ def dual_thrust_sim( mdf, config):
     return (res, closed_trades, ts)
         
 def run_sim(start_date, end_date, daily_close = False):
-    commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
-    start_dates1 = [datetime.date(2010,10,1)] * 12 + \
-                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH','pp', 'IF', 'MA', 'TF','IH', 'IC']
-    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
-                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)] + \
-                [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
-    commod_list = commod_list1 + commod_list2
-    start_dates = start_dates1 + start_dates2
-    #sim_list = [ 'm','y', 'p', 'RM', 'a', 'rb', 'ag', 'TA', 'MA', 'SR','i']
-    sim_list = [ 'ag', 'au', 'cu', 'al', 'zn']
-    sdate_list = []
-    for c, d in zip(commod_list, start_dates):
-        if c in sim_list:
-            sdate_list.append(d)
+    sim_list = [ 'ag', 'cu', 'al', 'zn', 'TA', 'MA', 'i', 'rb', 'm', 'y', 'p', 'm', 'RM', 'SR', 'ru']
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test2/DTsplit_'
+    file_prefix = test_folder + 'test/DTsplit_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -207,7 +192,8 @@ def run_sim(start_date, end_date, daily_close = False):
                   (0.2 ,4, 0.5, 0.0), (0.25,4, 0.5, 0.0), (0.3, 4, 0.5, 0.0), (0.35,4, 0.5, 0.0), \
                   (0.4, 4, 0.5, 0.0), (0.45,4, 0.5, 0.0), (0.5, 4, 0.5, 0.0),\
                   ]
-    for asset, sdate in zip(sim_list, sdate_list):
+    for asset in sim_list:
+        sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
         config['nearby'] = 1
         config['rollrule'] = '-50b'

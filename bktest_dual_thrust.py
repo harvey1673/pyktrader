@@ -13,6 +13,7 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     rollrule = config['rollrule']
     start_d = misc.day_shift(start_date, '-4b')
     file_prefix = config['file_prefix'] + '_' + asset + '_'
+    #print asset, nearby, start_d, end_date
     ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
     mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)
     mdf = backtest.cleanup_mindata(mdf, asset)
@@ -168,21 +169,7 @@ def dual_thrust_sim( ddf, mdf, config):
     return (res, closed_trades, ts)
         
 def run_sim(start_date, end_date, daily_close = False):
-    commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
-    start_dates1 = [datetime.date(2010,10,1)] * 12 + \
-                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH','pp', 'IF', 'MA', 'TF','IH', 'IC']
-    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
-                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)] + \
-                [datetime.date(2015,1,3), datetime.date(2014,4,1), datetime.date(2015,5,1), datetime.date(2015,5,1)]
-    commod_list = commod_list1 + commod_list2
-    start_dates = start_dates1 + start_dates2
-    sim_list = ['m', 'RM', 'p', 'y', 'l', 'pp', 'TA', 'SR', 'rb', 'TF', 'i', 'rb']
-    sdate_list = []
-    for c, d in zip(commod_list, start_dates):
-        if c in sim_list:
-            sdate_list.append(d)
+    sim_list = [ 'cs', 'TF', 'i', 'rb',  'SR', 'OI',  'MA', 'l', 'v', 'TA', 'a', 'm', 'p', 'y', 'pp', 'ru']
     test_folder = backtest.get_bktest_folder()
     file_prefix = test_folder + 'test/DTwEP_'
     if daily_close:
@@ -202,12 +189,13 @@ def run_sim(start_date, end_date, daily_close = False):
                   (0.6, 1, 0.0), (0.7, 1, 0.0), (0.8, 1, 0.0), (0.9, 1, 0.0), (1.0, 1, 0.0), (1.1, 1, 0.0), (1.2, 1, 0.0),\
                   (0.25, 2, 0),  (0.3, 2, 0),   (0.35, 2, 0),  (0.4, 2, 0),   (0.45, 2, 0),  (0.5, 2, 0),   (0.6, 2, 0),  \
                   (0.2, 4, 0),   (0.25,4, 0),   (0.3,  4, 0),  (0.35,4, 0),   (0.4,  4, 0) ]
-    for asset, sdate in zip(sim_list, sdate_list):
-        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
+    for asset in sim_list:
+        sdate =  backtest.sim_start_dict[asset]
+        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['nearby'] = 1
         config['rollrule'] = '-50b'
         config['exit_min'] = 2055
-        config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2058, 2100)
+        config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2059, 2100)
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
@@ -238,4 +226,4 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d, d_close)
     pass
-            
+

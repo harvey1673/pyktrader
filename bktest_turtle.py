@@ -161,6 +161,7 @@ def turtle_sim( ddf, mdf, config ):
 
 
 def run_sim(start_date, end_date, trail_loss = False):
+    sim_list = [ 'cs', 'TF', 'i', 'rb',  'SR', 'OI',  'MA', 'l', 'v', 'TA', 'a', 'm', 'p', 'y', 'pp', 'ru']
     test_folder = backtest.get_bktest_folder()
     postfix = '_'
     if trail_loss:
@@ -175,29 +176,14 @@ def run_sim(start_date, end_date, trail_loss = False):
               'trail_loss': trail_loss,
               'file_prefix': file_prefix}
 
-    commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm','bu', 'sn', 'ni'] #
-    start_dates1 = [datetime.date(2010,10,1)] * 12 + \
-                [datetime.date(2012,7,1), datetime.date(2013,11,26), \
-                 datetime.date(2011,6,1),datetime.date(2013,5,1), \
-                 datetime.date(2013,11,20), datetime.date(2014, 3, 27), datetime.date(2014, 3, 27)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH','pp', 'IF']
-    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
-                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2014,4,1), datetime.date(2010,7,1)]
-    commod_list = commod_list1+commod_list2
-    start_dates = start_dates1 + start_dates2
-    sim_list = ['i', 'j', 'jm', 'TF', 'au', 'TC', 'FG']
-    sdate_list = []
-    for c, d in zip(commod_list, start_dates):
-        if c in sim_list:
-            sdate_list.append(d)
     systems = [(20, 10, 1, 2, 4), (20, 5, 1, 2, 4), (15, 5, 1, 2, 4), (10, 5, 1, 2, 4), \
                (20, 10, 1, 2, 3), (20, 5, 1, 2, 3), (15, 5, 1, 2, 3), (10, 5, 1, 2, 3), \
                (20, 10, 1, 2, 2), (20, 5, 1, 2, 2), (15, 5, 1, 2, 2), (10, 5, 1, 2, 2), \
                (20, 10, 1, 2, 1), (20, 5, 1, 2, 1), (15, 5, 1, 2, 1), (10, 5, 1, 2, 1), \
                (20, 10, 1, 1, 2), (20, 5, 1, 1, 2), (15, 5, 1, 1, 2), (10, 5, 1, 1, 2), \
                (20, 10, 1, 1, 1), (20, 5, 1, 1, 1), (15, 5, 1, 1, 1), (10, 5, 1, 1, 1) ]
-    for asset, sdate in zip(sim_list, sdate_list):
+    for asset in sim_list:
+        sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['nearby'] = 1
         config['rollrule'] = '-50b'

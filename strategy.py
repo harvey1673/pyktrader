@@ -99,7 +99,6 @@ class ParSARTradePos(TradePos):
             self.af = max(self.af_cap, self.af + self.af_incr)
             self.ep = curr_ep
 
-
 class TargetTrailTradePos(TradePos):
     def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1, reset_margin = 10):
         TradePos.__init__(self, insts, vols, pos, entry_target, exit_target, price_unit)
@@ -113,7 +112,6 @@ class TargetTrailTradePos(TradePos):
             if self.check_profit(curr_price, self.reset_margin):
                 self.trailing = True
                 self.exit_target = self.curr_price
-
 
 def tradepos2dict(tradepos):
     trade = {}
@@ -139,7 +137,6 @@ def tradepos2dict(tradepos):
     trade['price_unit'] = tradepos.price_unit
     trade['is_closed'] = 1 if tradepos.is_closed else 0
     return trade
-
 
 class Strategy(object):
     def __init__(self, name, underliers, volumes, trade_unit = [], agent = None, email_notify = None):

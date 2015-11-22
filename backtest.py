@@ -10,10 +10,23 @@ sim_margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
                 'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
                 'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1,
-                'jd': 0.06, 'ni': 0.07, 'sn': 0.07, 'IC': 0.1, 
+                'jd': 0.06, 'ni': 0.07, 'IC': 0.1,
                 'IH': 0.01, 'FG': 0.05, 'TF':0.015, 'OI': 0.05,
                 'T': 0.015, 'MA': 0.06, 'cs': 0.05, 'bu': 0.07, 
-                'ni': 0.07, 'sn': 0.05, 'v': 0.05 }
+                'sn': 0.05, 'v': 0.05 }
+sim_start_dict = { 'c': datetime.date(2008.10,1), 'm': datetime.date(2010.10,1),
+    'y': datetime.date(2010.10,1), 'l': datetime.date(2010.10,1), 'rb':datetime.date(2010.10,1),
+    'p': datetime.date(2010.10,1), 'cu':datetime.date(2010.10,1), 'al':datetime.date(2010.10,1),
+    'zn':datetime.date(2010.10,1), 'au':datetime.date(2010.10,1), 'v': datetime.date(2010.10,1),
+    'a': datetime.date(2010.10,1), 'ru':datetime.date(2010.10,1), 'ag':datetime.date(2012.7,1),
+    'i': datetime.date(2013.11,26), 'j': datetime.date(2011.6,1), 'jm':datetime.date(2013.5,1),
+    'ME':datetime.date(2012.2,1),  'CF':datetime.date(2012.6,1),  'TA':datetime.date(2012.6,1),
+    'PM':datetime.date(2012.10,1), 'RM':datetime.date(2013.2,1),  'SR':datetime.date(2013.2,1),
+    'FG':datetime.date(2013.2,1),  'OI':datetime.date(2013.6,1),  'RI':datetime.date(2013.6,1),
+    'TC':datetime.date(2013.10,1), 'WH':datetime.date(2014.2,1),  'pp':datetime.date(2014,4,1),
+    'IF':datetime.date(2010.7,1),  'MA':datetime.date(2015.1,3),  'TF':datetime.date(2014.4,1),
+    'IH':datetime.date(2015.5,1),  'IC':datetime.date(2015.5,1),  'cs':datetime.date(2015.1,2),
+    }
 
 def get_bktest_folder():
     folder = ''
@@ -50,6 +63,7 @@ def cleanup_mindata(df, asset):
         else:
             cond = cond | (df.min_id>= tradehrs[idx][0]) & (df.min_id < tradehrs[idx][1])
     df = df.ix[cond]
+    df = df[(df.close > 0) & (df.high > 0) & (df.open > 0) & (df.low > 0)]
     return df
 
 def get_pnl_stats(df, start_capital, marginrate, freq):

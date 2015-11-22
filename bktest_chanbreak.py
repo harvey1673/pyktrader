@@ -135,22 +135,7 @@ def chanbreak_sim( mdf, config):
     return (res, closed_trades, ts)
     
 def run_sim(start_date, end_date):
-    commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
-    start_dates1 = [datetime.date(2010,10,1)] * 12 + \
-                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH', 'IF']
-    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
-                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2010,6,1)]
-    commod_list = commod_list1 + commod_list2
-    start_dates = start_dates1 + start_dates2
-    #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
     sim_list = [ 'm', 'y', 'l', 'p', 'rb', 'TA', 'SR', 'RM', 'cu', 'i', 'a', 'ag']
-    sdate_list = []
-    for c, d in zip(commod_list, start_dates):
-        if c in sim_list:
-            sdate_list.append(d)
-    
     test_folder = backtest.get_bktest_folder()
     file_prefix = test_folder + 'ChanBreak_'
     config = {'capital': 10000,
@@ -164,7 +149,8 @@ def run_sim(start_date, end_date):
               'file_prefix': file_prefix}        
     freqs = [3, 5, 15]
     windows = [[20, 3], [40,3], [60,10], [120, 10]]
-    for asset, sdate in zip(sim_list, sdate_list):
+    for asset in sim_list:
+        sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['rollrule'] = '-50b' 
         config['nearby'] = 1 
@@ -177,7 +163,7 @@ def run_sim(start_date, end_date):
             config['start_min'] = 1520
             config['exit_min'] = 2059
             config['rollrule'] = '-1b'    
-        chanbreak( asset, start_date, end_date, freqs, windows, config)
+        chanbreak( asset, max(start_date, sdate), end_date, freqs, windows, config)
 
 if __name__=="__main__":
     args = sys.argv[1:]
@@ -191,4 +177,3 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d)
     pass
-

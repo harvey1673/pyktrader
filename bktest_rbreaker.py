@@ -143,21 +143,7 @@ def r_breaker_sim( ddf, mdf, config):
     return (res, closed_trades, ts)
 
 def run_sim(start_date, end_date, daily_close = True):
-    commod_list1 = ['m','y','l','ru','rb','p','cu','al','v','a','au','zn','ag','i','j','jm'] #
-    start_dates1 = [datetime.date(2010,10,1)] * 12 + \
-                [datetime.date(2012,7,1), datetime.date(2013,11,26), datetime.date(2011,6,1),datetime.date(2013,5,1)]
-    commod_list2 = ['ME', 'CF', 'TA', 'PM', 'RM', 'SR', 'FG', 'OI', 'RI', 'TC', 'WH', 'IF']
-    start_dates2 = [datetime.date(2012, 2,1)] + [ datetime.date(2012, 6, 1)] * 2 + [datetime.date(2012, 10, 1)] + \
-                [datetime.date(2013, 2, 1)] * 3 + [datetime.date(2013,6,1)] * 2 + \
-                [datetime.date(2013, 10, 1), datetime.date(2014,2,1), datetime.date(2010,6,1)]
-    commod_list = commod_list1 + commod_list2
-    start_dates = start_dates1 + start_dates2
-    #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
     sim_list = [ 'rb','ru','TA','SR','CF','ag','au','cu','i','al','j','zn', 'a', 'jd']
-    sdate_list = []
-    for c, d in zip(commod_list, start_dates):
-        if c in sim_list:
-            sdate_list.append(d)
     test_folder = backtest.get_bktest_folder()
     file_prefix = test_folder + 'RBreaker_'
     if daily_close:
@@ -172,7 +158,8 @@ def run_sim(start_date, end_date, daily_close = True):
     
     scenarios = [(0.25, 0.05, 0.15), (0.30, 0.06, 0.20), (0.35, 0.08, 0.25), (0.4, 0.1, 0.3)]
     freqs = ['1min', '3min', '5min']
-    for asset, sdate in zip(sim_list, sdate_list):
+    for asset in sim_list:
+        sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['rollrule'] = '-50b' 
         config['nearby'] = 1 
