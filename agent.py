@@ -15,6 +15,7 @@ import pandas as pd
 from base import *
 from misc import *
 import data_handler
+import backtest
 import pyktlib
 import numpy as np
 from eventType import *
@@ -850,11 +851,18 @@ class Agent(object):
                 min_end = int(self.instruments[inst].last_tick_id/1000)+1
                 #print "loading inst = %s" % inst
                 mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
+                mindata = backtest.cleanup_mindata(mindata, self.instruments[inst].product)
                 self.min_data[inst][1] = mindata
                 if len(mindata)>0:
                     min_date = mindata.index[-1].date()
                     if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
-                        self.cur_day[inst] = mysqlaccess.get_daily_by_tick(inst, min_date, start_tick=self.instruments[inst].start_tick_id, end_tick=self.instruments[inst].last_tick_id)
+                        ddf = data_handler.conv_ohlc_freq(mindata, 'd')
+                        self.cur_day[inst]['open'] = ddf.open[-1]
+                        self.cur_day[inst]['close'] = ddf.close[-1]
+                        self.cur_day[inst]['high'] = ddf.high[-1]
+                        self.cur_day[inst]['low'] = ddf.low[-1]
+                        self.cur_day[inst]['volume'] = ddf.volume[-1]
+                        self.cur_day[inst]['openInterest'] = ddf.openInterest[-1]
                         self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
                         self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
                         self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
@@ -1789,7 +1797,7 @@ class Agent(object):
 
 class SaveAgent(Agent):
     def init_init(self):
-        self.save_flag = True 
+        self.save_flag = True
         self.live_trading = False
         self.prepare_data_env(mid_day = True)
         self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
