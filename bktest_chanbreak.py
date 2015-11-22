@@ -8,6 +8,9 @@ import datetime
 import backtest
 import sys
 
+def count_min_id(dt):
+    return ((dt.hour+6)%24)*60+dt.minute
+
 def chanbreak( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -44,22 +47,24 @@ def chanbreak_sim( mdf, config):
     start_equity = config['capital']
     tcost = config['trans_cost']
     unit = config['unit']
-    k = config['scaler']
+    #k = config['scaler']
     marginrate = config['marginrate']
     offset = config['offset']
     win = config['win']
+    pos_class = config['pos_class']
+    pos_args  = config['pos_args']
     chan_func = config['channel_func']
     upper_chan_func = chan_func[0]
     lower_chan_func = chan_func[1]
-    entry_chan = win    
-    exit_chan = int(entry_chan/k[1])
+    entry_chan = win[0]    
+    exit_chan =  win[1]
     xdf['H1'] = upper_chan_func(xdf, entry_chan).shift(1)
     xdf['L1'] = lower_chan_func(xdf, entry_chan).shift(1)
     xdf['H2'] = upper_chan_func(xdf, exit_chan).shift(1)
     xdf['L2'] = lower_chan_func(xdf, exit_chan).shift(1)
     xdf['ATR'] = dh.ATR(xdf, entry_chan).shift(1)
     xdata = pd.concat([xdf['H1'], xdf['L1'], xdf['H2'], xdf['L2'], xdf['ATR'], xdf['high'], xdf['low']], \
-                      axis=1, keys=['H1', 'L1', 'H2', 'L2', 'xhigh', 'xlow'])
+                      axis=1, keys=['H1', 'L1', 'H2', 'L2', 'ATR', 'xhigh', 'xlow'])
     ll = mdf.shape[0]
     mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
@@ -72,14 +77,15 @@ def chanbreak_sim( mdf, config):
     max_idx = len(xdf.index)
     for idx, dd in enumerate(mdf.index):
         mslice = mdf.ix[dd]
-        min_id = agent.get_min_id(dd)
+        min_id = mslice.min_id
+        cnt_id = count_min_id(dd)
         if len(curr_pos) == 0:
             pos = 0
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos
-        if np.isnan(mslice.ATR):
-            continue
+        #if np.isnan(mslice.ATR):
+        #    continue
         if (min_id >=config['exit_min']):
             if (pos!=0) and (dd.date() == end_d):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -91,26 +97,29 @@ def chanbreak_sim( mdf, config):
             continue
         else:
             if (pos !=0):
-                curr_pos[0].update_bar(mslice)
-                if curr_pos[0].check_exit(mslice.close, mslice.ATR * k[0]):
+                if (cnt_id % freq) == 0:
+                    curr_pos[0].update_bar(mslice)
+                check_price = (pos>0) * mslice.low + (pos<0) * mslice.high
+                if curr_pos[0].check_exit(check_price, 0):
                     curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
                     closed_trades.append(curr_pos[0])
                     pos = 0
                     curr_pos = []                    
-            if ((mslice.high >= mslice.H2) and (pos<0)) or ((mslice.low <= mslice.L2) and (pos>0)):
-                curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
-                tradeid += 1
-                curr_pos[0].exit_tradeid = tradeid
-                closed_trades.append(curr_pos[0])
-                curr_pos = []
-                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
-                pos = 0
+            #if ((mslice.high >= mslice.H2) and (pos<0)) or ((mslice.low <= mslice.L2) and (pos>0)):
+            #    curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
+            #    tradeid += 1
+            #    curr_pos[0].exit_tradeid = tradeid
+            #    closed_trades.append(curr_pos[0])
+            #    curr_pos = []
+            #    mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+            #    pos = 0
             if ((mslice.high >= mslice.H1) and (pos<=0)) or ((mslice.low <= mslice.L1) and (pos>=0)):
                 if (pos ==0 ):
                     target_pos = (mslice.close >= mslice.H1) * unit -(mslice.close <= mslice.L1) * unit
-                    new_pos = strat.ParSARTradePos([mslice.contract], [1], target_pos, mslice.close, mslice.close)
+                    exit_target = (mslice.close >= mslice.H1) * mslice.L2 + (mslice.close <= mslice.L1) * mslice.H2
+                    new_pos = pos_class([mslice.contract], [1], target_pos, mslice.close, exit_target, pos_args)
                     tradeid += 1
                     new_pos.entry_tradeid = tradeid
                     new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
@@ -136,7 +145,7 @@ def run_sim(start_date, end_date):
     commod_list = commod_list1 + commod_list2
     start_dates = start_dates1 + start_dates2
     #sim_list = ['m', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'CF','ME', 'RM', 'ag', 'au', 'cu', 'al', 'zn'] 
-    sim_list = [ 'm', 'y', 'l', 'ru', 'rb', 'TA', 'SR', 'RM', 'cu']
+    sim_list = [ 'm', 'y', 'l', 'p', 'rb', 'TA', 'SR', 'RM', 'cu', 'i', 'a', 'ag']
     sdate_list = []
     for c, d in zip(commod_list, start_dates):
         if c in sim_list:
@@ -148,23 +157,25 @@ def run_sim(start_date, end_date):
               'offset': 0,
               'trans_cost': 0.0, 
               'unit': 1,
-              'scaler': (0.5, 2),
+              'scaler': (0.5),
               'channel_func': [dh.DONCH_H, dh.DONCH_L],
+              'pos_class': strat.ParSARTradePos,
+              'pos_args': {'af': 0.02, 'incr': 0.02, 'cap': 0.2},
               'file_prefix': file_prefix}        
-    freqs = [3, 5, ]
-    windows = [20, 40, 60, 120, 270]
+    freqs = [3, 5, 15]
+    windows = [[20, 3], [40,3], [60,10], [120, 10]]
     for asset, sdate in zip(sim_list, sdate_list):
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
         config['rollrule'] = '-50b' 
         config['nearby'] = 1 
         config['start_min'] = 1600
-        config['exit_min'] = 2055
+        config['exit_min'] = 2044
         if asset in ['cu', 'al', 'zn']:
             config['nearby'] = 3
             config['rollrule'] = '-1b'
         elif asset in ['IF']:
             config['start_min'] = 1520
-            config['exit_min'] = 2112
+            config['exit_min'] = 2059
             config['rollrule'] = '-1b'    
         chanbreak( asset, start_date, end_date, freqs, windows, config)
 
@@ -180,3 +191,4 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d)
     pass
+
