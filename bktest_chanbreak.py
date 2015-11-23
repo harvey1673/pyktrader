@@ -84,8 +84,8 @@ def chanbreak_sim( mdf, config):
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos
-        #if np.isnan(mslice.ATR):
-        #    continue
+        if np.isnan(mslice.H1) or np.isnan(mslice.ATR):
+            continue
         if (min_id >=config['exit_min']):
             if (pos!=0) and (dd.date() == end_d):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -97,7 +97,7 @@ def chanbreak_sim( mdf, config):
             continue
         else:
             if (pos !=0):
-                if (cnt_id % freq) == 0:
+                if ((cnt_id+1) % freq) == 0:
                     curr_pos[0].update_bar(mslice)
                 check_price = (pos>0) * mslice.low + (pos<0) * mslice.high
                 if curr_pos[0].check_exit(check_price, 0):
@@ -177,3 +177,4 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d)
     pass
+	
