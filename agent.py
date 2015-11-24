@@ -857,12 +857,12 @@ class Agent(object):
                     min_date = mindata.index[-1].date()
                     if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
                         ddf = data_handler.conv_ohlc_freq(mindata, 'd')
-                        self.cur_day[inst]['open'] = ddf.open[-1]
-                        self.cur_day[inst]['close'] = ddf.close[-1]
-                        self.cur_day[inst]['high'] = ddf.high[-1]
-                        self.cur_day[inst]['low'] = ddf.low[-1]
-                        self.cur_day[inst]['volume'] = ddf.volume[-1]
-                        self.cur_day[inst]['openInterest'] = ddf.openInterest[-1]
+                        self.cur_day[inst]['open'] = float(ddf.open[-1])
+                        self.cur_day[inst]['close'] = float(ddf.close[-1])
+                        self.cur_day[inst]['high'] = float(ddf.high[-1])
+                        self.cur_day[inst]['low'] = float(ddf.low[-1])
+                        self.cur_day[inst]['volume'] = int(ddf.volume[-1])
+                        self.cur_day[inst]['openInterest'] = int(ddf.openInterest[-1])
                         self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
                         self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
                         self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
