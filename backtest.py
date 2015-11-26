@@ -26,7 +26,7 @@ sim_start_dict = { 'c': datetime.date(2008,10,1), 'm': datetime.date(2010,10,1),
     'TC':datetime.date(2013,10,1), 'WH':datetime.date(2014,2,1),  'pp':datetime.date(2014,4,1),
     'IF':datetime.date(2010,7,1),  'MA':datetime.date(2015,7,1),  'TF':datetime.date(2014,4,1),
     'IH':datetime.date(2015,5,1),  'IC':datetime.date(2015,5,1),  'cs':datetime.date(2015,1,2),
-    'jd':datetime.date(2014,6,1),
+    'jd':datetime.date(2014,6,1),  'ni':datetime.date(2015,6,1),  'sn':datetime.date(2015,6,1),
     }
 
 def get_bktest_folder():

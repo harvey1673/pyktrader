@@ -84,8 +84,8 @@ def chanbreak_sim( mdf, config):
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos
-        if np.isnan(mslice.H1) or np.isnan(mslice.ATR):
-            continue
+        #if np.isnan(mslice.ATR):
+        #    continue
         if (min_id >=config['exit_min']):
             if (pos!=0) and (dd.date() == end_d):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -97,9 +97,10 @@ def chanbreak_sim( mdf, config):
             continue
         else:
             if (pos !=0):
-                if ((cnt_id+1) % freq) == 0:
+                if (cnt_id % freq) == 0:
                     curr_pos[0].update_bar(mslice)
                 check_price = (pos>0) * mslice.low + (pos<0) * mslice.high
+                print mslice.close, check_price, curr_pos[0].exit_target
                 if curr_pos[0].check_exit(check_price, 0):
                     curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
                     tradeid += 1
@@ -127,7 +128,7 @@ def chanbreak_sim( mdf, config):
                     mdf.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
                     mdf.ix[dd, 'pos'] = pos
                 else:
-                    print "something wrong with position=%s, close =%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, xslice.H1, xslice.L1)
+                    print "something wrong with position=%s, close =%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, mslice.H1, mslice.L1)
             
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
@@ -147,8 +148,8 @@ def run_sim(start_date, end_date):
               'pos_class': strat.ParSARTradePos,
               'pos_args': {'af': 0.02, 'incr': 0.02, 'cap': 0.2},
               'file_prefix': file_prefix}        
-    freqs = [3, 5, 15]
-    windows = [[20, 3], [40,3], [60,10], [120, 10]]
+    freqs = [15]
+    windows = [[20, 5], [40,10], [60,15], [120, 20]]
     for asset in sim_list:
         sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
@@ -177,4 +178,3 @@ if __name__=="__main__":
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
     run_sim(start_d, end_d)
     pass
-	
