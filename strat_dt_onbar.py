@@ -3,7 +3,7 @@
 from misc import *
 from strategy import *
  
-class DTTrader(Strategy):
+class DTBarTrader(Strategy):
     def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None, ma_win = 10, min_rng = [0.00], freq = 1):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.lookbacks = lookbacks
@@ -35,7 +35,7 @@ class DTTrader(Strategy):
             self.min_rng = min_rng
         elif len(min_rng) == 1:
             self.min_rng = min_rng * numAssets
-		self.freq = freq
+        self.freq = freq
 
     def initialize(self):
         self.load_state()
@@ -61,7 +61,7 @@ class DTTrader(Strategy):
     def register_bar_freq(self):
         for instID in self.instIDs:
             self.agent.inst2strat[instID][self.name].append(self.freq)
-			
+
     def save_local_variables(self, file_writer):
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
@@ -81,11 +81,11 @@ class DTTrader(Strategy):
         if (freq != self.freq):
             return
         if len(self.submitted_trades[idx]) > 0:
-			self.logger.warning("warning: working order is still pending") 
+            self.logger.warning("warning: working order is still pending")
             return
         inst = self.underliers[idx][0]
         self.tday_open[idx] = self.agent.cur_day[inst]['open']
-		mslice = self.agent.min_data[inst][freq].iloc[-1]
+        mslice = self.agent.min_data[inst][freq].iloc[-1]
         if (self.tday_open[idx] <= 0.0) or (self.cur_rng[idx] <= 0) or (self.curr_prices[idx] <= 0.001):
             self.logger.warning("warning: open price =0.0 or range = 0.0 or curr_price=0 for inst=%s for stat = %s" % (inst, self.name))
             return

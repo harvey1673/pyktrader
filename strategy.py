@@ -170,8 +170,8 @@ class Strategy(object):
         self.curr_prices = [0.0] * num_assets
         self.order_type = OPT_LIMIT_ORDER
         self.run_flag = [1] * num_assets
-		self.pos_class = TradePos
-		self.pos_args = {}
+        self.pos_class = TradePos
+        self.pos_args = {}
 
     def reset(self):
         self.inst2idx = {}
@@ -464,4 +464,4 @@ class Strategy(object):
             tradedict = tradepos2dict(tradepos)
             file_writer.writerow([tradedict[itm] for itm in tradepos_header])
         return
-		
+

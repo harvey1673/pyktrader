@@ -19,23 +19,24 @@ def dual_thrust( asset, start_date, end_date, scenarios, config, channels=[20]):
     mdf = backtest.cleanup_mindata(mdf, asset)
     #ddf = dh.conv_ohlc_freq(mdf, 'D')
     output = {}
-	for chan in channels:
-		for ix, s in enumerate(scenarios):
-			config['win'] = s[1]
-			config['k'] = s[0]
-			config['m'] = s[2]
-			config['chan'] = chan
-			(res, closed_trades, ts) = dual_thrust_sim( ddf, mdf, config)
-			output[ix] = res
-			print 'saving results for scen = %s' % str(chan)+str(ix)
-			all_trades = {}
-			for i, tradepos in enumerate(closed_trades):
-				all_trades[i] = strat.tradepos2dict(tradepos)
-			fname = file_prefix + str(ix) + '_trades.csv'
-			trades = pd.DataFrame.from_dict(all_trades).T  
-			trades.to_csv(fname)
-			fname = file_prefix + str(ix) + '_dailydata.csv'
-			ts.to_csv(fname)
+    for chan in channels:
+        for ix, s in enumerate(scenarios):
+            config['win'] = s[1]
+            config['k'] = s[0]
+            config['m'] = s[2]
+            idx = chan*100+ix
+            config['chan'] = chan
+            (res, closed_trades, ts) = dual_thrust_sim( ddf, mdf, config)
+            output[idx] = res
+            print 'saving results for scen = %s' % str(idx)
+            all_trades = {}
+            for i, tradepos in enumerate(closed_trades):
+                all_trades[i] = strat.tradepos2dict(tradepos)
+            fname = file_prefix + str(idx) + '_trades.csv'
+            trades = pd.DataFrame.from_dict(all_trades).T
+            trades.to_csv(fname)
+            fname = file_prefix + str(idx) + '_dailydata.csv'
+            ts.to_csv(fname)
     fname = file_prefix + 'stats.csv'
     res = pd.DataFrame.from_dict(output)
     res.to_csv(fname)
@@ -49,7 +50,7 @@ def dual_thrust_sim( ddf, mdf, config):
     ep_enabled = config['EP']
     start_equity = config['capital']
     win = config['win']
-	chan = config['chan']
+    chan = config['chan']
     chan_func = config['channel_func']
     upper_chan_func = chan_func[0]
     lower_chan_func = chan_func[1]
@@ -147,13 +148,14 @@ def dual_thrust_sim( ddf, mdf, config):
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset)
-                tradeid += 1
-                new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close + offset, dd)
-                curr_pos.append(new_pos)
-                pos = unit
-                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
+                if mslice.high >= dslice.H1:
+                    new_pos = strat.TradePos([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset)
+                    tradeid += 1
+                    new_pos.entry_tradeid = tradeid
+                    new_pos.open(mslice.close + offset, dd)
+                    curr_pos.append(new_pos)
+                    pos = unit
+                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
             elif (mslice.low <= selltrig) and (pos >=0 ):
                 if len(curr_pos) > 0:
                     curr_pos[0].close(mslice.close-offset, dd)
@@ -162,13 +164,14 @@ def dual_thrust_sim( ddf, mdf, config):
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset)
-                tradeid += 1
-                new_pos.entry_tradeid = tradeid
-                new_pos.open(mslice.close - offset, dd)
-                curr_pos.append(new_pos)
-                pos = -unit
-                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+                if mslice.low <= dslice.L1:
+                    new_pos = strat.TradePos([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset)
+                    tradeid += 1
+                    new_pos.entry_tradeid = tradeid
+                    new_pos.open(mslice.close - offset, dd)
+                    curr_pos.append(new_pos)
+                    pos = -unit
+                    mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
         mdf.ix[dd, 'pos'] = pos
             
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
@@ -177,9 +180,10 @@ def dual_thrust_sim( ddf, mdf, config):
     return (res, closed_trades, ts)
         
 def run_sim(start_date, end_date, daily_close = False):
-    sim_list = [ 'cs', 'TF', 'i', 'rb',  'SR', 'OI',  'MA', 'l', 'v', 'TA', 'a', 'm', 'p', 'y', 'pp', 'ru']
+    #sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF']
+    sim_list = ['m', 'l', 'TA', 'rb', 'y', 'p']
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DTwEP_'
+    file_prefix = test_folder + 'test/DTchan_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -190,15 +194,12 @@ def run_sim(start_date, end_date, daily_close = False):
               'unit': 1,
               'stoploss': 0.0,
               'min_range': 0.00,
-			  'EP': False,
-			  'channel_func': [dh.DONCH_H, dh.DONCH_L],
+              'EP': False,
+              'channel_func': [dh.DONCH_H, dh.DONCH_L],
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), (0.9, 0, 0.5), (1.0, 0, 0.5), (1.1, 0, 0.5), (1.2, 0, 0.5),\
-                  (0.6, 1, 0.0), (0.7, 1, 0.0), (0.8, 1, 0.0), (0.9, 1, 0.0), (1.0, 1, 0.0), (1.1, 1, 0.0), (1.2, 1, 0.0),\
-                  (0.25, 2, 0),  (0.3, 2, 0),   (0.35, 2, 0),  (0.4, 2, 0),   (0.45, 2, 0),  (0.5, 2, 0),   (0.6, 2, 0),  \
-                  (0.2, 4, 0),   (0.25,4, 0),   (0.3,  4, 0),  (0.35,4, 0),   (0.4,  4, 0) ]
-	channels = [5, 10, 15, 20, 25]
+    scenarios = [ (0.5, 0, 0.5), (0.6, 0, 0.5), (0.7, 0, 0.5)]
+    channels = [5, 10, 15, 20, 25]
     for asset in sim_list:
         sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
@@ -217,6 +218,7 @@ def run_sim(start_date, end_date, daily_close = False):
         elif asset in ['TF', 'T']:
             config['rollrule'] = '-20b'
             config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+        config['no_trade_set'] = []
         dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config, channels = channels)
     return
 
