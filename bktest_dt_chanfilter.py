@@ -181,9 +181,10 @@ def dual_thrust_sim( ddf, mdf, config):
         
 def run_sim(start_date, end_date, daily_close = False):
     #sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF']
-    sim_list = ['m', 'l', 'TA', 'rb', 'y', 'p']
+    sim_list = ['SR', 'i', 'TF', 'l', 'm', 'y', 'p', 'TA', 'jd']
+    #sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF']
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DTchan_'
+    file_prefix = test_folder + 'test/DTchan1'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -198,7 +199,7 @@ def run_sim(start_date, end_date, daily_close = False):
               'channel_func': [dh.DONCH_H, dh.DONCH_L],
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.5, 0, 0.5), (0.6, 0, 0.5), (0.7, 0, 0.5)]
+    scenarios = [ (0.5, 1, 0), (0.6, 1, 0), (0.7, 1, 0), (0.8, 1, 0), (0.9, 1, 0), (1.0, 1, 0), (1.1, 1, 0)]
     channels = [5, 10, 15, 20, 25]
     for asset in sim_list:
         sdate =  backtest.sim_start_dict[asset]
