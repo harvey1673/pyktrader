@@ -180,11 +180,11 @@ def dual_thrust_sim( ddf, mdf, config):
     return (res, closed_trades, ts)
         
 def run_sim(start_date, end_date, daily_close = False):
-    #sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF']
-    sim_list = ['SR', 'i', 'TF', 'l', 'm', 'y', 'p', 'TA', 'jd']
+    sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF', 'ni', 'j', 'jm', 'jd', 'ru']
+    #sim_list = ['TA', 'MA', 'SR', 'cs', 'i', 'TF', 'm', 'y', 'p', 'jd', 'a', 'RM', 'rb', 'j', 'jm' ]
     #sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF']
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DTchan1'
+    file_prefix = test_folder + 'test/DTchan_full_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -199,7 +199,9 @@ def run_sim(start_date, end_date, daily_close = False):
               'channel_func': [dh.DONCH_H, dh.DONCH_L],
               'file_prefix': file_prefix}
     
-    scenarios = [ (0.5, 1, 0), (0.6, 1, 0), (0.7, 1, 0), (0.8, 1, 0), (0.9, 1, 0), (1.0, 1, 0), (1.1, 1, 0)]
+    scenarios = [ (0.5, 0, 0.5), (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), (0.9, 0, 0.5), (1.0, 0, 0.5),
+                  (0.5, 1, 0.0), (0.6, 1, 0.0), (0.7, 1, 0.0), (0.8, 1, 0.0), (0.9, 1, 0.0), (1.0, 1, 0.0),
+                  (0.25, 2, 0), (0.3, 2, 0), (0.35, 2, 0), (0.4, 2, 0), (0.45, 2, 0), (0.5, 2, 0) ]
     channels = [5, 10, 15, 20, 25]
     for asset in sim_list:
         sdate =  backtest.sim_start_dict[asset]

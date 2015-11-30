@@ -58,13 +58,13 @@ def chanbreak_sim( mdf, config):
     lower_chan_func = chan_func[1]
     entry_chan = win[0]    
     exit_chan =  win[1]
-    xdf['H1'] = upper_chan_func(xdf, entry_chan).shift(1)
-    xdf['L1'] = lower_chan_func(xdf, entry_chan).shift(1)
-    xdf['H2'] = upper_chan_func(xdf, exit_chan).shift(1)
-    xdf['L2'] = lower_chan_func(xdf, exit_chan).shift(1)
-    xdf['ATR'] = dh.ATR(xdf, entry_chan).shift(1)
+    xdf['H1'] = upper_chan_func(xdf, entry_chan)
+    xdf['L1'] = lower_chan_func(xdf, entry_chan)
+    xdf['H2'] = upper_chan_func(xdf, exit_chan)
+    xdf['L2'] = lower_chan_func(xdf, exit_chan)
+    xdf['ATR'] = dh.ATR(xdf, entry_chan)
     xdata = pd.concat([xdf['H1'], xdf['L1'], xdf['H2'], xdf['L2'], xdf['ATR'], xdf['high'], xdf['low']], \
-                      axis=1, keys=['H1', 'L1', 'H2', 'L2', 'ATR', 'xhigh', 'xlow'])
+                      axis=1, keys=['H1', 'L1', 'H2', 'L2', 'ATR', 'xhigh', 'xlow']).shift(1)
     ll = mdf.shape[0]
     mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
@@ -100,7 +100,7 @@ def chanbreak_sim( mdf, config):
                 if (cnt_id % freq) == 0:
                     curr_pos[0].update_bar(mslice)
                 check_price = (pos>0) * mslice.low + (pos<0) * mslice.high
-                print mslice.close, check_price, curr_pos[0].exit_target
+                #print mslice.close, check_price, curr_pos[0].exit_target
                 if curr_pos[0].check_exit(check_price, 0):
                     curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
                     tradeid += 1
@@ -108,19 +108,20 @@ def chanbreak_sim( mdf, config):
                     closed_trades.append(curr_pos[0])
                     pos = 0
                     curr_pos = []                    
-            #if ((mslice.high >= mslice.H2) and (pos<0)) or ((mslice.low <= mslice.L2) and (pos>0)):
-            #    curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
-            #    tradeid += 1
-            #    curr_pos[0].exit_tradeid = tradeid
-            #    closed_trades.append(curr_pos[0])
-            #    curr_pos = []
-            #    mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
-            #    pos = 0
+            if ((mslice.high >= mslice.H2) and (pos<0)) or ((mslice.low <= mslice.L2) and (pos>0)):
+                curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
+                tradeid += 1
+                curr_pos[0].exit_tradeid = tradeid
+                closed_trades.append(curr_pos[0])
+                curr_pos = []
+                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+                pos = 0
+                mdf.ix[dd, 'pos'] = pos
             if ((mslice.high >= mslice.H1) and (pos<=0)) or ((mslice.low <= mslice.L1) and (pos>=0)):
                 if (pos ==0 ):
                     target_pos = (mslice.close >= mslice.H1) * unit -(mslice.close <= mslice.L1) * unit
                     exit_target = (mslice.close >= mslice.H1) * mslice.L2 + (mslice.close <= mslice.L1) * mslice.H2
-                    new_pos = pos_class([mslice.contract], [1], target_pos, mslice.close, exit_target, pos_args)
+                    new_pos = pos_class([mslice.contract], [1], target_pos, mslice.close, exit_target, 1, **pos_args)
                     tradeid += 1
                     new_pos.entry_tradeid = tradeid
                     new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
@@ -136,9 +137,10 @@ def chanbreak_sim( mdf, config):
     return (res, closed_trades, ts)
     
 def run_sim(start_date, end_date):
-    sim_list = [ 'm', 'y', 'l', 'p', 'rb', 'TA', 'SR', 'RM', 'cu', 'i', 'a', 'ag']
+    #sim_list = [ 'm', 'y', 'l', 'p', 'rb', 'TA', 'SR', 'RM', 'cu', 'i', 'a', 'ag']
+    sim_list = [ 'rb' ]
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'ChanBreak_'
+    file_prefix = test_folder + 'ChanBreaktest_'
     config = {'capital': 10000,
               'offset': 0,
               'trans_cost': 0.0, 
@@ -149,7 +151,7 @@ def run_sim(start_date, end_date):
               'pos_args': {'af': 0.02, 'incr': 0.02, 'cap': 0.2},
               'file_prefix': file_prefix}        
     freqs = [15]
-    windows = [[20, 5], [40,10], [60,15], [120, 20]]
+    windows = [[20, 10], [40,10], [60,15], [120, 20]]
     for asset in sim_list:
         sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
