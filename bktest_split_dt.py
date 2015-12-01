@@ -8,6 +8,21 @@ import strategy as strat
 import datetime
 import backtest
 
+def min_freq_group(mdf, freq = 5):
+    min_cnt = (mdf['mid_id']-300)/100 * 60 + (mdf['mid_id'] % 100)
+    mdf['min_idx'] = min_cnt/freq
+    mdf['date_idx'] = mdf.index.date
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    return xdf
+
+def day_split(mdf, minlist = [1500]):
+    mdf['min_idx'] = 0
+    for idx, mid in enumerate(minlist):
+        mdf.loc[mdf['min_id']>=mid, 'min_idx'] = idx + 1
+    mdf['date_idx'] = mdf.index.date
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    return xdf
+
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -43,6 +58,8 @@ def dual_thrust_sim( mdf, config):
     offset = config['offset']
     k = config['k']
     f = config['f']
+    proc_func = config['proc_func']
+    proc_args = config['proc_args']
     start_equity = config['capital']
     win = config['win']
     multiplier = config['m']
@@ -53,40 +70,34 @@ def dual_thrust_sim( mdf, config):
     ma_fast = config['MA_fast']
     no_trade_set = config['no_trade_set']
     ll = mdf.shape[0]
-    mdf['min_idx'] = pd.Series(1, index = mdf.index)
-    mdf.loc[mdf['min_id']<1500, 'min_idx'] = 0
-    mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    xdf = proc_func(mdf, **proc_args)
     if win == -1:
         tr= pd.concat([xdf.high - xdf.low, abs(xdf.close - xdf.close.shift(1))], 
-                       join='outer', axis=1).max(axis=1).shift(1)
-    elif win == -2:
-        tr= pd.rolling_max(xdf.high, 2) - pd.rolling_min(xdf.low, 2)                       
+                       join='outer', axis=1).max(axis=1)
     elif win == 0:
         tr = pd.concat([(pd.rolling_max(xdf.high, 2) - pd.rolling_min(xdf.close, 2))*multiplier, 
                         (pd.rolling_max(xdf.close, 2) - pd.rolling_min(xdf.low, 2))*multiplier,
                         xdf.high - xdf.close, 
                         xdf.close - xdf.low], 
-                        join='outer', axis=1).max(axis=1).shift(1)
+                        join='outer', axis=1).max(axis=1)
     else:
         tr= pd.concat([pd.rolling_max(xdf.high, win) - pd.rolling_min(xdf.close, win), 
                        pd.rolling_max(xdf.close, win) - pd.rolling_min(xdf.low, win)], 
-                       join='outer', axis=1).max(axis=1).shift(1)
+                       join='outer', axis=1).max(axis=1)
     xdf['TR'] = tr
-    xdf['MA'] = pd.rolling_mean(xdf.close, ma_fast).shift(1)
-    ddf = pd.concat([xdf['TR'], xdf['MA'], xdf['open'], xdf['date_idx']], axis=1, keys=['TR','MA','dopen', 'date']).fillna(0)
-    mdf = mdf.join(ddf, how = 'left').fillna(method='ffill')
+    xdf['MA'] = pd.rolling_mean(xdf.close, ma_fast)
+    xdata = pd.concat([xdf['TR'].shift(1), xdf['MA'].shift(1), xdf['open'], xdf['date_idx']], axis=1, keys=['TR','MA','dopen', 'date']).fillna(0)
+    mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
     curr_pos = []
     closed_trades = []
-    start_d = ddf.index[0]
-    end_d = mdf.index[-1].date()
+    end_d = mdf.index[-1].date
     #prev_d = start_d - datetime.timedelta(days=1)
     tradeid = 0
     for dd in mdf.index:
         mslice = mdf.ix[dd]
-        min_id = agent.get_min_id(dd)
+        min_id = mslice.min_id
         if len(curr_pos) == 0:
             pos = 0
         else:
@@ -166,7 +177,8 @@ def dual_thrust_sim( mdf, config):
     return (res, closed_trades, ts)
         
 def run_sim(start_date, end_date, daily_close = False):
-    sim_list = [ 'ag', 'cu', 'al', 'zn', 'TA', 'MA', 'i', 'rb', 'm', 'y', 'p', 'm', 'RM', 'SR', 'ru']
+    #sim_list = [ 'ag', 'TA', 'MA', 'i', 'rb', 'a', 'm', 'y', 'p', 'm', 'RM', 'SR', 'ru', 'cu', 'al', 'zn']
+    sim_list = ['IF']
     test_folder = backtest.get_bktest_folder()
     file_prefix = test_folder + 'test/DTsplit_'
     if daily_close:
@@ -181,6 +193,8 @@ def run_sim(start_date, end_date, daily_close = False):
               'unit': 1,
               'stoploss': 0.0,
               'min_range': 0.004,
+              'proc_func': min_freq_group,
+              'proc_args': {'freq': 5},
               'file_prefix': file_prefix}
     
     scenarios = [ (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), (0.9, 0, 0.5, 0.0), \
@@ -210,6 +224,7 @@ def run_sim(start_date, end_date, daily_close = False):
         elif asset in ['TF', 'T']:
             config['rollrule'] = '-20b'
             config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+        config['no_trade_set'] = []
         dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config)
     return
 

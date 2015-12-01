@@ -9,7 +9,7 @@ import backtest
 import sys
 
 def count_min_id(dt):
-    return ((dt.hour+6)%24)*60+dt.minute
+    return ((dt.hour+6)%24)*60+dt.minute + 1
 
 def chanbreak( asset, start_date, end_date, freqs, windows, config):
     nearby  = config['nearby']
@@ -93,6 +93,7 @@ def chanbreak_sim( mdf, config):
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
+                pos = 0
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
             continue
         else:
@@ -100,7 +101,6 @@ def chanbreak_sim( mdf, config):
                 if (cnt_id % freq) == 0:
                     curr_pos[0].update_bar(mslice)
                 check_price = (pos>0) * mslice.low + (pos<0) * mslice.high
-                #print mslice.close, check_price, curr_pos[0].exit_target
                 if curr_pos[0].check_exit(check_price, 0):
                     curr_pos[0].close(mslice.close - misc.sign(pos) * offset, dd)
                     tradeid += 1
@@ -116,21 +116,17 @@ def chanbreak_sim( mdf, config):
                 curr_pos = []
                 mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
                 pos = 0
-                mdf.ix[dd, 'pos'] = pos
             if ((mslice.high >= mslice.H1) and (pos<=0)) or ((mslice.low <= mslice.L1) and (pos>=0)):
                 if (pos ==0 ):
-                    target_pos = (mslice.close >= mslice.H1) * unit -(mslice.close <= mslice.L1) * unit
-                    exit_target = (mslice.close >= mslice.H1) * mslice.L2 + (mslice.close <= mslice.L1) * mslice.H2
-                    new_pos = pos_class([mslice.contract], [1], target_pos, mslice.close, exit_target, 1, **pos_args)
+                    pos = (mslice.high >= mslice.H1) * unit -(mslice.low <= mslice.L1) * unit
+                    exit_target = (mslice.high >= mslice.H1) * mslice.L2 + (mslice.low <= mslice.L1) * mslice.H2
+                    new_pos = pos_class([mslice.contract], [1], pos, mslice.close, exit_target, 1, **pos_args)
                     tradeid += 1
                     new_pos.entry_tradeid = tradeid
-                    new_pos.open(mslice.close + misc.sign(target_pos)*offset, dd)
+                    new_pos.open(mslice.close + misc.sign(pos)*offset, dd)
                     curr_pos.append(new_pos)
-                    mdf.ix[dd, 'cost'] -=  abs(target_pos) * (offset + mslice.close*tcost)
-                    mdf.ix[dd, 'pos'] = pos
-                else:
-                    print "something wrong with position=%s, close =%s, upBnd=%s, lowBnd=%s" % ( pos, mslice.close, mslice.H1, mslice.L1)
-            
+                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
+            mdf.ix[dd, 'pos'] = pos
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
     res = dict( res_pnl.items() + res_trade.items())
@@ -138,7 +134,7 @@ def chanbreak_sim( mdf, config):
     
 def run_sim(start_date, end_date):
     #sim_list = [ 'm', 'y', 'l', 'p', 'rb', 'TA', 'SR', 'RM', 'cu', 'i', 'a', 'ag']
-    sim_list = [ 'rb' ]
+    sim_list = [ 'rb', 'p', 'IF' ]
     test_folder = backtest.get_bktest_folder()
     file_prefix = test_folder + 'ChanBreaktest_'
     config = {'capital': 10000,
@@ -150,8 +146,8 @@ def run_sim(start_date, end_date):
               'pos_class': strat.ParSARTradePos,
               'pos_args': {'af': 0.02, 'incr': 0.02, 'cap': 0.2},
               'file_prefix': file_prefix}        
-    freqs = [15]
-    windows = [[20, 10], [40,10], [60,15], [120, 20]]
+    freqs = [3, 5, 15]
+    windows = [[20,10], [20,5], [40,20], [40,10], [60,30], [60, 15]]
     for asset in sim_list:
         sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
