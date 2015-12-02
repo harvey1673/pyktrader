@@ -58,6 +58,9 @@ def dual_thrust_sim( mdf, config):
     offset = config['offset']
     k = config['k']
     f = config['f']
+	pos_update = config['pos_update']
+	pos_class = config['pos_class']
+	pos_args  = config['pos_args']
     proc_func = config['proc_func']
     proc_args = config['proc_args']
     start_equity = config['capital']
@@ -98,6 +101,7 @@ def dual_thrust_sim( mdf, config):
     for dd in mdf.index:
         mslice = mdf.ix[dd]
         min_id = mslice.min_id
+		min_cnt = (mid_id-300)/100 * 60 + mid_id % 100 + 1
         if len(curr_pos) == 0:
             pos = 0
         else:
@@ -106,20 +110,18 @@ def dual_thrust_sim( mdf, config):
         if (mslice.TR == 0) or (mslice.MA == 0):
             continue
         d_open = mslice.dopen
-        #if (prev_d < d):
-        #    d_open = mslice.open
-        #else:
-        #    d_open = dslice.open
         rng = max(min_rng * d_open, k * mslice.TR)
         if (d_open <= 0):
             continue
         buytrig  = d_open + rng
         selltrig = d_open - rng
+		if 'reset_margin' in pos_args:
+			pos_args['reset_margin'] = mslice.TR * SL
         if mslice.MA > mslice.close:
             buytrig  += f * rng
         elif mslice.MA < mslice.close:
             selltrig -= f * rng
-        if (min_id >= config['exit_min']) and (close_daily or (mslice.date == end_d)):
+        if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
@@ -129,9 +131,9 @@ def dual_thrust_sim( mdf, config):
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
         elif min_id not in no_trade_set:
-            if (pos!=0) and (SL>0):
-                curr_pos[0].trail_update(mslice.close)
-                if (curr_pos[0].trail_check(mslice.close, SL*mslice.close)):
+            if (pos!=0) and pos_update:
+				curr_pos[0].update_price(mslice.close)
+                if (curr_pos[0].check_exit( mslice.close, SL * mslice.close )):
                     curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
@@ -147,7 +149,7 @@ def dual_thrust_sim( mdf, config):
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset)
+                new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
                 new_pos.open(mslice.close + offset, dd)
@@ -162,7 +164,7 @@ def dual_thrust_sim( mdf, config):
                     closed_trades.append(curr_pos[0])
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                new_pos = strat.TradePos([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset)
+                new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
                 new_pos.open(mslice.close - offset, dd)
@@ -179,11 +181,7 @@ def dual_thrust_sim( mdf, config):
 def run_sim(start_date, end_date, daily_close = False):
     #sim_list = [ 'ag', 'TA', 'MA', 'i', 'rb', 'a', 'm', 'y', 'p', 'm', 'RM', 'SR', 'ru', 'cu', 'al', 'zn']
     sim_list = ['IF']
-    test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DTsplit_'
-    if daily_close:
-        file_prefix = file_prefix + 'daily_'
-    #file_prefix = file_prefix + '_'
+
     config = {'capital': 10000,
               'offset': 0,
               'MA_fast': 10,
@@ -195,8 +193,19 @@ def run_sim(start_date, end_date, daily_close = False):
               'min_range': 0.004,
               'proc_func': min_freq_group,
               'proc_args': {'freq': 5},
-              'file_prefix': file_prefix}
-    
+			  'pos_class': strat.TradePos,
+			  'pos_args': {},
+			  'pos_update': True}
+    test_folder = backtest.get_bktest_folder()
+    file_prefix = test_folder
+	if 'freq' in  config['proc_args']:
+		file_prefix = file_prefix + 'test/DT_%smin_' % config['proc_args']['freq']
+	else:
+		file_prefix = file_prefix + 'test/DTsplit_'
+
+    if daily_close:
+        file_prefix = file_prefix + 'daily_'
+    #file_prefix = file_prefix + '_'    
     scenarios = [ (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), (0.9, 0, 0.5, 0.0), \
                   (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), (1.2, 0, 0.5, 0.0),\
                   (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), (0.9, 1, 0.5, 0.0), \
@@ -206,6 +215,7 @@ def run_sim(start_date, end_date, daily_close = False):
                   (0.2 ,4, 0.5, 0.0), (0.25,4, 0.5, 0.0), (0.3, 4, 0.5, 0.0), (0.35,4, 0.5, 0.0), \
                   (0.4, 4, 0.5, 0.0), (0.45,4, 0.5, 0.0), (0.5, 4, 0.5, 0.0),\
                   ]
+	config['file_prefix'] = file_prefix
     for asset in sim_list:
         sdate =  backtest.sim_start_dict[asset]
         config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset]) 
