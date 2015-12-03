@@ -13,29 +13,29 @@ class DTChanMinTrader(Strategy):
                  lookbacks=[],
                  daily_close = False,
                  email_notify = None,
-				 freq = 15,
-				 chan_freq = 'd',
-				 chan_func = {'func_high': [data_handler.DONCH_H, data_handler.donch_h], 'high_name': 'DONCH_H',
-							  'func_low': [data_handler.DONCH_L, data_handler.donch_l],  'low_name': 'DONCH_L', 
-							  'func_args': {'n': 10}} 
-				 min_rng = [0.00]):
+                 freq = 15,
+                 chan_freq = 'd',
+                 chan_func = {'func_high': [data_handler.DONCH_H, data_handler.donch_h], 'high_name': 'DONCH_H',
+                              'func_low': [data_handler.DONCH_L, data_handler.donch_l],  'low_name': 'DONCH_L',
+                              'func_args': {'n': 10}},
+                 min_rng = [0.00]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
-		func_args = chan_func['func_args']
-		self.channel = func_args['n']
-		self.chan_freq = chan_freq
+        func_args = chan_func['func_args']
+        self.channel = func_args['n']
+        self.chan_freq = chan_freq
         self.data_func = [ 
                 (chan_freq, BaseObject(name = chan_func['low_name'] + str(self.channel), \
-									   sfunc=fcustom(chan_func['func_low'][0], **func_args),  \
-									   rfunc=fcustom(chan_func['func_low'][1], **func_args))),\
+                                       sfunc=fcustom(chan_func['func_low'][0], **func_args),  \
+                                       rfunc=fcustom(chan_func['func_low'][1], **func_args))),\
                 (chan_freq, BaseObject(name = chan_func['high_name'] + str(self.channel), \
-									   sfunc=fcustom(chan_func['func_high'][0], **func_args), \
-									   rfunc=fcustom(chan_func['func_high'][1], **func_args))),\
+                                       sfunc=fcustom(chan_func['func_high'][0], **func_args), \
+                                       rfunc=fcustom(chan_func['func_high'][1], **func_args))),\
                 ]
-		if 'm' in chan_freq:
-			mins = int(chan_freq[:-1])
-			if mins != self.freq:
-				min_str = str(freq)+'m'
-				self.data_func.append((min_str, None))
+        if 'm' in chan_freq:
+            mins = int(chan_freq[:-1])
+            if mins != self.freq:
+                min_str = str(freq)+'m'
+                self.data_func.append((min_str, None))
         self.lookbacks = lookbacks
         numAssets = len(underliers)
         self.ratios = [[0.5, 0.5]] * numAssets
@@ -48,9 +48,9 @@ class DTChanMinTrader(Strategy):
         else: 
             self.lookbacks = [0] * numAssets
         self.freq = freq		
-		self.cur_rng = [0.0] * numAssets
+        self.cur_rng = [0.0] * numAssets
         self.chan_high = [0.0] * numAssets
-		self.chan_low  = [0.0] * numAssets
+        self.chan_low  = [0.0] * numAssets
         self.tday_open = [0.0] * numAssets
         self.tick_base = [0.0] * numAssets
         self.order_type = OPT_LIMIT_ORDER
@@ -69,8 +69,8 @@ class DTChanMinTrader(Strategy):
 
     def initialize(self):
         self.load_state()
-		low_str = self.data_func[0][1].name
-		high_str = self.data_func[1][1].name
+        low_str = self.data_func[0][1].name
+        high_str = self.data_func[1][1].name
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
             self.tick_base[idx] = self.agent.instruments[inst].tick_base
@@ -78,14 +78,14 @@ class DTChanMinTrader(Strategy):
             min_id = int(min_id/100)*60 + min_id % 100 - self.daily_close_buffer
             self.last_min_id[idx] = int(min_id/60)*100 + min_id % 60
             if self.chan_freq == 'd':
-				ddf = self.agent.day_data[inst]
-			else:
-				mins = int(self.chan_freq[:-1])
-				ddf = self.agent.min_data[inst][mins]
-			mdf = self.agent.min_data[inst][1]
-			self.chan_high[idx] = ddf.ix[-1, high_str]
+                ddf = self.agent.day_data[inst]
+            else:
+                mins = int(self.chan_freq[:-1])
+                ddf = self.agent.min_data[inst][mins]
+            mdf = self.agent.min_data[inst][1]
+            self.chan_high[idx] = ddf.ix[-1, high_str]
             self.chan_low[idx]  = ddf.ix[-1, low_str]
-			self.tday_open[idx] = mdf['close'][-1]
+            self.tday_open[idx] = mdf['close'][-1]
             self.recalc_rng(idx, ddf)
         self.save_state()
         return
@@ -162,27 +162,27 @@ class DTChanMinTrader(Strategy):
 
         if ((self.curr_prices[idx] >= buy_trig) and (buysell <=0)) or ((self.curr_prices[idx] <= sell_trig) and (buysell >=0)):
             save_status = False
-			if buysell!=0:
+            if buysell!=0:
                 msg = 'DT to close position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
                                     % (inst, t_open, buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
                 self.close_tradepos(idx, self.positions[idx][0], self.curr_prices[idx] - buysell * self.num_tick * tick_base)
                 self.status_notifier(msg)
-				save_status = True
+                save_status = True
             if self.trade_unit[idx] <= 0:
-				self.save_state()
+                self.save_state()
                 return
             if  (self.curr_prices[idx] >= buy_trig):
                 buysell = 1
             else:
                 buysell = -1
-            if (self.curr_prices[idx] >= max(buy_trig, self.chan_high[idx]) or self.curr_prices[idx] <= min(sell_trig, self.chan_low[idx]):
-				msg = 'DT to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
-										% (inst, t_open, buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
-				self.open_tradepos(idx, buysell, self.curr_prices[idx] + buysell * self.num_tick * tick_base)
-				self.status_notifier(msg)
-				save_status = True
-			if save_status:
-				self.save_state()
+            if self.curr_prices[idx] >= max(buy_trig, self.chan_high[idx]) or self.curr_prices[idx] <= min(sell_trig, self.chan_low[idx]):
+                msg = 'DT to open position for inst = %s, open= %s, buy_trig=%s, sell_trig=%s, curr_price= %s, direction=%s, volume=%s' \
+                                        % (inst, t_open, buy_trig, sell_trig, self.curr_prices[idx], buysell, self.trade_unit[idx])
+                self.open_tradepos(idx, buysell, self.curr_prices[idx] + buysell * self.num_tick * tick_base)
+                self.status_notifier(msg)
+                save_status = True
+            if save_status:
+                self.save_state()
         return 
         
     def update_trade_unit(self):

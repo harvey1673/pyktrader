@@ -1050,8 +1050,11 @@ class Agent(object):
         if self.tick_id < tick_id:
             self.tick_id = tick_id
         tick_status = False
+        buffer = 0
+        if self.save_flag:
+            buffer = 5
         for ptime in hrs:
-            if (tick_id>=ptime[0]*1000-5) and (tick_id<=ptime[1]*1000+5):
+            if (tick_id>=ptime[0]*1000-buffer) and (tick_id< ptime[1]*1000+buffer):
                 tick_status = True
                 break
         return tick_status
@@ -1091,17 +1094,6 @@ class Agent(object):
         tick_min = self.get_bar_id(tick_id)
         if (self.cur_min[inst]['min_id'] > tick_min):
             return False
-        #try:
-        if (self.cur_day[inst]['open'] == 0.0):
-            self.cur_day[inst]['open'] = tick.price
-            self.logger.debug('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick_id))
-        self.cur_day[inst]['close'] = tick.price
-        self.cur_day[inst]['high']  = tick.high
-        self.cur_day[inst]['low']   = tick.low
-        self.cur_day[inst]['openInterest'] = tick.openInterest
-        self.cur_day[inst]['volume'] = tick.volume
-        self.cur_day[inst]['date'] = tick.timestamp.date()
-
         if (tick_min == self.cur_min[inst]['min_id']):
             self.tick_data[inst].append(tick)
             self.cur_min[inst]['close'] = tick.price
@@ -1110,7 +1102,7 @@ class Agent(object):
             if self.cur_min[inst]['low'] > tick.price:
                 self.cur_min[inst]['low'] = tick.price
         else:
-            if (len(self.tick_data[inst]) > 0) :
+            if (len(self.tick_data[inst]) > 0):
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                 self.cur_min[inst]['openInterest'] = last_tick.openInterest
@@ -1359,15 +1351,21 @@ class Agent(object):
                 return 0
             
         if (not self.validate_tick(ctick)):
-            #print "stop at validating tick", ctick.instID, ctick.timestamp, ctick.tick_id
             return 0
         
         if (not self.update_instrument(ctick)):
-            #print "stop at update inst", ctick.instID, ctick.timestamp, ctick.tick_id
             return 0
-     
+        inst = ctick.instID
+        if (self.cur_day[inst]['open'] == 0.0):
+            self.cur_day[inst]['open'] = ctick.price
+            self.logger.debug('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, ctick.price, ctick.tick_id))
+        self.cur_day[inst]['close'] = ctick.price
+        self.cur_day[inst]['high']  = ctick.high
+        self.cur_day[inst]['low']   = ctick.low
+        self.cur_day[inst]['openInterest'] = ctick.openInterest
+        self.cur_day[inst]['volume'] = ctick.volume
+        self.cur_day[inst]['date'] = ctick.timestamp.date()
         if( not self.update_min_bar(ctick)):
-            #print "stop at hist data update", ctick.instID, ctick.timestamp, ctick.tick_id
             return 0
         return 1
 

@@ -180,7 +180,7 @@ def dual_thrust_sim( ddf, mdf, config):
     return (res, closed_trades, ts)
         
 def run_sim(start_date, end_date, daily_close = False):
-    sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF', 'ni', 'j', 'jm', 'jd', 'ru']
+    sim_list = [ 'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF', 'ni', 'j', 'jm', 'jd', 'ru']
     #sim_list = ['TA', 'MA', 'SR', 'cs', 'i', 'TF', 'm', 'y', 'p', 'jd', 'a', 'RM', 'rb', 'j', 'jm' ]
     #sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF']
     test_folder = backtest.get_bktest_folder()

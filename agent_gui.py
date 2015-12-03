@@ -574,9 +574,9 @@ class Gui(tk.Tk):
     
         for strat_name in self.app.agent.strategies:
             strat = self.app.agent.strategies[strat_name]
-            if (strat.__class__.__name__ == 'DTTrader' or \
-                    strat.__class__.__name__ == 'DTSplitTrader' or \
-                    strat.__class__.__name__ == 'DTBarTrader'):
+            if strat.__class__.__name__ in ['DTTrader', 'DTSplitTrader', \
+                                            'DTBarTrader', 'DTChanSplitTrader', \
+                                            'DTChanMinTrader']:
                 self.strat_gui[strat_name] = DTStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
                 self.strat_gui[strat_name] = RBStratGui(strat, app, self)
