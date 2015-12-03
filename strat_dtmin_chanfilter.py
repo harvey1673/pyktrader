@@ -15,17 +15,27 @@ class DTChanMinTrader(Strategy):
                  email_notify = None,
 				 freq = 15,
 				 chan_freq = 'd',
-				 channel = 10,
-				 chan_func = [data_handler.DONCH_L, data_handler.DONCH_H],
-				 func_args = {}, 
+				 chan_func = {'func_high': [data_handler.DONCH_H, data_handler.donch_h], 'high_name': 'DONCH_H',
+							  'func_low': [data_handler.DONCH_L, data_handler.donch_l],  'low_name': 'DONCH_L', 
+							  'func_args': {'n': 10}} 
 				 min_rng = [0.00]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
-		self.channel = channel
-		func_args['n'] = channel
+		func_args = chan_func['func_args']
+		self.channel = func_args['n']
+		self.chan_freq = chan_freq
         self.data_func = [ 
-                (chan_freq, BaseObject(name = 'CHL' + str(channel), sfunc=fcustom(chan_func[0], **func_args), rfunc=fcustom(data_handler.donch_l, **func_args))),\
-                (chan_freq, BaseObject(name = 'CHH' + str(channel), sfunc=fcustom(chan_func[1], **func_args), rfunc=fcustom(data_handler.donch_h, **func_args))),\
-                ]    		
+                (chan_freq, BaseObject(name = chan_func['low_name'] + str(self.channel), \
+									   sfunc=fcustom(chan_func['func_low'][0], **func_args),  \
+									   rfunc=fcustom(chan_func['func_low'][1], **func_args))),\
+                (chan_freq, BaseObject(name = chan_func['high_name'] + str(self.channel), \
+									   sfunc=fcustom(chan_func['func_high'][0], **func_args), \
+									   rfunc=fcustom(chan_func['func_high'][1], **func_args))),\
+                ]
+		if 'm' in chan_freq:
+			mins = int(chan_freq[:-1])
+			if mins != self.freq:
+				min_str = str(freq)+'m'
+				self.data_func.append((min_str, None))
         self.lookbacks = lookbacks
         numAssets = len(underliers)
         self.ratios = [[0.5, 0.5]] * numAssets
@@ -37,12 +47,11 @@ class DTChanMinTrader(Strategy):
             self.lookbacks = lookbacks
         else: 
             self.lookbacks = [0] * numAssets
-        self.cur_rng = [0.0] * numAssets
+        self.freq = freq		
+		self.cur_rng = [0.0] * numAssets
         self.chan_high = [0.0] * numAssets
 		self.chan_low  = [0.0] * numAssets
         self.tday_open = [0.0] * numAssets
-        self.open_period = open_period
-        self.open_idx = [0] * numAssets
         self.tick_base = [0.0] * numAssets
         self.order_type = OPT_LIMIT_ORDER
         self.daily_close_buffer = 3
@@ -51,7 +60,6 @@ class DTChanMinTrader(Strategy):
             self.close_tday = daily_close
         elif len(daily_close) == 1: 
             self.close_tday = daily_close * numAssets 
-        self.ma_win = ma_win
         self.num_tick = 1
         self.min_rng = [0.0] * numAssets
         if len(min_rng) > 1:
@@ -61,48 +69,28 @@ class DTChanMinTrader(Strategy):
 
     def initialize(self):
         self.load_state()
-		high_str = 'CHH' + str(self.channel)
-        low_str = 'CHL' + str(self.channel) 
+		low_str = self.data_func[0][1].name
+		high_str = self.data_func[1][1].name
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
             self.tick_base[idx] = self.agent.instruments[inst].tick_base
             min_id = self.agent.instruments[inst].last_tick_id/1000
             min_id = int(min_id/100)*60 + min_id % 100 - self.daily_close_buffer
             self.last_min_id[idx] = int(min_id/60)*100 + min_id % 60
-            ddf = self.agent.day_data[inst]
-            mdf = self.agent.min_data[inst][1]
-            last_date = ddf.index[-1]
-	
+            if self.chan_freq == 'd':
+				ddf = self.agent.day_data[inst]
+			else:
+				mins = int(self.chan_freq[:-1])
+				ddf = self.agent.min_data[inst][mins]
+			mdf = self.agent.min_data[inst][1]
 			self.chan_high[idx] = ddf.ix[-1, high_str]
             self.chan_low[idx]  = ddf.ix[-1, low_str]
-            self.open_idx[idx] = 0
-            if last_date < mdf.index[-1].date():
-                last_min = mdf['min_id'][-1]
-                pid = 0
-                for i in range(1, len(self.open_period)):
-                    if self.open_period[i] >= last_min:
-                        break
-                    else:
-                        pid = i
-                df = mdf[(mdf.index.date <= last_date)|(mdf['min_id'] < self.open_period[pid])]
-                post_df = mdf[(mdf.index.date > last_date) & (mdf['min_id'] >= self.open_period[pid])]
-                self.open_idx[idx] = pid
-                self.tday_open[idx] = post_df['open'][0]
-            else:
-                df = mdf
-                self.tday_open[idx] = mdf['close'][-1]
-            self.recalc_rng(idx, df)
+			self.tday_open[idx] = mdf['close'][-1]
+            self.recalc_rng(idx, ddf)
         self.save_state()
         return
 
-    def recalc_rng(self, idx, df):
-        mdf = copy.copy(df)
-        inst = self.underliers[idx][0]
-        mdf.loc[:,'min_idx'] = pd.Series(0, index = mdf.index)
-        for i in range(1, len(self.open_period)-1):
-            mdf.loc[(mdf['min_id']>= self.open_period[i]) & (mdf['min_id']<self.open_period[i+1]), 'min_idx'] = i
-        mdf.loc[:, 'date_idx'] = mdf.index.date
-        ddf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    def recalc_rng(self, idx, ddf):
         win = self.lookbacks[idx]
         if win > 0:
             self.cur_rng[idx] = max(max(ddf.ix[-win:,'high'])- min(ddf.ix[-win:,'close']), max(ddf.ix[-win:,'close']) - min(ddf.ix[-win:,'low']))
@@ -130,19 +118,16 @@ class DTChanMinTrader(Strategy):
     def register_bar_freq(self):
         for idx, under in enumerate(self.underliers):
             inst = under[0]
-            self.agent.inst2strat[inst][self.name].append(1)
+            self.agent.inst2strat[inst][self.name].append(self.freq)
             #self.logger.debug("stat = %s register bar event for inst=%s freq = 1" % (self.name, inst, ))
 
     def on_bar(self, idx, freq):
         inst = self.underliers[idx][0]
         min_id = self.agent.cur_min[inst]['min_id']
         curr_min = self.agent.instruments[inst].last_update/1000
-        pid = self.open_idx[idx]
-        if pid < len(self.open_period)-1:
-            if (self.open_period[pid+1] > min_id) and (self.open_period[pid+1] <= curr_min):
-                self.recalc_rng(idx, self.agent.min_data[inst][1])
-                self.tday_open[idx] = self.agent.instruments[inst].price
-                self.logger.info("Note: the new split open is set to %s for inst=%s for stat = %s" % (self.tday_open[idx], inst, self.name, ))
+        self.recalc_rng(idx, self.agent.min_data[inst][self.freq])
+        self.tday_open[idx] = self.agent.instruments[inst].price
+        #self.logger.info("Note: the new split open is set to %s for inst=%s for stat = %s" % (self.tday_open[idx], inst, self.name, ))
 
     def on_tick(self, idx, ctick):
         if len(self.submitted_trades[idx]) > 0:
