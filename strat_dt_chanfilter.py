@@ -15,16 +15,23 @@ class DTChanSplitTrader(Strategy):
                  email_notify = None,
                  open_period = [300, 1500, 2115],
 				 channel = 10,
+				 chan_func = {'func_high': [data_handler.DONCH_H, data_handler.donch_h], 'high_name': 'DONCH_H',
+							  'func_low': [data_handler.DONCH_L, data_handler.donch_l],  'low_name': 'DONCH_L', 
+							  'func_args': {'n': 10}} 
 				 chan_func = [data_handler.DONCH_L, data_handler.DONCH_H],
 				 func_args = {},
 				 min_rng = [0.00]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
-		self.channel = channel
-		func_args['n'] = channel
+		func_args = chan_func['func_args']
+		self.channel = func_args['n']
         self.data_func = [ 
-                ('d', BaseObject(name = 'CHL' + str(channel), sfunc=fcustom(chan_func[0], **func_args), rfunc=fcustom(chan_func[0], **func_args))),\
-                ('d', BaseObject(name = 'CHH' + str(channel), sfunc=fcustom(chan_func[0], **func_args), rfunc=fcustom(chan_func[0], **func_args))),\
-                ]    		
+                (chan_freq, BaseObject(name = chan_func['low_name'] + str(self.channel), \
+									   sfunc=fcustom(chan_func['func_low'][0], **func_args),  \
+									   rfunc=fcustom(chan_func['func_low'][1], **func_args))),\
+                (chan_freq, BaseObject(name = chan_func['high_name'] + str(self.channel), \
+									   sfunc=fcustom(chan_func['func_high'][0], **func_args), \
+									   rfunc=fcustom(chan_func['func_high'][1], **func_args))),\
+                ]		
         self.lookbacks = lookbacks
         numAssets = len(underliers)
         self.ratios = [[0.5, 0.5]] * numAssets
@@ -60,8 +67,8 @@ class DTChanSplitTrader(Strategy):
 
     def initialize(self):
         self.load_state()
-		high_str = 'CHH' + str(self.channel)
-        low_str = 'CHL' + str(self.channel) 
+		low_str = self.data_func[0][1].name
+		high_str = self.data_func[1][1].name
         for idx, underlier in enumerate(self.underliers):
             inst = underlier[0]
             self.tick_base[idx] = self.agent.instruments[inst].tick_base
@@ -70,8 +77,7 @@ class DTChanSplitTrader(Strategy):
             self.last_min_id[idx] = int(min_id/60)*100 + min_id % 60
             ddf = self.agent.day_data[inst]
             mdf = self.agent.min_data[inst][1]
-            last_date = ddf.index[-1]
-	
+            last_date = ddf.index[-1]	
 			self.chan_high[idx] = ddf.ix[-1, high_str]
             self.chan_low[idx]  = ddf.ix[-1, low_str]
             self.open_idx[idx] = 0
