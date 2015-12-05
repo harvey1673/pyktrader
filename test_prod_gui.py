@@ -3,6 +3,8 @@ import misc
 import logging
 import base
 import sys
+import data_handler
+import strat_dt_chanfilter as dt_chansplit
 import strat_dual_thrust as strat_dt
 import strat_dt_split as dt_split
 import strat_rbreaker as strat_rb
@@ -144,6 +146,72 @@ def prod_test(tday, name='prod_test'):
                                  email_notify = [], min_rng = [0.004])
 
     ins_setup = {
+                 'm1605':  (1, 1.0, 0.0, 2, False),
+                 'RM605':  (1, 1.0, 0.0, 2, False),
+                 'y1605':  (1, 1.0, 0.0, 2, False),
+                 'p1605':  (1, 1.1, 0.0, 2, False),
+                 'a1605':  (1, 1.1, 0.0, 2, False),
+                 'TA605' : (1, 1.0, 0.0, 3, False),
+                 'MA605' : (1, 1.0, 0.0, 3, False),
+                 'SR605' : (1, 1.0, 0.0, 2, False),
+                 'i1605' : (2, 1.0, 0.0, 2, False),
+                }
+    insts = ins_setup.keys()
+    units_dt = [ins_setup[inst][3] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][4] for inst in insts]
+    chan_func ={'func_high': [data_handler.DONCH_H, data_handler.donch_h], 'high_name': 'DONCH_H', \
+                'func_low': [data_handler.DONCH_L, data_handler.donch_l],  'low_name': 'DONCH_L',  \
+                'func_args': {'n': 5}}
+    dtchan_split_strat1 = dt_chansplit.DTChanSplitTrader('DTChanSp1',
+                                                under_dt,
+                                                vol_dt,
+                                                trade_unit = units_dt,
+                                                ratios = ratios,
+                                                lookbacks = lookbacks,
+                                                agent = None,
+                                                daily_close = daily_close,
+                                                chan_func = chan_func,
+                                                open_period = [300, 430, 1500, 2115],
+                                                email_notify = [],
+                                                min_rng = [0.002])
+    ins_setup = {
+                 'm1605':  (1, 1.0, 0.0, 2, False),
+                 'RM605':  (1, 1.0, 0.0, 2, False),
+                 'y1605':  (1, 1.0, 0.0, 2, False),
+                 'p1605':  (1, 1.1, 0.0, 2, False),
+                 'a1605':  (1, 1.1, 0.0, 2, False),
+                 'TA605' : (1, 1.0, 0.0, 3, False),
+                 'MA605' : (1, 1.0, 0.0, 3, False),
+                 'SR605' : (1, 1.0, 0.0, 2, False),
+                 'i1605' : (2, 1.0, 0.0, 2, False),
+                }
+    insts = ins_setup.keys()
+    units_dt = [ins_setup[inst][3] for inst in insts]
+    under_dt = [[inst] for inst in insts]
+    vol_dt = [[1] for inst in insts]
+    ratios = [[ins_setup[inst][1], ins_setup[inst][2]] for inst in insts]
+    lookbacks = [ins_setup[inst][0] for inst in insts]
+    daily_close = [ins_setup[inst][4] for inst in insts]
+    chan_func ={'func_high': [data_handler.DONCH_H, data_handler.donch_h], 'high_name': 'DONCH_H', \
+                'func_low': [data_handler.DONCH_L, data_handler.donch_l],  'low_name': 'DONCH_L',  \
+                'func_args': {'n': 20}}
+    dtchan_split_strat2 = dt_chansplit.DTChanSplitTrader('DTChanSp2',
+                                                under_dt,
+                                                vol_dt,
+                                                trade_unit = units_dt,
+                                                ratios = ratios,
+                                                lookbacks = lookbacks,
+                                                agent = None,
+                                                daily_close = daily_close,
+                                                chan_func = chan_func,
+                                                open_period = [300, 430, 1500, 2115],
+                                                email_notify = [],
+                                                min_rng = [0.002])
+    ins_setup = {
                  'bu1601':[2, 1, 1],
                  'i1605': [1, 1, 2],
                  'TA605': [2, 2, 2],
@@ -176,7 +244,10 @@ def prod_test(tday, name='prod_test'):
                                     windows = [10, 20],
                                     max_pos = max_pos,
                                     trail_loss = trail_loss )
-    strategies = [rb_strat, dt_strat, dtma_strat, tl_strat, tl_strat2, dtsplit_strat1, dtsplit_strat2]
+    strategies = [rb_strat, dt_strat, dtma_strat,\
+                  tl_strat, tl_strat2, \
+                  dtsplit_strat1, dtsplit_strat2, \
+                  dtchan_split_strat1, dtchan_split_strat2]
     folder = misc.get_prod_folder()
     strat_cfg = {'strategies': strategies, \
                  'folder': folder, \

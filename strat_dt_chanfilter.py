@@ -14,11 +14,11 @@ class DTChanSplitTrader(Strategy):
                  daily_close = False,
                  email_notify = None,
                  open_period = [300, 1500, 2115],
-                 channel = 10,
-                 chan_func = {'func_high': [data_handler.DONCH_H, data_handler.donch_h], 'high_name': 'DONCH_H', \
-                              'func_low': [data_handler.DONCH_L, data_handler.donch_l],  'low_name': 'DONCH_L',  \
+                 chan_func = {'func_high': [data_handler.DONCH_H, data_handler.donch_h],
+                              'high_name': 'DONCH_H',
+                              'func_low': [data_handler.DONCH_L, data_handler.donch_l],
+                              'low_name': 'DONCH_L',
                               'func_args': {'n': 10}},
-                 func_args = {},
                  min_rng = [0.00]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         func_args = chan_func['func_args']

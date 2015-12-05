@@ -50,6 +50,9 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     fname = file_prefix + 'stats.csv'
     res = pd.DataFrame.from_dict(output)
     res.to_csv(fname)
+    df = pd.DataFrame.from_dict(output, orient='index')
+    print df.columns, df.index
+    print df
     return 
 
 def dual_thrust_sim( mdf, config):
@@ -197,9 +200,9 @@ def run_sim(sim_config):
     test_folder = backtest.get_bktest_folder()
     file_prefix = test_folder
     if 'freq' in config['proc_args']:
-        file_prefix = file_prefix + 'test/DT_%smin_' % config['proc_args']['freq']
+        file_prefix = file_prefix + 'test2/DT_%smin_' % config['proc_args']['freq']
     else:
-        file_prefix = file_prefix + 'test/DTsplit_test_'
+        file_prefix = file_prefix + 'test2/DTsplit_test_'
 
     if config['close_daily']:
         file_prefix = file_prefix + 'daily_'
@@ -231,29 +234,28 @@ def run_sim(sim_config):
 def get_config():
     sim_config = {}
     sim_config['sim_name']   = 'DT'
-    sim_config['products']   = [ 'l', 'rb', 'SR']
-    sim_config['start_date'] = '20150110'
+    sim_config['products']   = [ 'm', 'RM', 'y', 'p', 'a', 'l', 'pp', 'rb', 'SR', 'TA', 'MA', 'i', 'cs', 'ag', 'cu', 'ru', 'IF', 'TF' ]
+    sim_config['start_date'] = '20141101'
     sim_config['end_date']   = '20151118'
     sim_config['scenarios']  =  [
-            #(0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), (0.9, 0, 0.5, 0.0), \
-            #(1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), (1.2, 0, 0.5, 0.0),\
-            (0.8, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.2, 1, 0.5, 0.0), (1.4, 1, 0.5, 0.0), (1.6, 1, 0.5, 0.0),\
-            (0.8, 2, 0.5, 0.0), (1.0, 2, 0.5, 0.0), (1.2, 2, 0.5, 0.0), (1.4, 2, 0.5, 0.0), \
-            (0.4, 4, 0.5, 0.0), (0.5, 4, 0.5, 0.0), (0.6, 4, 0.5, 0.0), (0.7, 4, 0.5, 0.0), \
-            (0.8, 4, 0.5, 0.0), (0.9, 4, 0.5, 0.0), (0.2, 8, 0.5, 0.0), (0.25,8, 0.5, 0.0), \
-            (0.3 ,8, 0.5, 0.0), (0.4, 8, 0.5, 0.0), (0.5, 8, 0.5, 0.0), (0.6, 8, 0.5, 0.0), \
+            (0.8, 1, 0.5, 0.0), (0.9, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), (0.9, 0, 0.5, 0.0), \
+            (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), (1.2, 0, 0.5, 0.0),\
+            (0.4, 2, 0.5, 0.0), (0.6, 2, 0.5, 0.0), (0.8, 2, 0.5, 0.0), (1.0, 2, 0.5, 0.0), (1.2, 2, 0.5, 0.0),\
+            (0.2, 4, 0.5, 0.0), (0.3, 4, 0.5, 0.0), (0.4, 4, 0.5, 0.0), (0.5, 4, 0.5, 0.0), (0.6, 4, 0.5, 0.0),\
+            (0.7, 4, 0.5, 0.0), (0.8, 4, 0.5, 0.0), (0.1, 8, 0.5, 0.0), (0.15,8, 0.5, 0.0), (0.2, 8, 0.5, 0.0),\
+            (0.25,8, 0.5, 0.0), (0.3, 8, 0.5, 0.0), (0.35,8, 0.5, 0.0), (0.4, 8, 0.5, 0.0), (0.5, 8, 0.5, 0.0),\
             ]
     sim_config['pos_class'] = 'strat.TradePos'
     sim_config['proc_func'] = 'day_split'
     config = {'capital': 10000,
               'offset': 0,
-              'chan': 10,
+              'chan': 20,
               'use_chan': False,
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,
               'stoploss': 0.0,
-              'min_range': 0.002,
+              'min_range': 0.003,
               'proc_args': {'minlist':[430, 1500, 1630, 1930]},
               'pos_args': {},
               'pos_update': False}

@@ -221,7 +221,7 @@ class DTStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'MaWin', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
-        self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'CurMa'] 
+        self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'CurMa']
         self.shared_fields = ['NumTick', 'OrderType', 'MaWin']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
@@ -234,6 +234,27 @@ class DTStratGui(StratGui):
                             'CurMa': 'float',
                             'NumTick': 'int', 
                             'MaWin': 'int',
+                            'OrderType': 'str',
+                            'MinRng': 'float'}
+
+class DTChanStratGui(StratGui):
+    def __init__(self, strat, app, master):
+        StratGui.__init__(self, strat, app, master)
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'Channel', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
+        self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'ChanHigh', 'ChanLow']
+        self.shared_fields = ['NumTick', 'OrderType', 'Channel']
+        self.field_types = {'RunFlag':'int',
+                            'TradeUnit':'int',
+                            'Lookbacks':'int',
+                            'Ratios': 'floatlist',
+                            'CloseTday': 'bool',
+                            'TdayOpen': 'float',
+                            'CurrPrices': 'float',
+                            'CurRng':'float',
+                            'ChanHigh': 'float',
+                            'ChanLow': 'float',
+                            'NumTick': 'int',
+                            'Channel': 'int',
                             'OrderType': 'str',
                             'MinRng': 'float'}
 
@@ -575,9 +596,10 @@ class Gui(tk.Tk):
         for strat_name in self.app.agent.strategies:
             strat = self.app.agent.strategies[strat_name]
             if strat.__class__.__name__ in ['DTTrader', 'DTSplitTrader', \
-                                            'DTBarTrader', 'DTChanSplitTrader', \
-                                            'DTChanMinTrader']:
+                                            'DTBarTrader']:
                 self.strat_gui[strat_name] = DTStratGui(strat, app, self)
+            if strat.__class__.__name__ in ['DTChanSplitTrader','DTChanMinTrader']:
+                self.strat_gui[strat_name] = DTChanStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
                 self.strat_gui[strat_name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
