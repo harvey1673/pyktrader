@@ -3,7 +3,7 @@
 from misc import *
 from strategy import *
  
-class DTChanTrader(Strategy):
+class DTTrader(Strategy):
     def __init__(self, name, underliers, volumes, agent = None, trade_unit = [], ratios = [], lookbacks=[], daily_close = False, email_notify = None, ma_win = 10, min_rng = [0.00]):
         Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
         self.lookbacks = lookbacks
