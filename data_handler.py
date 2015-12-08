@@ -466,20 +466,18 @@ def DVO(df, w = [0.5, 0.5, 0, 0], N = 2, s = [0.5, 0.5], M = 252):
     return dvo
 
 def PSAR(df, iaf = 0.02, maxaf = 0.2, incr = 0):
-	if incr == 0:
-		incr = iaf
+    if incr == 0:
+        incr = iaf
     psar = pd.Series(df.close, name='PSAR_VAL')
-	direction = pd.Series(index = df.index, name='PSAR_DIR')
-    psarbull = pd.Series(index = df.index, name='PSAR_BULL')
-    psarbear = pd.Series(index = df.index, name='PSAR_BULL')
+    direction = pd.Series(index = df.index, name='PSAR_DIR')
     bull = True
-    ep = low[0]
+    ep = df.low[0]
     hp = df.high[0]
     lp = df.low[0]
-	af = iaf
+    af = iaf
     for idx, d in enumerate(df.index):
-		if idx == 0:
-			continue
+        if idx == 0:
+            continue
         if bull:
             psar[idx] = psar[idx - 1] + af * (hp - psar[idx - 1])
         else:
@@ -504,13 +502,16 @@ def PSAR(df, iaf = 0.02, maxaf = 0.2, incr = 0):
                 if df.high[idx] > hp:
                     hp = df.high[idx]
                     af = min(af + incr, maxaf)
-                if df.low[idx - 1] < psar[idx]:
                 psar[idx] = min(psar[idx], df.low[idx - 1], df.low[idx - 2])
-				direction[idx] = 1
+
             else:
                 if df.low[idx] < lp:
-                    lp = df.low[i]
+                    lp = df.low[idx]
                     af = min(af + incr, maxaf)
                 psar[idx] = max(psar[idx], df.high[idx - 1], df.high[idx - 2])
-				direction[idx] = -1
-	return pd.concat([psar, direction], join='outer', axis=1)
+                direction[idx] = -1
+        if bull:
+            direction[idx] = 1
+        else:
+            direction[idx] = -1
+    return pd.concat([psar, direction], join='outer', axis=1)
