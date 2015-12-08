@@ -464,5 +464,53 @@ def DVO(df, w = [0.5, 0.5, 0, 0], N = 2, s = [0.5, 0.5], M = 252):
             ts = theta[idx-(M-1):idx+1]
             dvo[idx] = stats.percentileofscore(ts.values, theta[idx])
     return dvo
-            
-        
+
+def PSAR(df, iaf = 0.02, maxaf = 0.2, incr = 0):
+	if incr == 0:
+		incr = iaf
+    psar = pd.Series(df.close, name='PSAR_VAL')
+	direction = pd.Series(index = df.index, name='PSAR_DIR')
+    psarbull = pd.Series(index = df.index, name='PSAR_BULL')
+    psarbear = pd.Series(index = df.index, name='PSAR_BULL')
+    bull = True
+    ep = low[0]
+    hp = df.high[0]
+    lp = df.low[0]
+	af = iaf
+    for idx, d in enumerate(df.index):
+		if idx == 0:
+			continue
+        if bull:
+            psar[idx] = psar[idx - 1] + af * (hp - psar[idx - 1])
+        else:
+            psar[idx] = psar[idx - 1] + af * (lp - psar[idx - 1])
+        reverse = False
+        if bull:
+            if df.low[idx] < psar[idx]:
+                bull = False
+                reverse = True
+                psar[idx] = hp
+                lp = df.low[idx]
+                af = iaf
+        else:
+            if df.high[idx] > psar[idx]:
+                bull = True
+                reverse = True
+                psar[idx] = lp
+                hp = df.high[idx]
+                af = iaf
+        if not reverse:
+            if bull:
+                if df.high[idx] > hp:
+                    hp = df.high[idx]
+                    af = min(af + incr, maxaf)
+                if df.low[idx - 1] < psar[idx]:
+                psar[idx] = min(psar[idx], df.low[idx - 1], df.low[idx - 2])
+				direction[idx] = 1
+            else:
+                if df.low[idx] < lp:
+                    lp = df.low[i]
+                    af = min(af + incr, maxaf)
+                psar[idx] = max(psar[idx], df.high[idx - 1], df.high[idx - 2])
+				direction[idx] = -1
+	return pd.concat([psar, direction], join='outer', axis=1)
