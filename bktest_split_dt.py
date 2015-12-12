@@ -8,21 +8,6 @@ import strategy as strat
 import datetime
 import backtest
 
-def min_freq_group(mdf, freq = 5):
-    min_cnt = (mdf['mid_id']-300)/100 * 60 + (mdf['mid_id'] % 100)
-    mdf['min_idx'] = min_cnt/freq
-    mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
-    return xdf
-
-def day_split(mdf, minlist = [1500]):
-    mdf['min_idx'] = 0
-    for idx, mid in enumerate(minlist):
-        mdf.loc[mdf['min_id']>=mid, 'min_idx'] = idx + 1
-    mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
-    return xdf
-
 def dual_thrust( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
     rollrule = config['rollrule']
@@ -50,9 +35,7 @@ def dual_thrust( asset, start_date, end_date, scenarios, config):
     fname = file_prefix + 'stats.csv'
     res = pd.DataFrame.from_dict(output)
     res.to_csv(fname)
-    df = pd.DataFrame.from_dict(output, orient='index')
-    print df.columns, df.index
-    print df
+    #df = pd.DataFrame.from_dict(output, orient='index')
     return 
 
 def dual_thrust_sim( mdf, config):
@@ -67,6 +50,7 @@ def dual_thrust_sim( mdf, config):
     proc_func = config['proc_func']
     proc_args = config['proc_args']
     start_equity = config['capital']
+    chan_func = config['chan_func']
     win = config['win']
     multiplier = config['m']
     tcost = config['trans_cost']
@@ -92,8 +76,8 @@ def dual_thrust_sim( mdf, config):
                        pd.rolling_max(xdf.close, win) - pd.rolling_min(xdf.low, win)], 
                        join='outer', axis=1).max(axis=1)
     xdf['TR'] = tr
-    xdf['chan_h'] = pd.rolling_max(xdf.high, chan)
-    xdf['chan_l'] = pd.rolling_min(xdf.low, chan)
+    xdf['chan_h'] = chan_func['high']['func'](xdf['high'], chan, **chan_func['high']['args'])
+    xdf['chan_l'] = chan_func['low']['func'](xdf['low'], chan, **chan_func['low']['args'])
     xdf['MA'] = pd.rolling_mean(xdf.close, chan)
     xdata = pd.concat([xdf['TR'].shift(1), xdf['MA'].shift(1),
                        xdf['chan_h'].shift(1), xdf['chan_l'].shift(1),
@@ -129,7 +113,7 @@ def dual_thrust_sim( mdf, config):
             buytrig  += f * rng
         elif mslice.MA < mslice.close:
             selltrig -= f * rng
-        if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
+        if (min_id >= config['exit_min']) and (close_daily or (mslice.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
                 tradeid += 1
@@ -202,7 +186,13 @@ def run_sim(sim_config):
     if 'freq' in config['proc_args']:
         file_prefix = file_prefix + 'test2/DT_%smin_' % config['proc_args']['freq']
     else:
-        file_prefix = file_prefix + 'test2/DTsplit_test_'
+        chan = config['chan']
+        use_chan = config['use_chan']
+        if use_chan:
+            filestr = 'chan%s' % chan
+        else:
+            filestr = 'nochan'
+        file_prefix = file_prefix + 'test2/DT%ssplit_' % filestr
 
     if config['close_daily']:
         file_prefix = file_prefix + 'daily_'
@@ -231,43 +221,58 @@ def run_sim(sim_config):
         dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config)
     return
 
-def get_config():
+def get_config(start_d, end_d, chan, d_close):
+    if chan == 0:
+        use_chan = False
+    else:
+        use_chan = True
     sim_config = {}
     sim_config['sim_name']   = 'DT'
-    sim_config['products']   = [ 'm', 'RM', 'y', 'p', 'a', 'l', 'pp', 'rb', 'SR', 'TA', 'MA', 'i', 'cs', 'ag', 'cu', 'ru', 'IF', 'TF' ]
-    sim_config['start_date'] = '20141101'
-    sim_config['end_date']   = '20151118'
+    sim_config['products']   = ['IF']#[ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au', 'al', 'zn' ]
+    sim_config['start_date'] = start_d
+    sim_config['end_date']   = end_d
     sim_config['scenarios']  =  [
-            (0.8, 1, 0.5, 0.0), (0.9, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), (0.9, 0, 0.5, 0.0), \
-            (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), (1.2, 0, 0.5, 0.0),\
-            (0.4, 2, 0.5, 0.0), (0.6, 2, 0.5, 0.0), (0.8, 2, 0.5, 0.0), (1.0, 2, 0.5, 0.0), (1.2, 2, 0.5, 0.0),\
-            (0.2, 4, 0.5, 0.0), (0.3, 4, 0.5, 0.0), (0.4, 4, 0.5, 0.0), (0.5, 4, 0.5, 0.0), (0.6, 4, 0.5, 0.0),\
-            (0.7, 4, 0.5, 0.0), (0.8, 4, 0.5, 0.0), (0.1, 8, 0.5, 0.0), (0.15,8, 0.5, 0.0), (0.2, 8, 0.5, 0.0),\
-            (0.25,8, 0.5, 0.0), (0.3, 8, 0.5, 0.0), (0.35,8, 0.5, 0.0), (0.4, 8, 0.5, 0.0), (0.5, 8, 0.5, 0.0),\
+            (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), \
+            (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), \
+            (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), \
+            (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), \
+            (0.2, 2, 0.5, 0.0), (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.35, 2, 0.5, 0.0),\
+            (0.4, 2, 0.5, 0.0), (0.45, 2, 0.5, 0.0),(0.5, 2, 0.5, 0.0), \
+            #(0.2, 4, 0.5, 0.0), (0.25, 4, 0.5, 0.0),(0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),\
+            #(0.4, 4, 0.5, 0.0), (0.45, 4, 0.5, 0.0),(0.5, 4, 0.5, 0.0),\
             ]
     sim_config['pos_class'] = 'strat.TradePos'
-    sim_config['proc_func'] = 'day_split'
+    sim_config['proc_func'] = 'dh.day_split'
+    chan_func = {'high': {'func': pd.rolling_max, 'args':{}},
+                 'low':  {'func': pd.rolling_min, 'args':{}},
+                 }
     config = {'capital': 10000,
               'offset': 0,
-              'chan': 20,
-              'use_chan': False,
+              'chan': chan,
+              'use_chan': use_chan,
               'trans_cost': 0.0,
-              'close_daily': False,
+              'close_daily': d_close,
               'unit': 1,
               'stoploss': 0.0,
               'min_range': 0.003,
-              'proc_args': {'minlist':[430, 1500, 1630, 1930]},
+              'proc_args': {'minlist':[1500]},
               'pos_args': {},
-              'pos_update': False}
+              'pos_update': False,
+              'chan_func': chan_func,
+              }
     sim_config['config'] = config
     return sim_config
 
 if __name__=="__main__":
     args = sys.argv[1:]
-    if len(args) < 3:
+    if len(args) < 4:
         d_close = False
     else:
-        d_close = (int(args[2])>0)
+        d_close = (int(args[3])>0)
+    if len(args) < 3:
+        chan = 0
+    else:
+        chan = int(args[2])
     if len(args) < 2:
         end_d = datetime.date(2015,1,23)
     else:
@@ -276,5 +281,6 @@ if __name__=="__main__":
         start_d = datetime.date(2013,1,2)
     else:
         start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-    run_sim(start_d, end_d, d_close)
+    simconf = get_config(args[0], args[1], chan, d_close)
+    run_sim(simconf)
     pass

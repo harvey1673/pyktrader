@@ -7,6 +7,21 @@ def ohlcsum(df):
     return pd.Series([df.index[0], df['open'][0], df['high'].max(), df['low'].min(), df['close'][-1], df['volume'].sum()],
                   index = ['datetime', 'open','high','low','close','volume'])
 
+def min_freq_group(mdf, freq = 5):
+    min_cnt = (mdf['mid_id']-300)/100 * 60 + (mdf['mid_id'] % 100)
+    mdf['min_idx'] = min_cnt/freq
+    mdf['date_idx'] = mdf.index.date
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    return xdf
+
+def day_split(mdf, minlist = [1500]):
+    mdf['min_idx'] = 0
+    for idx, mid in enumerate(minlist):
+        mdf.loc[mdf['min_id']>=mid, 'min_idx'] = idx + 1
+    mdf['date_idx'] = mdf.index.date
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    return xdf
+
 def conv_ohlc_freq(df, freq):
     highcol = pd.DataFrame(df['high']).resample(freq, how ='max').dropna()
     lowcol  = pd.DataFrame(df['low']).resample(freq, how ='min').dropna()

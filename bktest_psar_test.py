@@ -8,20 +8,6 @@ import strategy as strat
 import datetime
 import backtest
 
-def min_freq_group(mdf, freq = 5):
-    min_cnt = (mdf['mid_id']-300)/100 * 60 + (mdf['mid_id'] % 100)
-    mdf['min_idx'] = min_cnt/freq
-    mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
-    return xdf
-
-def day_split(mdf, minlist = [1500]):
-    mdf['min_idx'] = 0
-    for idx, mid in enumerate(minlist):
-        mdf.loc[mdf['min_id']>=mid, 'min_idx'] = idx + 1
-    mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
-    return xdf
 
 def psar_test( asset, start_date, end_date, scenarios, config):
     nearby  = config['nearby']
@@ -246,12 +232,12 @@ def get_config():
             (0.25,8, 0.5, 0.0), (0.3, 8, 0.5, 0.0), (0.35,8, 0.5, 0.0), (0.4, 8, 0.5, 0.0), (0.5, 8, 0.5, 0.0),\
             ]
     sim_config['pos_class'] = 'strat.TradePos'
-    sim_config['proc_func'] = 'min_freq_group'
+    sim_config['proc_func'] = 'dh.min_freq_group'
     config = {'capital': 10000,
               'offset': 0,
               'chan': 20,
               'use_chan': False,
-			  'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0},
+              'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0},
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,

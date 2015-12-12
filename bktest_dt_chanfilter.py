@@ -52,8 +52,6 @@ def dual_thrust_sim( ddf, mdf, config):
     win = config['win']
     chan = config['chan']
     chan_func = config['channel_func']
-    upper_chan_func = chan_func[0]
-    lower_chan_func = chan_func[1]
     multiplier = config['m']
     tcost = config['trans_cost']
     unit = config['unit']
@@ -74,10 +72,8 @@ def dual_thrust_sim( ddf, mdf, config):
                        pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
                        join='outer', axis=1).max(axis=1).shift(1)
     ddf['TR'] = tr
-    ddf['H1'] = upper_chan_func(ddf, chan).shift(1)
-    ddf['L1'] = lower_chan_func(ddf, chan).shift(1)
-    #ddf['prev_high'] = ddf.high.shift(1)
-    #ddf['prev_low'] = ddf.low.shift(1)    
+    ddf['H1'] = chan_func['high']['func'](ddf, chan, **chan_func['high']['args']).shift(1)
+    ddf['L1'] = chan_func['low']['func'](ddf, chan, **chan_func['low']['args']).shift(1)
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -180,11 +176,11 @@ def dual_thrust_sim( ddf, mdf, config):
     return (res, closed_trades, ts)
         
 def run_sim(start_date, end_date, daily_close = False):
-    sim_list = [ 'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF', 'ni', 'j', 'jm', 'jd', 'ru']
-    #sim_list = ['TA', 'MA', 'SR', 'cs', 'i', 'TF', 'm', 'y', 'p', 'jd', 'a', 'RM', 'rb', 'j', 'jm' ]
-    #sim_list = [ 'a', 'm', 'p', 'y', 'cs', 'i', 'rb',  'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF']
+    #sim_list = [ 'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF', 'ni', 'j', 'jm', 'jd', 'ru']
+    #sim_list = ['ag', 'au', 'IF', 'ME' ]
+    sim_list = [ 'p', 'y', 'cs', 'i', 'j', 'jm', 'rb', 'ag', 'cu', 'SR', 'MA', 'm', 'l', 'TA', 'MA', 'pp', 'TF']
     test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test/DTchan_full_'
+    file_prefix = test_folder + 'test2/DT15pct10chan_'
     if daily_close:
         file_prefix = file_prefix + 'daily_'
     #file_prefix = file_prefix + '_'
@@ -196,7 +192,8 @@ def run_sim(start_date, end_date, daily_close = False):
               'stoploss': 0.0,
               'min_range': 0.00,
               'EP': False,
-              'channel_func': [dh.DONCH_H, dh.DONCH_L],
+              'channel_func': { 'high': {'func': dh.PCT_CHANNEL, 'args':{'pct': 90, 'field': 'high'}},
+                                'low':  {'func': dh.PCT_CHANNEL, 'args':{'pct': 10, 'field': 'low'}}},
               'file_prefix': file_prefix}
     
     scenarios = [ (0.5, 0, 0.5), (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), (0.9, 0, 0.5), (1.0, 0, 0.5),
