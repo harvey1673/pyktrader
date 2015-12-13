@@ -1,6 +1,11 @@
 import datetime
+import os
+import sys
+import json
 import pandas as pd
 import numpy as np
+import data_handler as dh
+import strategy as strat
 import misc
 import platform
 
@@ -25,7 +30,7 @@ sim_start_dict = { 'c': datetime.date(2008,10,1), 'm': datetime.date(2010,10,1),
     'FG':datetime.date(2013,2,1),  'OI':datetime.date(2013,6,1),  'RI':datetime.date(2013,6,1),
     'TC':datetime.date(2013,10,1), 'WH':datetime.date(2014,2,1),  'pp':datetime.date(2014,4,1),
     'IF':datetime.date(2010,7,1),  'MA':datetime.date(2015,7,1),  'TF':datetime.date(2014,4,1),
-    'IH':datetime.date(2015,5,1),  'IC':datetime.date(2015,5,1),  'cs':datetime.date(2015,1,2),
+    'IH':datetime.date(2015,5,1),  'IC':datetime.date(2015,5,1),  'cs':datetime.date(2015,2,2),
     'jd':datetime.date(2014,6,1),  'ni':datetime.date(2015,6,1),  'sn':datetime.date(2015,6,1),
     }
 
@@ -164,3 +169,102 @@ def max_drawdown(ts):
     max_dd = ts[i] - ts[j]
     max_duration = (i - j).days
     return max_dd, max_duration
+
+def simlauncher_min(config_file):
+    sim_config = {}
+    with open(config_file, 'r') as fp:
+        sim_config = json.load(fp)
+    bktest_split = sim_config['sim_func'].split('.')
+    bktest_module = __import__(bktest_split[0])
+    run_sim = getattr(bktest_module, bktest_split[1])
+    dir_name = config_file.split('.')[0]
+    test_folder = get_bktest_folder()
+    file_prefix = test_folder + dir_name + os.path.sep
+    if not os.path.exists(file_prefix):
+        os.makedirs(file_prefix)
+    sim_list = sim_config['products']
+    config = {}
+    start_date = datetime.datetime.strptime(sim_config['start_date'], '%Y%m%d').date()
+    config['start_date'] = start_date
+    end_date   = datetime.datetime.strptime(sim_config['end_date'], '%Y%m%d').date()
+    config['end_date'] = end_date
+    scen_dim = [ len(sim_config[s]) for s in sim_config['scen_keys']]
+    scenarios = [list(s) for s in np.ndindex(tuple(scen_dim))]
+    config.update(sim_config['config'])
+    config['pos_class'] = eval(sim_config['pos_class'])
+    config['proc_func'] = eval(sim_config['proc_func'])
+    file_prefix = file_prefix + sim_config['sim_name']
+    if config['close_daily']:
+        file_prefix = file_prefix + 'daily_'
+    config['file_prefix'] = file_prefix
+    for asset in sim_list:
+        file_prefix = config['file_prefix'] + '_' + asset + '_'
+        fname = file_prefix + 'stats.json'
+        output = {}
+        if os.path.isfile(fname):
+            with open(fname, 'r') as fp:
+                output = json.load(fp)
+        if len(output.keys()) >= len(scenarios):
+            continue
+        if asset in sim_start_dict:
+            start_date =  max(sim_start_dict[asset], config['start_date'])
+        else:
+            start_date = config['start_date']
+        config['marginrate'] = ( sim_margin_dict[asset], sim_margin_dict[asset])
+        config['nearby'] = 1
+        config['rollrule'] = '-50b'
+        config['exit_min'] = 2112
+        config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2059, 2100)
+        if asset in ['cu', 'al', 'zn']:
+            config['nearby'] = 3
+            config['rollrule'] = '-1b'
+        elif asset in ['IF', 'IH', 'IC']:
+            config['rollrule'] = '-2b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+        elif asset in ['au', 'ag']:
+            config['rollrule'] = '-25b'
+        elif asset in ['TF', 'T']:
+            config['rollrule'] = '-20b'
+            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+        config['no_trade_set'] = []
+        nearby   = config['nearby']
+        rollrule = config['rollrule']
+        if nearby > 0:
+            mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+        mdf = cleanup_mindata(mdf, asset)
+        if 'need_daily' in sim_config:
+            ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
+            config['ddf'] = ddf
+        for ix, s in enumerate(scenarios):
+            fname1 = file_prefix + str(ix) + '_trades.csv'
+            fname2 = file_prefix + str(ix) + '_dailydata.csv'
+            if os.path.isfile(fname1) and os.path.isfile(fname2):
+                continue
+            for key, seq in zip(sim_config['scen_keys'], s):
+                config[key] = sim_config[key][seq]
+            df = mdf.copy(deep = True)
+            (res, closed_trades, ts) = run_sim( df, config)
+            output[ix] = res
+            print 'saving results for asset = %s, scen = %s' % (asset, str(ix))
+            all_trades = {}
+            for i, tradepos in enumerate(closed_trades):
+                all_trades[i] = strat.tradepos2dict(tradepos)
+            trades = pd.DataFrame.from_dict(all_trades).T
+            trades.to_csv(fname1)
+            ts.to_csv(fname2)
+            fname = file_prefix + 'stats.json'
+            try:
+                with open(fname, 'w') as ofile:
+                    json.dump(output, ofile)
+            except:
+                continue
+        #res = pd.DataFrame.from_dict(output)
+    return
+
+if __name__=="__main__":
+    args = sys.argv[1:]
+    if len(args) < 1:
+        print "need to input a file name for simulation"
+    else:
+        simlauncher_min(args[0])
+    pass
