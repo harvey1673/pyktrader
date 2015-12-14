@@ -29,10 +29,10 @@ def psar_test_sim( mdf, config):
     xdf['chan_h'] = pd.rolling_max(xdf.high, chan)
     xdf['chan_l'] = pd.rolling_min(xdf.low, chan)
     xdf['MA'] = pd.rolling_mean(xdf.close, chan)
-	psar_data = dh.PSAR(xdf, **config['sar_params'])
+    psar_data = dh.PSAR(xdf, **config['sar_params'])
     xdata = pd.concat([xdf['MA'], xdf['chan_h'], xdf['chan_l'], psar_data['PSAR_VAL'], psar_data['PSAR_DIR'], xdf['date_idx']],
                        axis=1, keys=['MA', 'chanH', 'chanL', 'psar', 'psar_dir', 'xdate']).fillna(0)
-	xdata = xdata.shift(1)
+    xdata = xdata.shift(1)
     mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -52,17 +52,9 @@ def psar_test_sim( mdf, config):
         mdf.ix[dd, 'pos'] = pos
         if (mslice.MA == 0):
             continue
-        d_open = mslice.dopen
-        if (d_open <= 0):
-            continue
-        buytrig  = d_open + rng
-        selltrig = d_open - rng
         if 'reset_margin' in pos_args:
             pos_args['reset_margin'] = mslice.TR * SL
-        if mslice.MA > mslice.close:
-            buytrig  += f * rng
-        elif mslice.MA < mslice.close:
-            selltrig -= f * rng
+
         if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -140,7 +132,7 @@ def gen_config_file(filename):
               'offset': 0,
               'chan': 10,
               'use_chan': True,
-			  'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0},
+              'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0},
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,

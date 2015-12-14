@@ -150,7 +150,7 @@ def gen_config_file(filename):
     sim_config['sim_func']  = 'bktest_split_dt.dual_thrust_sim'
     sim_config['scen_keys'] = ['param']
     sim_config['sim_name']   = 'DTsplit'
-    sim_config['products']   = ['IF']#[ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au', 'al', 'zn' ]
+    sim_config['products']   = ['m', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au', 'al', 'zn' ]
     sim_config['start_date'] = '20141101'
     sim_config['end_date']   = '20151118'
     sim_config['param']  =  [
@@ -165,11 +165,11 @@ def gen_config_file(filename):
             ]
     sim_config['pos_class'] = 'strat.TradePos'
     sim_config['proc_func'] = 'dh.day_split'
+    sim_config['offset']    = 1
     chan_func = {'high': {'func': 'pd.rolling_max', 'args':{}},
                  'low':  {'func': 'pd.rolling_min', 'args':{}},
                  }
     config = {'capital': 10000,
-              'offset': 0,
               'chan': 10,
               'use_chan': True,
               'trans_cost': 0.0,
@@ -177,7 +177,7 @@ def gen_config_file(filename):
               'unit': 1,
               'stoploss': 0.0,
               'min_range': 0.003,
-              'proc_args': {'minlist':[1500]},
+              'proc_args': {'minlist':[]},
               'pos_args': {},
               'pos_update': False,
               'chan_func': chan_func,

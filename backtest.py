@@ -34,6 +34,19 @@ sim_start_dict = { 'c': datetime.date(2008,10,1), 'm': datetime.date(2010,10,1),
     'jd':datetime.date(2014,6,1),  'ni':datetime.date(2015,6,1),  'sn':datetime.date(2015,6,1),
     }
 
+trade_offset_dict = {
+                'au': 0.05, 'ag': 1,    'cu': 10,   'al':5,
+                'zn': 5,    'rb': 1,    'ru': 5,    'a': 1,
+                'm':  1,    'RM': 1,    'y' : 2,    'p': 2,
+                'c':  1,    'CF': 5,    'i' : 0.5,  'j': 0.5,
+                'jm': 0.5,  'pp': 1,    'l' : 5,    'SR': 1,
+                'TA': 2,    'TC': 0.2,  'ME': 1,    'IF': 0.4,
+                'jd': 1,    'ni': 10,   'IC': 1.0,
+                'IH': 0.4,  'FG': 1,    'TF':0.005, 'OI': 2,
+                'T': 0.005, 'MA': 1,    'cs': 1,    'bu': 1,
+                'sn': 10,   'v':  5,
+                }
+
 def get_bktest_folder():
     folder = ''
     system = platform.system()
@@ -197,6 +210,7 @@ def simlauncher_min(config_file):
     if config['close_daily']:
         file_prefix = file_prefix + 'daily_'
     config['file_prefix'] = file_prefix
+    summary_df = None
     for asset in sim_list:
         file_prefix = config['file_prefix'] + '_' + asset + '_'
         fname = file_prefix + 'stats.json'
@@ -210,6 +224,10 @@ def simlauncher_min(config_file):
             start_date =  max(sim_start_dict[asset], config['start_date'])
         else:
             start_date = config['start_date']
+        if 'offset' in sim_config:
+            config['offset'] = sim_config['offset'] * trade_offset_dict[asset]
+        else:
+            config['offset'] = trade_offset_dict[asset]
         config['marginrate'] = ( sim_margin_dict[asset], sim_margin_dict[asset])
         config['nearby'] = 1
         config['rollrule'] = '-50b'
@@ -244,6 +262,8 @@ def simlauncher_min(config_file):
                 config[key] = sim_config[key][seq]
             df = mdf.copy(deep = True)
             (res, closed_trades, ts) = run_sim( df, config)
+            res.update(dict(zip(sim_config['scen_keys'], s)))
+            res['asset'] = asset
             output[ix] = res
             print 'saving results for asset = %s, scen = %s' % (asset, str(ix))
             all_trades = {}
@@ -258,7 +278,16 @@ def simlauncher_min(config_file):
                     json.dump(output, ofile)
             except:
                 continue
-        #res = pd.DataFrame.from_dict(output)
+        res = pd.DataFrame.from_dict(output, orient = 'index')
+        res.index.name = 'scenario'
+        res = res.sort(columns = ['sharp_ratio'], ascending=False)
+        res.set_index(['asset', 'scenatio'], inplace = True)
+        if summary_df == None:
+            summary_df = res[:6].copy(deep = True)
+        else:
+            summary_df = summary_df.append(res[:6])
+        fname = file_prefix + 'summary.csv'
+        summary_df.to_csv(fname)
     return
 
 if __name__=="__main__":
