@@ -202,6 +202,11 @@ def simlauncher_min(config_file):
     end_date   = datetime.datetime.strptime(sim_config['end_date'], '%Y%m%d').date()
     config['end_date'] = end_date
     scen_dim = [ len(sim_config[s]) for s in sim_config['scen_keys']]
+    outcol_list = ['asset', 'scenario'] + sim_config['scen_keys'] \
+                + ['sharp_ratio', 'tot_pnl', 'std_pnl', 'num_days', \
+                    'max_drawdown', 'max_dd_period', 'profit_dd_ratio', \
+                    'all_profit', 'tot_cost', 'win_ratio', 'num_win', 'num_loss', \
+                    'profit_per_win', 'profit_per_loss']
     scenarios = [list(s) for s in np.ndindex(tuple(scen_dim))]
     config.update(sim_config['config'])
     config['pos_class'] = eval(sim_config['pos_class'])
@@ -210,7 +215,10 @@ def simlauncher_min(config_file):
     if config['close_daily']:
         file_prefix = file_prefix + 'daily_'
     config['file_prefix'] = file_prefix
-    summary_df = None
+    summary_df = pd.DataFrame()
+    fname = config['file_prefix'] + 'summary.csv'
+    if os.path.isfile(fname):
+        summary_df = pd.DataFrame.from_csv(fname)
     for asset in sim_list:
         file_prefix = config['file_prefix'] + '_' + asset + '_'
         fname = file_prefix + 'stats.json'
@@ -218,75 +226,76 @@ def simlauncher_min(config_file):
         if os.path.isfile(fname):
             with open(fname, 'r') as fp:
                 output = json.load(fp)
-        if len(output.keys()) >= len(scenarios):
-            continue
-        if asset in sim_start_dict:
-            start_date =  max(sim_start_dict[asset], config['start_date'])
-        else:
-            start_date = config['start_date']
-        if 'offset' in sim_config:
-            config['offset'] = sim_config['offset'] * trade_offset_dict[asset]
-        else:
-            config['offset'] = trade_offset_dict[asset]
-        config['marginrate'] = ( sim_margin_dict[asset], sim_margin_dict[asset])
-        config['nearby'] = 1
-        config['rollrule'] = '-50b'
-        config['exit_min'] = 2112
-        config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2059, 2100)
-        if asset in ['cu', 'al', 'zn']:
-            config['nearby'] = 3
-            config['rollrule'] = '-1b'
-        elif asset in ['IF', 'IH', 'IC']:
-            config['rollrule'] = '-2b'
-            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
-        elif asset in ['au', 'ag']:
-            config['rollrule'] = '-25b'
-        elif asset in ['TF', 'T']:
-            config['rollrule'] = '-20b'
-            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
-        config['no_trade_set'] = []
-        nearby   = config['nearby']
-        rollrule = config['rollrule']
-        if nearby > 0:
-            mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
-        mdf = cleanup_mindata(mdf, asset)
-        if 'need_daily' in sim_config:
-            ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
-            config['ddf'] = ddf
-        for ix, s in enumerate(scenarios):
-            fname1 = file_prefix + str(ix) + '_trades.csv'
-            fname2 = file_prefix + str(ix) + '_dailydata.csv'
-            if os.path.isfile(fname1) and os.path.isfile(fname2):
-                continue
-            for key, seq in zip(sim_config['scen_keys'], s):
-                config[key] = sim_config[key][seq]
-            df = mdf.copy(deep = True)
-            (res, closed_trades, ts) = run_sim( df, config)
-            res.update(dict(zip(sim_config['scen_keys'], s)))
-            res['asset'] = asset
-            output[ix] = res
-            print 'saving results for asset = %s, scen = %s' % (asset, str(ix))
-            all_trades = {}
-            for i, tradepos in enumerate(closed_trades):
-                all_trades[i] = strat.tradepos2dict(tradepos)
-            trades = pd.DataFrame.from_dict(all_trades).T
-            trades.to_csv(fname1)
-            ts.to_csv(fname2)
-            fname = file_prefix + 'stats.json'
-            try:
-                with open(fname, 'w') as ofile:
-                    json.dump(output, ofile)
-            except:
-                continue
+        if len(output.keys()) < len(scenarios):
+            if asset in sim_start_dict:
+                start_date =  max(sim_start_dict[asset], config['start_date'])
+            else:
+                start_date = config['start_date']
+            if 'offset' in sim_config:
+                config['offset'] = sim_config['offset'] * trade_offset_dict[asset]
+            else:
+                config['offset'] = trade_offset_dict[asset]
+            config['marginrate'] = ( sim_margin_dict[asset], sim_margin_dict[asset])
+            config['nearby'] = 1
+            config['rollrule'] = '-50b'
+            config['exit_min'] = 2112
+            config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2059, 2100)
+            if asset in ['cu', 'al', 'zn']:
+                config['nearby'] = 3
+                config['rollrule'] = '-1b'
+            elif asset in ['IF', 'IH', 'IC']:
+                config['rollrule'] = '-2b'
+                config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+            elif asset in ['au', 'ag']:
+                config['rollrule'] = '-25b'
+            elif asset in ['TF', 'T']:
+                config['rollrule'] = '-20b'
+                config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
+            config['no_trade_set'] = []
+            nearby   = config['nearby']
+            rollrule = config['rollrule']
+            if nearby > 0:
+                mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+            mdf = cleanup_mindata(mdf, asset)
+            if 'need_daily' in sim_config:
+                ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
+                config['ddf'] = ddf
+            for ix, s in enumerate(scenarios):
+                fname1 = file_prefix + str(ix) + '_trades.csv'
+                fname2 = file_prefix + str(ix) + '_dailydata.csv'
+                if os.path.isfile(fname1) and os.path.isfile(fname2):
+                    continue
+                for key, seq in zip(sim_config['scen_keys'], s):
+                    config[key] = sim_config[key][seq]
+                df = mdf.copy(deep = True)
+                (res, closed_trades, ts) = run_sim( df, config)
+                res.update(dict(zip(sim_config['scen_keys'], s)))
+                res['asset'] = asset
+                output[ix] = res
+                print 'saving results for asset = %s, scen = %s' % (asset, str(ix))
+                all_trades = {}
+                for i, tradepos in enumerate(closed_trades):
+                    all_trades[i] = strat.tradepos2dict(tradepos)
+                trades = pd.DataFrame.from_dict(all_trades).T
+                trades.to_csv(fname1)
+                ts.to_csv(fname2)
+                fname = file_prefix + 'stats.json'
+                try:
+                    with open(fname, 'w') as ofile:
+                        json.dump(output, ofile)
+                except:
+                    continue
         res = pd.DataFrame.from_dict(output, orient = 'index')
         res.index.name = 'scenario'
         res = res.sort(columns = ['sharp_ratio'], ascending=False)
-        res.set_index(['asset', 'scenatio'], inplace = True)
-        if summary_df == None:
-            summary_df = res[:6].copy(deep = True)
+        res = res.reset_index()
+        res.set_index(['asset', 'scenario'])
+        out_res = res[outcol_list]
+        if len(summary_df) == 0:
+            summary_df = out_res[:10].copy(deep = True)
         else:
-            summary_df = summary_df.append(res[:6])
-        fname = file_prefix + 'summary.csv'
+            summary_df = summary_df.append(out_res[:10])
+        fname = config['file_prefix'] + 'summary.csv'
         summary_df.to_csv(fname)
     return
 

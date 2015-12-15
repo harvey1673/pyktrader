@@ -6,53 +6,22 @@ import pandas as pd
 import numpy as np
 import strategy as strat
 import datetime
+import json
 import backtest
 
-def dual_thrust( asset, start_date, end_date, scenarios, config, channels=[20]):
-    nearby  = config['nearby']
-    rollrule = config['rollrule']
-    start_d = misc.day_shift(start_date, '-4b')
-    file_prefix = config['file_prefix'] + '_' + asset + '_'
-    #print asset, nearby, start_d, end_date
-    ddf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'd', need_shift=True)
-    mdf = misc.nearby(asset, nearby, start_d, end_date, rollrule, 'm', need_shift=True)
-    mdf = backtest.cleanup_mindata(mdf, asset)
-    #ddf = dh.conv_ohlc_freq(mdf, 'D')
-    output = {}
-    for chan in channels:
-        for ix, s in enumerate(scenarios):
-            config['win'] = s[1]
-            config['k'] = s[0]
-            config['m'] = s[2]
-            idx = chan*100+ix
-            config['chan'] = chan
-            (res, closed_trades, ts) = dual_thrust_sim( ddf, mdf, config)
-            output[idx] = res
-            print 'saving results for scen = %s' % str(idx)
-            all_trades = {}
-            for i, tradepos in enumerate(closed_trades):
-                all_trades[i] = strat.tradepos2dict(tradepos)
-            fname = file_prefix + str(idx) + '_trades.csv'
-            trades = pd.DataFrame.from_dict(all_trades).T
-            trades.to_csv(fname)
-            fname = file_prefix + str(idx) + '_dailydata.csv'
-            ts.to_csv(fname)
-    fname = file_prefix + 'stats.csv'
-    res = pd.DataFrame.from_dict(output)
-    res.to_csv(fname)
-    return 
-
-def dual_thrust_sim( ddf, mdf, config):
+def dual_thrust_sim( mdf, config):
+    ddf = config['ddf']
     close_daily = config['close_daily']
     marginrate = config['marginrate']
     offset = config['offset']
-    k = config['k']
+    k = config['param'][0]
+    win = config['param'][1]
+    multiplier = config['param'][2]
+    f = config['param'][3]
     ep_enabled = config['EP']
     start_equity = config['capital']
-    win = config['win']
     chan = config['chan']
-    chan_func = config['channel_func']
-    multiplier = config['m']
+    chan_func = config['chan_func']
     tcost = config['trans_cost']
     unit = config['unit']
     SL = config['stoploss']
@@ -72,8 +41,8 @@ def dual_thrust_sim( ddf, mdf, config):
                        pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
                        join='outer', axis=1).max(axis=1).shift(1)
     ddf['TR'] = tr
-    ddf['H1'] = chan_func['high']['func'](ddf, chan, **chan_func['high']['args']).shift(1)
-    ddf['L1'] = chan_func['low']['func'](ddf, chan, **chan_func['low']['args']).shift(1)
+    ddf['H1'] = eval(chan_func['high']['func'])(ddf, chan, **chan_func['high']['args']).shift(1)
+    ddf['L1'] = eval(chan_func['low']['func'])(ddf, chan, **chan_func['low']['args']).shift(1)
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -174,67 +143,54 @@ def dual_thrust_sim( ddf, mdf, config):
     res_trade = backtest.get_trade_stats( closed_trades )
     res = dict( res_pnl.items() + res_trade.items())
     return (res, closed_trades, ts)
-        
-def run_sim(start_date, end_date, daily_close = False):
-    #sim_list = [ 'SR', 'MA', 'l', 'TA', 'MA', 'pp', 'TF', 'ni', 'j', 'jm', 'jd', 'ru']
-    #sim_list = ['ag', 'au', 'IF', 'ME' ]
-    sim_list = [ 'p', 'y', 'cs', 'i', 'j', 'jm', 'rb', 'ag', 'cu', 'SR', 'MA', 'm', 'l', 'TA', 'MA', 'pp', 'TF']
-    test_folder = backtest.get_bktest_folder()
-    file_prefix = test_folder + 'test2/DT15pct10chan_'
-    if daily_close:
-        file_prefix = file_prefix + 'daily_'
-    #file_prefix = file_prefix + '_'
+
+def gen_config_file(filename):
+    sim_config = {}
+    sim_config['sim_func']  = 'bktest_dt_chanfilter.dual_thrust_sim'
+    sim_config['scen_keys'] = ['chan', 'param']
+    sim_config['sim_name']   = 'DTpct10_'
+    sim_config['products']   = ['m', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au' ]
+    sim_config['start_date'] = '20141101'
+    sim_config['end_date']   = '20151118'
+    sim_config['need_daily'] = True
+    sim_config['param']  =  [
+            (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), \
+            (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), \
+            (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), \
+            (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), \
+            (0.2, 2, 0.5, 0.0), (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.35, 2, 0.5, 0.0),\
+            (0.4, 2, 0.5, 0.0), (0.45, 2, 0.5, 0.0),(0.5, 2, 0.5, 0.0), \
+            #(0.2, 4, 0.5, 0.0), (0.25, 4, 0.5, 0.0),(0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),\
+            #(0.4, 4, 0.5, 0.0), (0.45, 4, 0.5, 0.0),(0.5, 4, 0.5, 0.0),\
+            ]
+    sim_config['chan'] = [10, 20]
+    sim_config['pos_class'] = 'strat.TradePos'
+    sim_config['proc_func'] = 'dh.day_split'
+    sim_config['offset']    = 1
+    chan_func = { 'high': {'func': 'dh.PCT_CHANNEL', 'args':{'pct': 90, 'field': 'high'}},
+                  'low':  {'func': 'dh.PCT_CHANNEL', 'args':{'pct': 10, 'field': 'low'}}}
     config = {'capital': 10000,
-              'offset': 0,
+              'use_chan': True,
               'trans_cost': 0.0,
-              'close_daily': daily_close, 
+              'close_daily': False,
               'unit': 1,
               'stoploss': 0.0,
-              'min_range': 0.00,
+              'min_range': 0.003,
+              'proc_args': {'minlist':[1500]},
+              'pos_args': {},
+              'pos_update': False,
               'EP': False,
-              'channel_func': { 'high': {'func': dh.PCT_CHANNEL, 'args':{'pct': 90, 'field': 'high'}},
-                                'low':  {'func': dh.PCT_CHANNEL, 'args':{'pct': 10, 'field': 'low'}}},
-              'file_prefix': file_prefix}
-    
-    scenarios = [ (0.5, 0, 0.5), (0.6, 0, 0.5), (0.7, 0, 0.5), (0.8, 0, 0.5), (0.9, 0, 0.5), (1.0, 0, 0.5),
-                  (0.5, 1, 0.0), (0.6, 1, 0.0), (0.7, 1, 0.0), (0.8, 1, 0.0), (0.9, 1, 0.0), (1.0, 1, 0.0),
-                  (0.25, 2, 0), (0.3, 2, 0), (0.35, 2, 0), (0.4, 2, 0), (0.45, 2, 0), (0.5, 2, 0) ]
-    channels = [5, 10, 15, 20, 25]
-    for asset in sim_list:
-        sdate =  backtest.sim_start_dict[asset]
-        config['marginrate'] = ( backtest.sim_margin_dict[asset], backtest.sim_margin_dict[asset])
-        config['nearby'] = 1
-        config['rollrule'] = '-50b'
-        config['exit_min'] = 2055
-        config['no_trade_set'] = range(300, 301) + range(1500, 1501) + range(2059, 2100)
-        if asset in ['cu', 'al', 'zn']:
-            config['nearby'] = 3
-            config['rollrule'] = '-1b'
-        elif asset in ['IF', 'IH', 'IC']:
-            config['rollrule'] = '-2b'
-            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
-        elif asset in ['au', 'ag']:
-            config['rollrule'] = '-25b'
-        elif asset in ['TF', 'T']:
-            config['rollrule'] = '-20b'
-            config['no_trade_set'] = range(1515, 1520) + range(2110, 2115)
-        config['no_trade_set'] = []
-        dual_thrust( asset, max(sdate, start_date), end_date, scenarios, config, channels = channels)
-    return
+              'chan_func': chan_func,
+              }
+    sim_config['config'] = config
+    with open(filename, 'w') as outfile:
+        json.dump(sim_config, outfile)
+    return sim_config
 
 if __name__=="__main__":
     args = sys.argv[1:]
-    if len(args) < 3:
-        d_close = False
-    else:
-        d_close = (int(args[2])>0)
-    if len(args) < 2:
-        end_d = datetime.date(2015,1,23)
-    else:
-        end_d = datetime.datetime.strptime(args[1], '%Y%m%d').date()
     if len(args) < 1:
-        start_d = datetime.date(2013,1,2)
+        print "need to input a file name for config file"
     else:
-        start_d = datetime.datetime.strptime(args[0], '%Y%m%d').date()
-    run_sim(start_d, end_d, d_close)
+        gen_config_file(args[0])
     pass
