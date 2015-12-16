@@ -8,10 +8,10 @@ def ohlcsum(df):
                   index = ['datetime', 'open','high','low','close','volume'])
 
 def min_freq_group(mdf, freq = 5):
-    min_cnt = (mdf['mid_id']-300)/100 * 60 + (mdf['mid_id'] % 100)
+    min_cnt = (mdf['min_id']-300)/100 * 60 + (mdf['min_id'] % 100)
     mdf['min_idx'] = min_cnt/freq
     mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(ohlcsum).reset_index().set_index('datetime')
     return xdf
 
 def day_split(mdf, minlist = [1500]):
@@ -19,7 +19,7 @@ def day_split(mdf, minlist = [1500]):
     for idx, mid in enumerate(minlist):
         mdf.loc[mdf['min_id']>=mid, 'min_idx'] = idx + 1
     mdf['date_idx'] = mdf.index.date
-    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+    xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(ohlcsum).reset_index().set_index('datetime')
     return xdf
 
 def conv_ohlc_freq(df, freq):

@@ -1,11 +1,9 @@
 import sys
 import misc
-import agent
+import json
 import data_handler as dh
 import pandas as pd
-import numpy as np
 import strategy as strat
-import datetime
 import backtest
 
 def psar_test_sim( mdf, config):
@@ -22,7 +20,6 @@ def psar_test_sim( mdf, config):
     unit = config['unit']
     SL = config['stoploss']
     chan = config['chan']
-    use_chan = config['use_chan']
     no_trade_set = config['no_trade_set']
     ll = mdf.shape[0]
     xdf = proc_func(mdf, **proc_args)
@@ -52,10 +49,10 @@ def psar_test_sim( mdf, config):
         mdf.ix[dd, 'pos'] = pos
         if (mslice.MA == 0):
             continue
-		buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0)
-		sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0)
-		long_close  = (mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)
-		short_close = (mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)
+        buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0)
+        sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0)
+        long_close  = (mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)
+        short_close = (mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)
         if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -76,19 +73,20 @@ def psar_test_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-			close_price = mslice.close
+            close_price = mslice.close
             if (short_close or long_close) and (pos != 0):
-				if (mslice.psar_dir > 0) and (pos < 0):
-					close_price = max(mslice.psar, mslice.open)
-				elif (mslice.psar_dir < 0) and (pos < 0):
-					close_price = min(mslice.psar, mslice.open)
+                if (mslice.psar_dir > 0) and (pos < 0):
+                    close_price = max(mslice.psar, mslice.open)
+                elif (mslice.psar_dir < 0) and (pos < 0):
+                    close_price = min(mslice.psar, mslice.open)
                 curr_pos[0].close(mslice.close+offset, dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
                 closed_trades.append(curr_pos[0])
                 curr_pos = []
+                pos = 0
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            if buy_trig:
+            if buy_trig and (pos == 0):
                 new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
@@ -96,7 +94,7 @@ def psar_test_sim( mdf, config):
                 curr_pos.append(new_pos)
                 pos = unit
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif sell_trig:
+            elif sell_trig and (pos ==0):
                 new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
@@ -121,7 +119,7 @@ def gen_config_file(filename):
     sim_config['end_date']   = '20151118'
     sim_config['freq']  =  [ '15m', '60m' ]
     sim_config['pos_class'] = 'strat.TradePos'
-    sim_config['proc_func'] = 'min_freq_group'
+    sim_config['proc_func'] = 'dh.min_freq_group'
     #chan_func = {'high': {'func': 'pd.rolling_max', 'args':{}},
     #             'low':  {'func': 'pd.rolling_min', 'args':{}},
     #             }
@@ -129,13 +127,14 @@ def gen_config_file(filename):
               'offset': 0,
               'chan': 20,
               'use_chan': True,
-              'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0},
+              'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0.02},
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,
               'stoploss': 0.0,
               #'proc_args': {'minlist':[1500]},
               'proc_args': {'freq':15},
+              'pos_args': {},
               'pos_update': False,
               #'chan_func': chan_func,
               }
