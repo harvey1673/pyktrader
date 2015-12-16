@@ -52,9 +52,10 @@ def psar_test_sim( mdf, config):
         mdf.ix[dd, 'pos'] = pos
         if (mslice.MA == 0):
             continue
-        if 'reset_margin' in pos_args:
-            pos_args['reset_margin'] = mslice.TR * SL
-
+		buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0)
+		sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0)
+		long_close  = (mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)
+		short_close = (mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)
         if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -75,38 +76,34 @@ def psar_test_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-            if (mslice.high >= buytrig) and (pos <=0 ):
-                if len(curr_pos) > 0:
-                    curr_pos[0].close(mslice.close+offset, dd)
-                    tradeid += 1
-                    curr_pos[0].exit_tradeid = tradeid
-                    closed_trades.append(curr_pos[0])
-                    curr_pos = []
-                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                if (use_chan == False) or (mslice.high > mslice.chanH):
-                    new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset, **pos_args)
-                    tradeid += 1
-                    new_pos.entry_tradeid = tradeid
-                    new_pos.open(mslice.close + offset, dd)
-                    curr_pos.append(new_pos)
-                    pos = unit
-                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif (mslice.low <= selltrig) and (pos >=0 ):
-                if len(curr_pos) > 0:
-                    curr_pos[0].close(mslice.close-offset, dd)
-                    tradeid += 1
-                    curr_pos[0].exit_tradeid = tradeid
-                    closed_trades.append(curr_pos[0])
-                    curr_pos = []
-                    mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-                if (use_chan == False) or (mslice.low < mslice.chanL):
-                    new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset, **pos_args)
-                    tradeid += 1
-                    new_pos.entry_tradeid = tradeid
-                    new_pos.open(mslice.close - offset, dd)
-                    curr_pos.append(new_pos)
-                    pos = -unit
-                    mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
+			close_price = mslice.close
+            if (short_close or long_close) and (pos != 0):
+				if (mslice.psar_dir > 0) and (pos < 0):
+					close_price = max(mslice.psar, mslice.open)
+				elif (mslice.psar_dir < 0) and (pos < 0):
+					close_price = min(mslice.psar, mslice.open)
+                curr_pos[0].close(mslice.close+offset, dd)
+                tradeid += 1
+                curr_pos[0].exit_tradeid = tradeid
+                closed_trades.append(curr_pos[0])
+                curr_pos = []
+                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
+            if buy_trig:
+                new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset, **pos_args)
+                tradeid += 1
+                new_pos.entry_tradeid = tradeid
+                new_pos.open(mslice.close + offset, dd)
+                curr_pos.append(new_pos)
+                pos = unit
+                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
+            elif sell_trig:
+                new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset, **pos_args)
+                tradeid += 1
+                new_pos.entry_tradeid = tradeid
+                new_pos.open(mslice.close - offset, dd)
+                curr_pos.append(new_pos)
+                pos = -unit
+                mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
         mdf.ix[dd, 'pos'] = pos
             
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
@@ -130,7 +127,7 @@ def gen_config_file(filename):
     #             }
     config = {'capital': 10000,
               'offset': 0,
-              'chan': 10,
+              'chan': 20,
               'use_chan': True,
               'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0},
               'trans_cost': 0.0,
