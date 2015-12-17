@@ -28,8 +28,8 @@ def psar_test_sim( mdf, config):
     xdf['MA'] = pd.rolling_mean(xdf.close, chan)
     psar_data = dh.PSAR(xdf, **config['sar_params'])
     xdata = pd.concat([xdf['MA'], xdf['chan_h'], xdf['chan_l'], psar_data['PSAR_VAL'], psar_data['PSAR_DIR'], xdf['date_idx']],
-                       axis=1, keys=['MA', 'chanH', 'chanL', 'psar', 'psar_dir', 'xdate']).fillna(0)
-    xdata = xdata.shift(1)
+                       axis=1, keys=['MA', 'chanH', 'chanL', 'psar', 'psar_dir', 'date'])
+    xdata = xdata.shift(1).fillna(0)
     mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -47,12 +47,8 @@ def psar_test_sim( mdf, config):
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos
-        if (mslice.MA == 0):
+        if (mslice.MA == 0) or (mslice.chanH == 0) or (mslice.chanL == 0) or (mslice.psar_dir ==0):
             continue
-        buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0)
-        sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0)
-        long_close  = (mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)
-        short_close = (mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)
         if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -73,11 +69,13 @@ def psar_test_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
+            long_close  = ((mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)) and (pos >0)
+            short_close = ((mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)) and (pos <0)
             close_price = mslice.close
-            if (short_close or long_close) and (pos != 0):
-                if (mslice.psar_dir > 0) and (pos < 0):
+            if (short_close or long_close):
+                if (mslice.psar_dir > 0):
                     close_price = max(mslice.psar, mslice.open)
-                elif (mslice.psar_dir < 0) and (pos < 0):
+                elif (mslice.psar_dir < 0):
                     close_price = min(mslice.psar, mslice.open)
                 curr_pos[0].close(mslice.close+offset, dd)
                 tradeid += 1
@@ -86,7 +84,9 @@ def psar_test_sim( mdf, config):
                 curr_pos = []
                 pos = 0
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            if buy_trig and (pos == 0):
+            buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0) and (pos ==0)
+            sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0) and (pos == 0)
+            if buy_trig:
                 new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
@@ -94,7 +94,7 @@ def psar_test_sim( mdf, config):
                 curr_pos.append(new_pos)
                 pos = unit
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif sell_trig and (pos ==0):
+            elif sell_trig:
                 new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
@@ -114,7 +114,7 @@ def gen_config_file(filename):
     sim_config['sim_func']  = 'bktest_psar_test.psar_test_sim'
     sim_config['scen_keys'] = ['freq']
     sim_config['sim_name']   = 'psar_test'
-    sim_config['products']   = [ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au', 'al', 'zn' ]
+    sim_config['products']   = ['m'] #[ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au', 'al', 'zn' ]
     sim_config['start_date'] = '20141101'
     sim_config['end_date']   = '20151118'
     sim_config['freq']  =  [ '15m', '60m' ]
@@ -129,7 +129,7 @@ def gen_config_file(filename):
               'use_chan': True,
               'sar_params': {'iaf': 0.02, 'maxaf': 0.2, 'incr': 0.02},
               'trans_cost': 0.0,
-              'close_daily': False,
+              'close_daily': True,
               'unit': 1,
               'stoploss': 0.0,
               #'proc_args': {'minlist':[1500]},

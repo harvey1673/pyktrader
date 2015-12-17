@@ -10,17 +10,17 @@ import backtest
 
 def DONCH_IDX(df, n):
     high = pd.Series(pd.rolling_max(df['high'], n), name = 'DONCH_H'+ str(n))
-	low  = pd.Series(pd.rolling_min(df['low'], n), name = 'DONCH_L'+ str(n))
-	maxidx = pd.Series(index=df.index, name = 'DONIDX_H%s' % str(n))
-	minidx = pd.Series(index=df.index, name = 'DONIDX_L%s' % str(n))
+    low  = pd.Series(pd.rolling_min(df['low'], n), name = 'DONCH_L'+ str(n))
+    maxidx = pd.Series(index=df.index, name = 'DONIDX_H%s' % str(n))
+    minidx = pd.Series(index=df.index, name = 'DONIDX_L%s' % str(n))
     for idx, dateidx in enumerate(high.index):
         if idx >= (n-1):
-			highlist = list(df.ix[(idx-n+1):idx, 'high'])[::-1]
-			maxidx[idx] = highlist.index(high[idx])
-			lowlist = list(df.ix[(idx-n+1):idx, 'low'])[::-1]
+            highlist = list(df.ix[(idx-n+1):idx, 'high'])[::-1]
+            maxidx[idx] = highlist.index(high[idx])
+            lowlist = list(df.ix[(idx-n+1):idx, 'low'])[::-1]
             minidx[idx] = lowlist.index(low[idx])
     return pd.concat([high,low, maxidx, minidx], join='outer', axis=1)
-	
+
 def ttl_soup_sim( mdf, config):
     close_daily = config['close_daily']
     marginrate = config['marginrate']
@@ -65,10 +65,10 @@ def ttl_soup_sim( mdf, config):
         mdf.ix[dd, 'pos'] = pos
         if (mslice.MA == 0):
             continue
-		buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0)
-		sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0)
-		long_close  = (mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)
-		short_close = (mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)
+        buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0)
+        sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0)
+        long_close  = (mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)
+        short_close = (mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)
         if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -89,12 +89,12 @@ def ttl_soup_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-			close_price = mslice.close
+            close_price = mslice.close
             if (short_close or long_close) and (pos != 0):
-				if (mslice.psar_dir > 0) and (pos < 0):
-					close_price = max(mslice.psar, mslice.open)
-				elif (mslice.psar_dir < 0) and (pos < 0):
-					close_price = min(mslice.psar, mslice.open)
+                if (mslice.psar_dir > 0) and (pos < 0):
+                    close_price = max(mslice.psar, mslice.open)
+                elif (mslice.psar_dir < 0) and (pos < 0):
+                    close_price = min(mslice.psar, mslice.open)
                 curr_pos[0].close(mslice.close+offset, dd)
                 tradeid += 1
                 curr_pos[0].exit_tradeid = tradeid
@@ -141,7 +141,7 @@ def gen_config_file(filename):
     config = {'capital': 10000,
               'offset': 0,
               'chan': 20,
-			  'gap_win': 4,
+              'gap_win': 4,
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,

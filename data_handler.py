@@ -8,8 +8,8 @@ def ohlcsum(df):
                   index = ['datetime', 'open','high','low','close','volume'])
 
 def min_freq_group(mdf, freq = 5):
-    min_cnt = (mdf['min_id']-300)/100 * 60 + (mdf['min_id'] % 100)
-    mdf['min_idx'] = min_cnt/freq
+    min_cnt = (mdf['min_id']/100).astype(int)*60 + (mdf['min_id'] % 100)
+    mdf['min_idx'] = (min_cnt/freq).astype(int)
     mdf['date_idx'] = mdf.index.date
     xdf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(ohlcsum).reset_index().set_index('datetime')
     return xdf
