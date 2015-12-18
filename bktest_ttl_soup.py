@@ -35,16 +35,29 @@ def ttl_soup_sim( mdf, config):
     unit = config['unit']
     SL = config['stoploss']
     chan = config['chan']
+	exit_ratio = config['exit_ratio']
+	exit_chan = int(chan * exit_ratio)
     gap_win = config['gap_win']
     no_trade_set = config['no_trade_set']
     ll = mdf.shape[0]
     xdf = proc_func(mdf, **proc_args)
-    xdf['chan_h'] = pd.rolling_max(xdf.high, chan)
-    xdf['chan_l'] = pd.rolling_min(xdf.low, chan)
-    xdf['MA'] = pd.rolling_mean(xdf.close, chan)
-    psar_data = dh.PSAR(xdf, **config['sar_params'])
-    xdata = pd.concat([xdf['MA'], xdf['chan_h'], xdf['chan_l'], psar_data['PSAR_VAL'], psar_data['PSAR_DIR'], xdf['date_idx']],
-                       axis=1, keys=['MA', 'chanH', 'chanL', 'psar', 'psar_dir', 'xdate']).fillna(0)
+    donch_data = DONCH_IDX(xdf, chan)
+	hh_enter_str = 'DONCH_H%s' % str(chan)
+	hidx_str = 'DONIDX_H%s' % str(chan)
+	ll_enter_str = 'DONCH_L%s' % str(chan)
+	lidx_str = 'DONIDX_L%s' % str(chan)
+	xdf['exit_hh'] = pd.rolling_max(xdf.high, exit_chan)
+	xdf['exit_ll'] = pd.rolling_min(xdf.low, exit_chan)
+	xdf['ssetup'] = (xdf['close'] >= donch_data[hh_str].shift(1)) && (donch_data[hidx_str]>=gap_win)
+	xdf['bsetup'] = (xdf['close'] <= donch_data[ll_str].shift(1)) && (donch_data[lidx_str]>=gap_win)
+	atr = dh.ATR(xdf, chan)
+	donch_data['prevhh'] = donch_data[hh_str].shift(1)
+    donch_data['prevll'] = donch_data[ll_str].shift(1)
+	xdata = pd.concat([donch_data[hidx_str], donch_data[hh_str], 
+					   donch_data[lidx_str], donch_data[ll_str],
+					   xdf['ssetup'], xdf['bsetup'],atr, 
+					   donch_data[hh_str].shift(1), donch_data[ll_str].shift(1)],
+                       axis=1, keys=['hh_idx', 'hh', 'll_idx', 'll', 'ssetup', 'bsetup', 'ATR', 'prev_hh', 'prev_ll']).fillna(0)
     xdata = xdata.shift(1)
     mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
@@ -63,12 +76,8 @@ def ttl_soup_sim( mdf, config):
         else:
             pos = curr_pos[0].pos
         mdf.ix[dd, 'pos'] = pos
-        if (mslice.MA == 0):
+        if (mslice.prev_hh == 0):
             continue
-        buy_trig  = (mslice.high >= mslice.chanH) and (mslice.psar_dir > 0)
-        sell_trig = (mslice.low <= mslice.chanL) and (mslice.psar_dir < 0)
-        long_close  = (mslice.low <= mslice.chanL) or (mslice.psar_dir < 0)
-        short_close = (mslice.high >= mslice.chanH) or (mslice.psar_dir > 0)
         if (min_id >= config['exit_min']) and (close_daily or (mslice.datetime.date == end_d)):
             if (pos != 0):
                 curr_pos[0].close(mslice.close - misc.sign(pos) * offset , dd)
@@ -79,9 +88,10 @@ def ttl_soup_sim( mdf, config):
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost) 
                 pos = 0
         elif min_id not in no_trade_set:
-            if (pos!=0) and pos_update:
-                curr_pos[0].update_price(mslice.close)
-                if (curr_pos[0].check_exit( mslice.close, SL * mslice.close )):
+            if (pos!=0):
+				if pos_update:
+					curr_pos[0].update_price(mslice.close)
+                if (curr_pos[0].check_exit( mslice.close, 0 ) or curr_pos[0].check_profit(mslice.close, -mslice.ATR*SL)):
                     curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
@@ -89,8 +99,8 @@ def ttl_soup_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-            close_price = mslice.close
-            if (short_close or long_close) and (pos != 0):
+            
+			if (short_close or long_close) and (pos != 0):
                 if (mslice.psar_dir > 0) and (pos < 0):
                     close_price = max(mslice.psar, mslice.open)
                 elif (mslice.psar_dir < 0) and (pos < 0):
@@ -141,6 +151,7 @@ def gen_config_file(filename):
     config = {'capital': 10000,
               'offset': 0,
               'chan': 20,
+			  'exit_ratio': 0.5,
               'gap_win': 4,
               'trans_cost': 0.0,
               'close_daily': False,
