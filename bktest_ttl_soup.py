@@ -1,6 +1,6 @@
 import sys
 import misc
-import agent
+import json
 import data_handler as dh
 import pandas as pd
 import numpy as np
@@ -15,9 +15,9 @@ def DONCH_IDX(df, n):
     minidx = pd.Series(index=df.index, name = 'DONIDX_L%s' % str(n))
     for idx, dateidx in enumerate(high.index):
         if idx >= (n-1):
-            highlist = list(df.ix[(idx-n+1):idx, 'high'])[::-1]
+            highlist = list(df.ix[(idx-n+1):(idx+1), 'high'])[::-1]
             maxidx[idx] = highlist.index(high[idx])
-            lowlist = list(df.ix[(idx-n+1):idx, 'low'])[::-1]
+            lowlist = list(df.ix[(idx-n+1):(idx+1), 'low'])[::-1]
             minidx[idx] = lowlist.index(low[idx])
     return pd.concat([high,low, maxidx, minidx], join='outer', axis=1)
 
@@ -35,28 +35,28 @@ def ttl_soup_sim( mdf, config):
     unit = config['unit']
     SL = config['stoploss']
     chan = config['chan']
-	exit_ratio = config['exit_ratio']
-	exit_chan = int(chan * exit_ratio)
+    exit_ratio = config['exit_ratio']
+    exit_chan = int(chan * exit_ratio)
     gap_win = config['gap_win']
     no_trade_set = config['no_trade_set']
     ll = mdf.shape[0]
     xdf = proc_func(mdf, **proc_args)
     donch_data = DONCH_IDX(xdf, chan)
-	hh_enter_str = 'DONCH_H%s' % str(chan)
-	hidx_str = 'DONIDX_H%s' % str(chan)
-	ll_enter_str = 'DONCH_L%s' % str(chan)
-	lidx_str = 'DONIDX_L%s' % str(chan)
-	xdf['exit_hh'] = pd.rolling_max(xdf.high, exit_chan)
-	xdf['exit_ll'] = pd.rolling_min(xdf.low, exit_chan)
-	xdf['ssetup'] = (xdf['close'] >= donch_data[hh_str].shift(1)) && (donch_data[hidx_str]>=gap_win)
-	xdf['bsetup'] = (xdf['close'] <= donch_data[ll_str].shift(1)) && (donch_data[lidx_str]>=gap_win)
-	atr = dh.ATR(xdf, chan)
-	donch_data['prevhh'] = donch_data[hh_str].shift(1)
+    hh_str = 'DONCH_H%s' % str(chan)
+    hidx_str = 'DONIDX_H%s' % str(chan)
+    ll_str = 'DONCH_L%s' % str(chan)
+    lidx_str = 'DONIDX_L%s' % str(chan)
+    xdf['exit_hh'] = pd.rolling_max(xdf.high, exit_chan)
+    xdf['exit_ll'] = pd.rolling_min(xdf.low, exit_chan)
+    xdf['ssetup'] = (xdf['close'] >= donch_data[hh_str].shift(1)) & (donch_data[hidx_str]>=gap_win)
+    xdf['bsetup'] = (xdf['close'] <= donch_data[ll_str].shift(1)) & (donch_data[lidx_str]>=gap_win)
+    atr = dh.ATR(xdf, chan)
+    donch_data['prevhh'] = donch_data[hh_str].shift(1)
     donch_data['prevll'] = donch_data[ll_str].shift(1)
-	xdata = pd.concat([donch_data[hidx_str], donch_data[hh_str], 
-					   donch_data[lidx_str], donch_data[ll_str],
-					   xdf['ssetup'], xdf['bsetup'],atr, 
-					   donch_data[hh_str].shift(1), donch_data[ll_str].shift(1)],
+    xdata = pd.concat([donch_data[hidx_str], donch_data[hh_str],
+                       donch_data[lidx_str], donch_data[ll_str],
+                       xdf['ssetup'], xdf['bsetup'],atr,
+                       donch_data[hh_str].shift(1), donch_data[ll_str].shift(1)],
                        axis=1, keys=['hh_idx', 'hh', 'll_idx', 'll', 'ssetup', 'bsetup', 'ATR', 'prev_hh', 'prev_ll']).fillna(0)
     xdata = xdata.shift(1)
     mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
@@ -89,9 +89,12 @@ def ttl_soup_sim( mdf, config):
                 pos = 0
         elif min_id not in no_trade_set:
             if (pos!=0):
-				if pos_update:
-					curr_pos[0].update_price(mslice.close)
-                if (curr_pos[0].check_exit( mslice.close, 0 ) or curr_pos[0].check_profit(mslice.close, -mslice.ATR*SL)):
+                if pos_update:
+                    curr_pos[0].update_price(mslice.close)
+                exit_flag = False
+                if ((pos > 0) and (mslice.close <= mslice.exit_ll)) or ((pos < 0) and (mslice.close >= mslice.exit_hh)):
+                    exit_flag = True
+                if exit_flag or curr_pos[0].check_exit( mslice.close, 0 ) or curr_pos[0].check_profit(mslice.close, -mslice.ATR*SL):
                     curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
@@ -99,28 +102,16 @@ def ttl_soup_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-            
-			if (short_close or long_close) and (pos != 0):
-                if (mslice.psar_dir > 0) and (pos < 0):
-                    close_price = max(mslice.psar, mslice.open)
-                elif (mslice.psar_dir < 0) and (pos < 0):
-                    close_price = min(mslice.psar, mslice.open)
-                curr_pos[0].close(mslice.close+offset, dd)
-                tradeid += 1
-                curr_pos[0].exit_tradeid = tradeid
-                closed_trades.append(curr_pos[0])
-                curr_pos = []
-                mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            if buy_trig:
-                new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.close + offset, **pos_args)
+            if mslice.bsetup and (pos == 0) and (mslice.close>=mslice.prev_ll):
+                new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.low, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
                 new_pos.open(mslice.close + offset, dd)
                 curr_pos.append(new_pos)
                 pos = unit
                 mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)
-            elif sell_trig:
-                new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, mslice.close - offset, **pos_args)
+            elif mslice.ssetup and (pos == 0) and mslice.close<=mslice.prev_hh:
+                new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, mslice.high, **pos_args)
                 tradeid += 1
                 new_pos.entry_tradeid = tradeid
                 new_pos.open(mslice.close - offset, dd)
@@ -136,31 +127,32 @@ def ttl_soup_sim( mdf, config):
 
 def gen_config_file(filename):
     sim_config = {}
-    sim_config['sim_func']  = 'bktest_psar_test.psar_test_sim'
-    sim_config['scen_keys'] = ['freq']
+    sim_config['sim_func']  = 'bktest_ttl_soup.ttl_soup_sim'
+    sim_config['scen_keys'] = ['gap_win', 'stoploss']
     sim_config['sim_name']   = 'ttlsoup_test'
-    sim_config['products']   = [ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au', 'al', 'zn' ]
-    sim_config['start_date'] = '20141101'
+    sim_config['products']   = [ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'CF']
+    sim_config['start_date'] = '20131101'
     sim_config['end_date']   = '20151118'
-    sim_config['freq']  =  [ '15m', '60m' ]
+    #sim_config['freq']  =  [ '15m', '60m' ]
     sim_config['pos_class'] = 'strat.TradePos'
-    sim_config['proc_func'] = 'min_freq_group'
-    chan_func = {'high': {'func': 'dh.DONCH_H', 'args':{}},
-                 'low':  {'func': 'dh.DONCH_L', 'args':{}},
-                 }
+    sim_config['proc_func'] = 'dh.day_split'#'min_freq_group'
+    #chan_func = {'high': {'func': 'dh.DONCH_H', 'args':{}},
+    #             'low':  {'func': 'dh.DONCH_L', 'args':{}},
+    #             }
+    sim_config['gap_win'] = [2, 3, 4]
+    sim_config['stoploss'] = [1, 2, 3]
     config = {'capital': 10000,
               'offset': 0,
               'chan': 20,
-			  'exit_ratio': 0.5,
-              'gap_win': 4,
+              'exit_ratio': 0.3,
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,
-              'stoploss': 0.0,
-              #'proc_args': {'minlist':[1500]},
-              'proc_args': {'freq':15},
+              'stoploss': 2,
+              'proc_args': {'minlist':[]},
+              #'proc_args': {'freq':15},
+              'pos_args': {},
               'pos_update': True,
-              'chan_func': chan_func,
               }
     sim_config['config'] = config
     with open(filename, 'w') as outfile:
