@@ -107,7 +107,7 @@ def ttl_soup_sim( mdf, config):
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
 				elif pos_update and (min_cnt % config['pos_freq'] == 0):
-					curr_pos[0].update_bar(mslice.close)
+					curr_pos[0].update_price(mslice.close)
             if mslice.bsetup and (pos == 0) and (mslice.close>=mslice.prev_ll):
                 new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.low, **pos_args)
                 tradeid += 1
