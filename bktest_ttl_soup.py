@@ -21,6 +21,12 @@ def DONCH_IDX(df, n):
             minidx[idx] = lowlist.index(low[idx])
     return pd.concat([high,low, maxidx, minidx], join='outer', axis=1)
 
+def CHENOW_PLUNGER(df, n, atr_n = 40):
+	atr = dh.ATR(df, atr_n)
+	high = pd.Series((pd.rolling_max(df['high'], n) - df['close'])/atr, name = 'CPLUNGER_H'+ str(n))
+	low  = pd.Series((df['close'] - pd.rolling_min(df['low'], n))/atr, name = 'CPLUNGER_L'+ str(n))
+	return pd.concat([high,low], join='outer', axis=1)
+
 def ttl_soup_sim( mdf, config):
     close_daily = config['close_daily']
     marginrate = config['marginrate']
@@ -89,12 +95,10 @@ def ttl_soup_sim( mdf, config):
                 pos = 0
         elif min_id not in no_trade_set:
             if (pos!=0):
-                if pos_update:
-                    curr_pos[0].update_price(mslice.close)
                 exit_flag = False
                 if ((pos > 0) and (mslice.close <= mslice.exit_ll)) or ((pos < 0) and (mslice.close >= mslice.exit_hh)):
                     exit_flag = True
-                if exit_flag or curr_pos[0].check_exit( mslice.close, 0 ) or curr_pos[0].check_profit(mslice.close, -mslice.ATR*SL):
+                if exit_flag or curr_pos[0].check_exit( mslice.close, 0):
                     curr_pos[0].close(mslice.close-offset*misc.sign(pos), dd)
                     tradeid += 1
                     curr_pos[0].exit_tradeid = tradeid
@@ -102,6 +106,8 @@ def ttl_soup_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
+				elif pos_update and (min_cnt % config['pos_freq'] == 0):
+					curr_pos[0].update_bar(mslice.close)
             if mslice.bsetup and (pos == 0) and (mslice.close>=mslice.prev_ll):
                 new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.low, **pos_args)
                 tradeid += 1
@@ -134,7 +140,7 @@ def gen_config_file(filename):
     sim_config['start_date'] = '20131101'
     sim_config['end_date']   = '20151118'
     #sim_config['freq']  =  [ '15m', '60m' ]
-    sim_config['pos_class'] = 'strat.TradePos'
+    sim_config['pos_class'] = 'strat.ParSARTradePos'
     sim_config['proc_func'] = 'dh.day_split'#'min_freq_group'
     #chan_func = {'high': {'func': 'dh.DONCH_H', 'args':{}},
     #             'low':  {'func': 'dh.DONCH_L', 'args':{}},
@@ -151,8 +157,9 @@ def gen_config_file(filename):
               'stoploss': 2,
               'proc_args': {'minlist':[]},
               #'proc_args': {'freq':15},
-              'pos_args': {},
+              'pos_args': {af = 0.02, incr = 0.02, cap = 0.2},
               'pos_update': True,
+			  'pos_freq':15,
               }
     sim_config['config'] = config
     with open(filename, 'w') as outfile:
