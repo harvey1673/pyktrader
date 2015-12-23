@@ -8,25 +8,6 @@ import strategy as strat
 import datetime
 import backtest
 
-def DONCH_IDX(df, n):
-    high = pd.Series(pd.rolling_max(df['high'], n), name = 'DONCH_H'+ str(n))
-    low  = pd.Series(pd.rolling_min(df['low'], n), name = 'DONCH_L'+ str(n))
-    maxidx = pd.Series(index=df.index, name = 'DONIDX_H%s' % str(n))
-    minidx = pd.Series(index=df.index, name = 'DONIDX_L%s' % str(n))
-    for idx, dateidx in enumerate(high.index):
-        if idx >= (n-1):
-            highlist = list(df.ix[(idx-n+1):(idx+1), 'high'])[::-1]
-            maxidx[idx] = highlist.index(high[idx])
-            lowlist = list(df.ix[(idx-n+1):(idx+1), 'low'])[::-1]
-            minidx[idx] = lowlist.index(low[idx])
-    return pd.concat([high,low, maxidx, minidx], join='outer', axis=1)
-
-def CHENOW_PLUNGER(df, n, atr_n = 40):
-	atr = dh.ATR(df, atr_n)
-	high = pd.Series((pd.rolling_max(df['high'], n) - df['close'])/atr, name = 'CPLUNGER_H'+ str(n))
-	low  = pd.Series((df['close'] - pd.rolling_min(df['low'], n))/atr, name = 'CPLUNGER_L'+ str(n))
-	return pd.concat([high,low], join='outer', axis=1)
-
 def ttl_soup_sim( mdf, config):
     close_daily = config['close_daily']
     marginrate = config['marginrate']
@@ -47,7 +28,7 @@ def ttl_soup_sim( mdf, config):
     no_trade_set = config['no_trade_set']
     ll = mdf.shape[0]
     xdf = proc_func(mdf, **proc_args)
-    donch_data = DONCH_IDX(xdf, chan)
+    donch_data = dh.DONCH_IDX(xdf, chan)
     hh_str = 'DONCH_H%s' % str(chan)
     hidx_str = 'DONIDX_H%s' % str(chan)
     ll_str = 'DONCH_L%s' % str(chan)
@@ -106,8 +87,8 @@ def ttl_soup_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-				elif pos_update and (min_cnt % config['pos_freq'] == 0):
-					curr_pos[0].update_price(mslice.close)
+                elif pos_update and (min_cnt % config['pos_freq'] == 0):
+                    curr_pos[0].update_price(mslice.close)
             if mslice.bsetup and (pos == 0) and (mslice.close>=mslice.prev_ll):
                 new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, mslice.low, **pos_args)
                 tradeid += 1
@@ -136,7 +117,7 @@ def gen_config_file(filename):
     sim_config['sim_func']  = 'bktest_ttl_soup.ttl_soup_sim'
     sim_config['scen_keys'] = ['gap_win', 'stoploss']
     sim_config['sim_name']   = 'ttlsoup_test'
-    sim_config['products']   = [ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'CF']
+    sim_config['products']   = [ 'm', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'jd', 'l', 'pp', 'v', 'cu']
     sim_config['start_date'] = '20131101'
     sim_config['end_date']   = '20151118'
     #sim_config['freq']  =  [ '15m', '60m' ]
@@ -157,9 +138,9 @@ def gen_config_file(filename):
               'stoploss': 2,
               'proc_args': {'minlist':[]},
               #'proc_args': {'freq':15},
-              'pos_args': {af = 0.02, incr = 0.02, cap = 0.2},
+              'pos_args': { 'af': 0.02, 'incr': 0.02, 'cap': 0.2},
               'pos_update': True,
-			  'pos_freq':15,
+              'pos_freq':15,
               }
     sim_config['config'] = config
     with open(filename, 'w') as outfile:

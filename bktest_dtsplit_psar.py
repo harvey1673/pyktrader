@@ -105,8 +105,8 @@ def dual_thrust_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-				elif pos_update and (min_cnt % config['pos_freq'] == 0):
-					curr_pos[0].update_bar(mslice.close)
+                elif pos_update and (min_cnt % config['pos_freq'] == 0):
+                    curr_pos[0].update_bar(mslice.close)
             if (mslice.high >= buytrig) and (pos ==0 ):
                 if (use_chan == False) or (mslice.high > mslice.chanH):
                     new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, selltrig, **pos_args)
@@ -166,10 +166,10 @@ def gen_config_file(filename):
               'stoploss': 0.0,
               'min_range': 0.003,
               'proc_args': {'minlist':[1500]},
-              'pos_args': {af = 0.02, incr = 0.02, cap = 0.2},
+              'pos_args': { 'af': 0.02, 'incr': 0.02, 'cap': 0.2},
               'pos_update': True,
               'chan_func': chan_func,
-			  'pos_freq':15,
+              'pos_freq':15,
               }
     sim_config['config'] = config
     with open(filename, 'w') as outfile:

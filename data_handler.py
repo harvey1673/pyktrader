@@ -295,6 +295,25 @@ def DONCH_L(df, n):
     DC_L = pd.rolling_min(df['low'], n)
     return pd.Series(DC_L, name = 'DONCH_L'+ str(n))
 
+def DONCH_IDX(df, n):
+    high = pd.Series(pd.rolling_max(df['high'], n), name = 'DONCH_H'+ str(n))
+    low  = pd.Series(pd.rolling_min(df['low'], n), name = 'DONCH_L'+ str(n))
+    maxidx = pd.Series(index=df.index, name = 'DONIDX_H%s' % str(n))
+    minidx = pd.Series(index=df.index, name = 'DONIDX_L%s' % str(n))
+    for idx, dateidx in enumerate(high.index):
+        if idx >= (n-1):
+            highlist = list(df.ix[(idx-n+1):(idx+1), 'high'])[::-1]
+            maxidx[idx] = highlist.index(high[idx])
+            lowlist = list(df.ix[(idx-n+1):(idx+1), 'low'])[::-1]
+            minidx[idx] = lowlist.index(low[idx])
+    return pd.concat([high,low, maxidx, minidx], join='outer', axis=1)
+
+def CHENOW_PLUNGER(df, n, atr_n = 40):
+    atr = ATR(df, atr_n)
+    high = pd.Series((pd.rolling_max(df['high'], n) - df['close'])/atr, name = 'CPLUNGER_H'+ str(n))
+    low  = pd.Series((df['close'] - pd.rolling_min(df['low'], n))/atr, name = 'CPLUNGER_L'+ str(n))
+    return pd.concat([high,low], join='outer', axis=1)
+
 def donch_h(df, n):
     df.ix[-1,'DONCH_H'+str(n)] = max(df.ix[-n:,'high'])
  
