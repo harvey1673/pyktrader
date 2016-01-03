@@ -7,6 +7,7 @@ import numpy as np
 import strategy as strat
 import datetime
 import backtest
+from base import *
 
 def dual_thrust_sim( mdf, config):
     close_daily = config['close_daily']
@@ -62,6 +63,8 @@ def dual_thrust_sim( mdf, config):
     end_d = mdf.index[-1].date
     #prev_d = start_d - datetime.timedelta(days=1)
     tradeid = 0
+    xslice = BaseObject(open = 0, close = 0, high = 1000000, low = 0, pid = -1)
+    need_update = False
     for dd in mdf.index:
         mslice = mdf.ix[dd]
         min_id = mslice.min_id
@@ -105,11 +108,12 @@ def dual_thrust_sim( mdf, config):
                     curr_pos = []
                     mdf.ix[dd, 'cost'] -=  abs(pos) * (offset + mslice.close*tcost)    
                     pos = 0
-                elif pos_update and (min_cnt % config['pos_freq'] == 0):
-                    curr_pos[0].update_bar(mslice.close)
+                elif pos_update and need_update:
+                    curr_pos[0].update_bar(xslice)
             if (mslice.high >= buytrig) and (pos ==0 ):
                 if (use_chan == False) or (mslice.high > mslice.chanH):
                     new_pos = pos_class([mslice.contract], [1], unit, mslice.close + offset, selltrig, **pos_args)
+                    #print mslice.close, mslice.TR, buytrig, selltrig
                     tradeid += 1
                     new_pos.entry_tradeid = tradeid
                     new_pos.open(mslice.close + offset, dd)
@@ -119,6 +123,7 @@ def dual_thrust_sim( mdf, config):
             elif (mslice.low <= selltrig) and (pos ==0 ):
                 if (use_chan == False) or (mslice.low < mslice.chanL):
                     new_pos = pos_class([mslice.contract], [1], -unit, mslice.close - offset, buytrig, **pos_args)
+                    #print mslice.close, mslice.TR, buytrig, selltrig
                     tradeid += 1
                     new_pos.entry_tradeid = tradeid
                     new_pos.open(mslice.close - offset, dd)
@@ -126,6 +131,18 @@ def dual_thrust_sim( mdf, config):
                     pos = -unit
                     mdf.ix[dd, 'cost'] -= abs(pos) * (offset + mslice.close*tcost)
         mdf.ix[dd, 'pos'] = pos
+        if xslice.pid != min_cnt / config['pos_freq']:
+            if xslice.pid >= 0:
+                need_update = True
+            xslice.open = mslice.open
+            xslice.high = mslice.high
+            xslice.low  = mslice.low
+            xslice.close = mslice.close
+            xslice.pid = mslice.min_id / config['pos_freq']
+        else:
+            xslice.high = max(xslice.high, mslice.high)
+            xslice.low  = min(xslice.low, mslice.low)
+            xslice.close = mslice.close
             
     (res_pnl, ts) = backtest.get_pnl_stats( mdf, start_equity, marginrate, 'm')
     res_trade = backtest.get_trade_stats( closed_trades )
@@ -135,7 +152,7 @@ def dual_thrust_sim( mdf, config):
 
 def gen_config_file(filename):
     sim_config = {}
-    sim_config['sim_func']  = 'bktest_split_dt.dual_thrust_sim'
+    sim_config['sim_func']  = 'bktest_dtsplit_psar.dual_thrust_sim'
     sim_config['scen_keys'] = ['param']
     sim_config['sim_name']   = 'DTsplit'
     sim_config['products']   = ['m', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au' ]
@@ -169,7 +186,7 @@ def gen_config_file(filename):
               'pos_args': { 'af': 0.02, 'incr': 0.02, 'cap': 0.2},
               'pos_update': True,
               'chan_func': chan_func,
-              'pos_freq':15,
+              'pos_freq':60,
               }
     sim_config['config'] = config
     with open(filename, 'w') as outfile:
