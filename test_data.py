@@ -2,13 +2,12 @@ import data_saver
 import tushare as ts
 import datetime
 import pandas as pd
-import mysql.connector
+import mysql.connector as mysqlconn
 import misc
 import mysqlaccess as db
 import os
 import urllib2
 import pytz
-import pandas as pd
 import patoolib
 import mysqlaccess as db
 from glob import glob
@@ -123,18 +122,18 @@ def import_datayes_daily_data(start_date, end_date, cont_list = [], is_replace =
                     db.insert_daily_data(cont, data_dict, is_replace = is_replace, dbtable = 'fut_daily')
         print 'date=%s, insert count = %s' % (d, cnt)
 
-def batch_process_histtick(folder, columns, proc_func = func, db_table, skiprows = 1):
-	# first unrar the files
-	cnx = mysql.connector.connect(**db.dbconfig)
-	for file in os.listdir(folder):
-		if file.endswith(".rar"):
-			patoolib.extract_archive(file, outdir = ".")
-	allcsvs = [y for x in os.walk(folder) for y in glob(os.path.join(x[0], '*.csv'))]
-	for csvfile in allcsvs:
-		df = pd.read_csv(csvfile, header = None, names = columns, index_col = False, skiprows = 1)
-		xdf = proc_func(df)
-		xdf.to_sql(name = db_table, flavor = 'mysql', con = cnx, if_exists='replace') 
-	return 0
-	
+def batch_process_histtick(folder, columns, proc_func, db_table = 'fut_tick', skiprows = 1):
+    # first unrar the files
+    cnx = mysqlconn.connect(**db.dbconfig)
+    for file in os.listdir(folder):
+        if file.endswith(".rar"):
+            patoolib.extract_archive(file, outdir = ".")
+    allcsvs = [y for x in os.walk(folder) for y in glob(os.path.join(x[0], '*.csv'))]
+    for csvfile in allcsvs:
+        df = pd.read_csv(csvfile, header = None, names = columns, index_col = False, skiprows = 1)
+        xdf = proc_func(df)
+        xdf.to_sql(name = db_table, flavor = 'mysql', con = cnx, if_exists='replace')
+    return 0
+
 if __name__ == '__main__':
     print
