@@ -6,6 +6,67 @@ import mysql.connector
 import misc
 import mysqlaccess as db
 import os
+import urllib2
+import pytz
+import pandas as pd
+import patoolib
+import mysqlaccess as db
+from glob import glob
+
+from bs4 import BeautifulSoup
+from datetime import datetime
+from pandas.io.data import DataReader
+
+SITE = "http://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+START = datetime(1900, 1, 1, 0, 0, 0, 0, pytz.utc)
+END = datetime.today().utcnow()
+
+
+def scrape_list(site):
+    hdr = {'User-Agent': 'Mozilla/5.0'}
+    req = urllib2.Request(site, headers=hdr)
+    page = urllib2.urlopen(req)
+    soup = BeautifulSoup(page)
+
+    table = soup.find('table', {'class': 'wikitable sortable'})
+    sector_tickers = dict()
+    for row in table.findAll('tr'):
+        col = row.findAll('td')
+        if len(col) > 0:
+            sector = str(col[3].string.strip()).lower().replace(' ', '_')
+            ticker = str(col[0].string.strip())
+            if sector not in sector_tickers:
+                sector_tickers[sector] = list()
+            sector_tickers[sector].append(ticker)
+    return sector_tickers
+
+
+def download_ohlc(sector_tickers, start, end):
+    sector_ohlc = {}
+    for sector, tickers in sector_tickers.iteritems():
+        print 'Downloading data from Yahoo for %s sector' % sector
+        data = DataReader(tickers, 'yahoo', start, end)
+        for item in ['Open', 'High', 'Low']:
+            data[item] = data[item] * data['Adj Close'] / data['Close']
+        data.rename(items={'Open': 'open', 'High': 'high', 'Low': 'low',
+                           'Adj Close': 'close', 'Volume': 'volume'},
+                    inplace=True)
+        data.drop(['Close'], inplace=True)
+        sector_ohlc[sector] = data
+    print 'Finished downloading data'
+    return sector_ohlc
+
+
+def store_HDF5(sector_ohlc, path):
+    with pd.get_store(path) as store:
+        for sector, ohlc in sector_ohlc.iteritems():
+            store[sector] = ohlc
+
+
+def get_snp500():
+    sector_tickers = scrape_list(SITE)
+    sector_ohlc = download_ohlc(sector_tickers, START, END)
+    store_HDF5(sector_ohlc, 'snp500.h5')
 
 def save_tick_data(tday, folder = '', tick_id = 300000):
     all_insts = data_saver.filter_main_cont(tday)
@@ -62,5 +123,18 @@ def import_datayes_daily_data(start_date, end_date, cont_list = [], is_replace =
                     db.insert_daily_data(cont, data_dict, is_replace = is_replace, dbtable = 'fut_daily')
         print 'date=%s, insert count = %s' % (d, cnt)
 
+def batch_process_histtick(folder, columns, proc_func = func, db_table, skiprows = 1):
+	# first unrar the files
+	cnx = mysql.connector.connect(**db.dbconfig)
+	for file in os.listdir(folder):
+		if file.endswith(".rar"):
+			patoolib.extract_archive(file, outdir = ".")
+	allcsvs = [y for x in os.walk(folder) for y in glob(os.path.join(x[0], '*.csv'))]
+	for csvfile in allcsvs:
+		df = pd.read_csv(csvfile, header = None, names = columns, index_col = False, skiprows = 1)
+		xdf = proc_func(df)
+		xdf.to_sql(name = db_table, flavor = 'mysql', con = cnx, if_exists='replace') 
+	return 0
+	
 if __name__ == '__main__':
     print
