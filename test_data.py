@@ -4,7 +4,6 @@ import datetime
 import pandas as pd
 import mysql.connector as mysqlconn
 import misc
-import mysqlaccess as db
 import os
 import urllib2
 import pytz
@@ -122,17 +121,37 @@ def import_datayes_daily_data(start_date, end_date, cont_list = [], is_replace =
                     db.insert_daily_data(cont, data_dict, is_replace = is_replace, dbtable = 'fut_daily')
         print 'date=%s, insert count = %s' % (d, cnt)
 
-def batch_process_histtick(folder, columns, proc_func, db_table = 'fut_tick', skiprows = 1):
-    # first unrar the files
+def extract_rar_data(source, target, extract_src = False):
+    if extract_src:
+        for file in os.listdir(source):
+            if file.endswith(".rar"):
+                patoolib.extract_archive(source+file, outdir = target)
+    allrar = [y for x in os.walk(target) for y in glob(os.path.join(x[0], '*.rar'))]
+    for file in allrar:
+        patoolib.extract_archive(file, outdir = target)
+
+def load_csv_tick(target, db_table = 'test_fut_tick'):
     cnx = mysqlconn.connect(**db.dbconfig)
-    for file in os.listdir(folder):
-        if file.endswith(".rar"):
-            patoolib.extract_archive(file, outdir = ".")
-    allcsvs = [y for x in os.walk(folder) for y in glob(os.path.join(x[0], '*.csv'))]
+    allcsvs = [y for x in os.walk(target) for y in glob(os.path.join(x[0], '*.csv'))]
     for csvfile in allcsvs:
-        df = pd.read_csv(csvfile, header = None, names = columns, index_col = False, skiprows = 1)
-        xdf = proc_func(df)
-        xdf.to_sql(name = db_table, flavor = 'mysql', con = cnx, if_exists='replace')
+        try:
+            df = pd.DataFrame()
+            df = pd.read_csv(csvfile, header = None, index_col = False, skiprows = 1, usecols = [1, 2, 3, 4, 7, 12, 13, 14,15 ])
+            df.columns = ['instID', 'datetime','price', 'openInterest', 'volume', 'bidPrice1', 'askPrice1', 'bidVol1', 'askVol1']
+            df['datetime'] = pd.to_datetime(df.datetime)
+            df['date'] = df.datetime.apply(lambda x:x.date())
+            df['hour'] = df.datetime.apply(lambda x:x.hour)
+            df['min'] = df.datetime.apply(lambda x:x.minute)
+            df['sec'] = df.datetime.apply(lambda x:x.second)
+            df['msec'] = df.datetime.apply(lambda x:x.microsecond)/1000
+            df['tick_id'] = ((df['hour'] + 6) % 24)*100000 + df['min']*1000 + df['sec']*10 + df['msec']/100
+            del df['datetime']
+            print csvfile, len(df)
+            df.to_sql(name = db_table, flavor = 'mysql', con = cnx, if_exists='append')
+            cnx.commit()
+        except:
+            continue
+    cnx.close()
     return 0
 
 if __name__ == '__main__':
