@@ -61,7 +61,7 @@ class Instrument(object):
         self.prev_close = 0.0
         self.volume = 0
         self.open_interest = 0
-        self.last_update = datetime.datetime(1900, 1, 1, 0,0,0,0)
+        self.last_update = 0
         self.ask_price1 = 0.0
         self.ask_vol1 = 0
         self.bid_price1 = 0.0
@@ -84,7 +84,7 @@ class Instrument(object):
         self.bid_vol5 = 0        
         self.up_limit = 0
         self.down_limit = 0
-        self.last_traded = datetime.datetime.now()
+        self.last_traded = 0
         self.max_holding = (100, 100)
         self.mid_price = 0.0
         self.cont_mth = 205012 # only used by option and future

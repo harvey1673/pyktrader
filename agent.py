@@ -39,7 +39,10 @@ def trading_hours(product, exch):
     if exch in ['SSE', 'SZE']:
         hrs = [(1530, 1730), (1900, 2100)]
     elif exch == 'CFFEX':
-        hrs = [(1515, 1730), (1900, 2115)]
+        if product in ['IF', 'IH', 'IC']:
+            hrs = [(1530, 1730), (1900, 2100)]
+        else:
+            hrs = [(1515, 1730), (1900, 2115)]
     else:
         if product in night_session_markets:
             night_idx = night_session_markets[product]
@@ -1028,11 +1031,20 @@ class Agent(object):
         inst = tick.instID
         if self.instruments[inst].day_finalized:
             return False
-        if (self.instruments[inst].exchange == 'CZCE') and \
-                (tick.tick_id <= 530000+4) and (tick.tick_id >= 300000-4) and \
-                (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
-            tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
-            tick.date = self.scur_day.strftime('%Y%m%d')
+        if (self.instruments[inst].exchange == 'CZCE'):
+            if (tick.tick_id <= 530000+4) and (tick.tick_id >= 300000-4) and \
+                    (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
+                tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
+                tick.date = self.scur_day.strftime('%Y%m%d')
+            if (self.instruments[inst].last_update == tick.tick_id) and \
+                    ((self.instruments[inst].volume < tick.volume) or \
+                    (self.instruments[inst].ask_vol1 != tick.askVol1) or \
+                    (self.instruments[inst].bid_vol1 != tick.bidVol1)):
+                if tick.tick_id % 10 < 5:
+                    tick.tick_id += 5
+                    tick.msec += 500
+                    tick.timestamp = tick.timestamp + datetime.timedelta(milliseconds=500)
+                    #self.logger.info('tick is adjusted for inst = %s, old tick_id = %s,  tick_id = %s' % (inst, self.instruments[inst].last_update, tick.tick_id))
         tick_date = tick.timestamp.date()
         if (self.scur_day > tick_date) or (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
             return False
@@ -1062,6 +1074,8 @@ class Agent(object):
     def update_instrument(self, tick):      
         inst = tick.instID    
         curr_tick = tick.tick_id
+        if self.instruments[inst].last_update >= curr_tick:
+            return False
         self.instruments[inst].up_limit   = tick.upLimit
         self.instruments[inst].down_limit = tick.downLimit        
         tick.askPrice1 = min(tick.askPrice1, tick.upLimit)
