@@ -1,0 +1,68 @@
+No data fo 151119
+No data fo 151119
+
+alter table stock_opt_map add exchange varchar(10) after underlying; 
+alter table stock_opt_map add tick_base decimal(10,6) after strike_scale;
+update stock_opt_map set exchange='SSE';
+update stock_opt_map set tick_base = '0.0001';
+alter table fut_tick add tick_id int(11) after date;
+update fut_tick set tick_id = hour*100000+min*1000+sec*10+floor(msec/100);
+update fut_min set min_id = mod(hour(datetime)+6,24)*100+minute(datetime);
+
+mysqldump -u harvey -p --opt --verbose --host=192.168.1.157 blueshale|mysql -u harvey -p blueshale
+
+select * from fut_min where date(datetime)='2015-07-27' into outfile 'min_data_150727.csv' fields terminated by ',';
+select * from fut_daily where date>='2015-07-27' into outfile 'daily_data_150727.csv' fields terminated by ',';
+
+select * from fut_tick where date>='2015-07-27' into outfile 'tick_data_150727.csv' fields terminated by ',';
+load data local infile 'C:\\dev\\src\\ktlib\\new_tick_data.csv' into table fut_tick fields terminated by ',';
+alter table fut_tick add index (tick_id);
+
+insert into trade_products (product_code,trading_start,exchange,contract,pricing_unit,lot_size,tick_size,liquidity,start_min,end_min,broker_fee) values ('ni','2015-03-27', 'SHFE','fghjkmnquvxz','mt',1,10.0,2.0,1500,2100,0.00);
+insert into trade_products (product_code,trading_start,exchange,contract,pricing_unit,lot_size,tick_size,liquidity,start_min,end_min,broker_fee) values ('sn','2015-03-27', 'SHFE','fghjkmnquvxz','mt',1,10.0,2.0,1500,2100,0.00);
+
+git fetch upstream
+git checkout master
+git merge upstream/master
+
+compile boost:
+1 download and unzip the current boost version
+2 in a VS10 command prompt cd to the root of the freshly unzipped boost folder
+3 execute bootstrap.bat. This should build bjam.exe in that folder
+4 cd to the root folder of boost 1.39 and copy bjam.exe over
+5 execute your bjam command: bjam toolset=msvc-10.0 --build-type=complete stage
+
+
+create table stock_opt_map (instID varchar(30), opt_code varchar(30), underlying varchar(20), otype varchar(1), exchange varchar(10), opt_mth int, strike int, strike_scale int, tick_base decimal(10,6), lot_size int, chg_code varchar(10), version tinyint, update_date date);  
+load data local infile 'C:\\dev\\src\\ktlib\\stockopt_table.csv' replace into table stock_opt_map fields terminated by ',' lines terminated by '\n' ignore 1 lines (instID, opt_code, underlying, otype, exchange, opt_mth, strike, strike_scale, tick_base, lot_size, chg_code, version, @svar) set updatetrading_start=str_to_date(@svar,'%Y/%m/%d');
+create table trade_products (product_code varchar(10), trading_start date, exchange varchar(10), contract varchar(20), pricing_unit varchar(10), lot_size int, tick_size decimal(10,4), liquidity decimal(3,1), start_min int, end_min int, broker_fee decimal (10,2));
+create table contract_list (contract_code varchar(15) not null, start_date date, expiry date, product_code varchar(10), margin_l decimal(10,4), margin_s decimal(10,4), primary key (contract_code));
+load data local infile 'C:\\dev\\src\\ktlib\\product_table.csv' replace into table trade_products fields terminated by ',' lines terminated by '\n' ignore 1 lines (product_code,@svar,exchange,contract,pricing_unit,lot_size,tick_size,liquidity,start_min,end_min,broker_fee) set trading_start=str_to_date(@svar,'%m/%d/%Y');
+
+load data local infile 'C:\\dev\\src\\ktlib\\contract_list2.csv' replace into table contract_list fields terminated by ',' lines terminated by '\n' ignore 1 lines (contract_code,@svar,@evar,product_code,margin_l,margin_s) set start_date=str_to_date(@svar,'%Y/%m/%d'), expiry=str_to_date(@evar,'%Y/%m/%d');
+
+create table histL1_fut_tick (instID varchar(30), tstamp datetime, hour tinyint(4), min tinyint(4),sec tinyint(4),msec tinyint(6), openInterest int(11), deltaOI int(11), dvol int(11), dvol_open int(11), dvol_close int(11), price decimal(12,4), bidPrice1 decimal(12,4), bidVol1 int(11), askPrice1 decimal(12,4), askVol1 int(11)); 
+
+create table fut_tick (instID varchar(30), date date, tick_id int(11), hour tinyint(4), min tinyint(4),sec tinyint(4),msec smallint(6), openInterest int(11), volume int(11), price decimal(12,4), high decimal(12,4),low decimal(12,4),bidPrice1 decimal(12,4), bidVol1 int(11), askPrice1 decimal(12,4), askVol1 int(11));
+
+alter table stock_opt_map add exchange varchar(10) after underlying; 
+alter table stock_opt_map add tick_base decimal(10,6) after strike_scale;
+update stock_opt_map set exchange='SSE';
+update stock_opt_map set tick_base = '0.0001';
+alter table fut_tick add tick_id int(11) after date;
+update fut_tick set tick_id = hour*100000+min*1000+sec*10+floor(msec/100);
+update fut_min set min_id = mod(hour(datetime)+6,24)*100+minute(datetime);
+
+mysqldump -u harvey -p --opt --verbose --host=192.168.1.157 blueshale|mysql -u harvey -p blueshale
+
+select * from fut_min where date(datetime)='2015-07-27' into outfile 'min_data_150727.csv' fields terminated by ',';
+select * from fut_daily where date>='2015-07-27' into outfile 'daily_data_150727.csv' fields terminated by ',';
+
+select * from fut_tick where date>='2015-07-27' into outfile 'tick_data_150727.csv' fields terminated by ',';
+load data local infile 'C:\\dev\\src\\ktlib\\new_tick_data.csv' into table fut_tick fields terminated by ',';
+alter table fut_tick add index (tick_id);
+
+insert into trade_products (product_code,trading_start,exchange,contract,pricing_unit,lot_size,tick_size,liquidity,start_min,end_min,broker_fee) values ('ni','2015-03-27', 'SHFE','fghjkmnquvxz','mt',1,10.0,2.0,1500,2100,0.00);
+insert into trade_products (product_code,trading_start,exchange,contract,pricing_unit,lot_size,tick_size,liquidity,start_min,end_min,broker_fee) values ('sn','2015-03-27', 'SHFE','fghjkmnquvxz','mt',1,10.0,2.0,1500,2100,0.00);
+insert into trade_products (product_code,trading_start,exchange,contract,pricing_unit,lot_size,tick_size,liquidity,start_min,end_min,broker_fee) values ('IO','2014-05-01', 'CFFEX','fghjkmnquvxz','',100,0.1,2.0,1515,2115,0.00);
+
