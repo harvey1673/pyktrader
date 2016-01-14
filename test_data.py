@@ -130,7 +130,7 @@ def extract_rar_data(source, target, extract_src = False):
     for file in allrar:
         patoolib.extract_archive(file, outdir = target)
 
-def load_csv_tick(target, db_table = 'test_fut_tick'):
+def conv_csv_to_sql(target, db_table = 'test_fut_tick'):
     cnx = mysqlconn.connect(**db.dbconfig)
     allcsvs = [y for x in os.walk(target) for y in glob(os.path.join(x[0], '*.csv'))]
     for csvfile in allcsvs:
@@ -153,6 +153,27 @@ def load_csv_tick(target, db_table = 'test_fut_tick'):
             continue
     cnx.close()
     return 0
+
+def load_hist_csv2sql(folder, db_table):
+    cnx = mysqlconn.connect(**db.dbconfig)
+    cursor = cnx.cursor()
+    allcsvs = [y for x in os.walk(folder) for y in glob(os.path.join(x[0], '*.csv'))]
+    for csvfile in allcsvs:
+        try:
+            stmt = "load data local infile '{file}' replace into table {dbtable} ".format(file=csvfile, dbtable=db_table)
+            stmt += "fields terminated by ',' ignore 1 lines "
+            stmt += "(@dummy, instID,  @datestr, price, openInterest, deltaOI, @dummy, "
+            stmt += "dvol, dvol_open, dvol_close, @dummy, @dummy, "
+            stmt += "bidPrice1, askPrice1, bidVol1, askVol1) "
+            stmt += "set tstamp = str_to_date(@datestr, '%Y-%m-%d %H:%i:%s.%f');"
+            print csvfile
+            cursor.execute(stmt)
+            cnx.commit()
+        except:
+            print 'skip %s' % csvfile
+            continue
+    cnx.close()
+    return
 
 if __name__ == '__main__':
     print
