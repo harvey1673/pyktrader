@@ -8,7 +8,7 @@ from vtConstant import *
 
 
 ########################################################################
-class VtGateway(object):
+class gateway(object):
     """交易接口"""
 
     #----------------------------------------------------------------------
@@ -20,94 +20,103 @@ class VtGateway(object):
 		if agent != None:
         	self.agent = agent
 			self.eventEngine = agent.event_engine
-
+		self.qry_account = {}
+		self.qry_pos = {}
+		
     #----------------------------------------------------------------------
-    def onTick(self, tick):
+	def event_subscribe(self):
+		pass
+		
+	def onTick(self, tick):
         """市场行情推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_TICK)
-        event1.dict_['data'] = tick
+        event1 = Event(type=EVENT_TICK)
+        event1.dict['data'] = tick
         self.eventEngine.put(event1)
         
         # 特定合约代码的事件
-        event2 = Event(type_=EVENT_TICK+tick.vtSymbol)
-        event2.dict_['data'] = tick
+        event2 = Event(type=EVENT_TICK+tick.instID)
+        event2.dict['data'] = tick
         self.eventEngine.put(event2)
     
     #----------------------------------------------------------------------
     def onTrade(self, trade):
         """成交信息推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_TRADE)
-        event1.dict_['data'] = trade
+        event1 = Event(type=EVENT_TRADE)
+        event1.dict['data'] = trade
         self.eventEngine.put(event1)
         
         # 特定合约的成交事件
-        event2 = Event(type_=EVENT_TRADE+trade.vtSymbol)
-        event2.dict_['data'] = trade
+        event2 = Event(type=EVENT_TRADE+trade.instID)
+        event2.dict['data'] = trade
         self.eventEngine.put(event2)        
     
     #----------------------------------------------------------------------
     def onOrder(self, order):
         """订单变化推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_ORDER)
-        event1.dict_['data'] = order
+        event1 = Event(type=EVENT_ORDER)
+        event1.dict['data'] = order
         self.eventEngine.put(event1)
         
         # 特定订单编号的事件
-        event2 = Event(type_=EVENT_ORDER+order.vtOrderID)
-        event2.dict_['data'] = order
+        event2 = Event(type=EVENT_ORDER+order.vtOrderID)
+        event2.dict['data'] = order
         self.eventEngine.put(event2)
     
     #----------------------------------------------------------------------
     def onPosition(self, position):
         """持仓信息推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_POSITION)
-        event1.dict_['data'] = position
+        event1 = Event(type=EVENT_POSITION)
+        event1.dict['data'] = position
         self.eventEngine.put(event1)
         
         # 特定合约代码的事件
-        event2 = Event(type_=EVENT_POSITION+position.vtSymbol)
-        event2.dict_['data'] = position
+        event2 = Event(type=EVENT_POSITION+position.instID)
+        event2.dict['data'] = position
         self.eventEngine.put(event2)
     
     #----------------------------------------------------------------------
     def onAccount(self, account):
         """账户信息推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_ACCOUNT)
-        event1.dict_['data'] = account
+        event1 = Event(type=EVENT_ACCOUNT)
+        event1.dict['data'] = account
         self.eventEngine.put(event1)
         
         # 特定合约代码的事件
-        event2 = Event(type_=EVENT_ACCOUNT+account.vtAccountID)
-        event2.dict_['data'] = account
+        event2 = Event(type=EVENT_ACCOUNT+account.vtAccountID)
+        event2.dict['data'] = account
         self.eventEngine.put(event2)
     
     #----------------------------------------------------------------------
     def onError(self, error):
         """错误信息推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_ERROR)
-        event1.dict_['data'] = error
+        log = VtLogData()
+        log.gatewayName = self.gatewayName
+        log.logContent = error.errorMsg
+		log.level = logging.WARNING
+        event1 = Event(type=EVENT_LOG)
+        event1.dict['data'] = log
         self.eventEngine.put(event1)    
         
     #----------------------------------------------------------------------
     def onLog(self, log):
         """日志推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_LOG)
-        event1.dict_['data'] = log
+        event1 = Event(type=EVENT_LOG)
+        event1.dict['data'] = log
         self.eventEngine.put(event1)
         
     #----------------------------------------------------------------------
     def onContract(self, contract):
         """合约基础信息推送"""
         # 通用事件
-        event1 = Event(type_=EVENT_CONTRACT)
-        event1.dict_['data'] = contract
+        event1 = Event(type=EVENT_CONTRACT)
+        event1.dict['data'] = contract
         self.eventEngine.put(event1)        
     
     #----------------------------------------------------------------------
@@ -169,7 +178,7 @@ class VtTickData(VtBaseData):
         # 代码相关
         self.symbol = EMPTY_STRING              # 合约代码
         self.exchange = EMPTY_STRING            # 交易所代码
-        self.vtSymbol = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
+        self.instID = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
         
         # 成交数据
         self.lastPrice = EMPTY_FLOAT            # 最新成交价
@@ -226,13 +235,13 @@ class VtTradeData(VtBaseData):
         # 代码编号相关
         self.symbol = EMPTY_STRING              # 合约代码
         self.exchange = EMPTY_STRING            # 交易所代码
-        self.vtSymbol = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
+        self.instID = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
         
         self.tradeID = EMPTY_STRING             # 成交编号
         self.vtTradeID = EMPTY_STRING           # 成交在vt系统中的唯一编号，通常是 Gateway名.成交编号
         
         self.orderID = EMPTY_STRING             # 订单编号
-        self.vtOrderID = EMPTY_STRING           # 订单在vt系统中的唯一编号，通常是 Gateway名.订单编号
+        self.order_ref = EMPTY_STRING           # 订单在vt系统中的唯一编号，通常是 Gateway名.订单编号
         
         # 成交相关
         self.direction = EMPTY_UNICODE          # 成交方向
@@ -254,11 +263,12 @@ class VtOrderData(VtBaseData):
         # 代码编号相关
         self.symbol = EMPTY_STRING              # 合约代码
         self.exchange = EMPTY_STRING            # 交易所代码
-        self.vtSymbol = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
+        self.instID = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
         
         self.orderID = EMPTY_STRING             # 订单编号
-        self.vtOrderID = EMPTY_STRING           # 订单在vt系统中的唯一编号，通常是 Gateway名.订单编号
-        
+        self.order_ref = EMPTY_STRING           # 订单在vt系统中的唯一编号，通常是 Gateway名.订单编号
+        self.orderSysID = EMPTY_STRING
+		
         # 报单相关
         self.direction = EMPTY_UNICODE          # 报单方向
         self.offset = EMPTY_UNICODE             # 报单开平仓
@@ -287,14 +297,14 @@ class VtPositionData(VtBaseData):
         # 代码编号相关
         self.symbol = EMPTY_STRING              # 合约代码
         self.exchange = EMPTY_STRING            # 交易所代码
-        self.vtSymbol = EMPTY_STRING            # 合约在vt系统中的唯一代码，合约代码.交易所代码  
+        self.instID = EMPTY_STRING            # 合约在vt系统中的唯一代码，合约代码.交易所代码  
         
         # 持仓相关
         self.direction = EMPTY_STRING           # 持仓方向
         self.position = EMPTY_INT               # 持仓量
         self.frozen = EMPTY_INT                 # 冻结数量
         self.price = EMPTY_FLOAT                # 持仓均价
-        self.vtPositionName = EMPTY_STRING      # 持仓在vt系统中的唯一代码，通常是vtSymbol.方向
+        self.vtPositionName = EMPTY_STRING      # 持仓在vt系统中的唯一代码，通常是instID.方向
         
         # 20151020添加
         self.ydPosition = EMPTY_INT             # 昨持仓
@@ -348,6 +358,7 @@ class VtLogData(VtBaseData):
         
         self.logTime = time.strftime('%X', time.localtime())    # 日志生成时间
         self.logContent = EMPTY_UNICODE                         # 日志信息
+		self.level = logging.DEBUG
 
 
 ########################################################################
@@ -361,7 +372,7 @@ class VtContractData(VtBaseData):
         
         self.symbol = EMPTY_STRING              # 代码
         self.exchange = EMPTY_STRING            # 交易所代码
-        self.vtSymbol = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
+        self.instID = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
         self.name = EMPTY_UNICODE               # 合约中文名
         
         self.productClass = EMPTY_UNICODE       # 合约类型
@@ -430,15 +441,3 @@ class VtCancelOrderReq(object):
         self.orderID = EMPTY_STRING             # 报单号
         self.frontID = EMPTY_STRING             # 前置机号
         self.sessionID = EMPTY_STRING           # 会话号
-  
-    
-    
-    
-    
-    
-
-    
-    
-    
-Status API Training Shop Blog About Pricing
-© 2016 GitHub, Inc. Terms Privacy Security Contact Help
