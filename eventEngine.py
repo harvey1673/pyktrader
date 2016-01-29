@@ -1,4 +1,4 @@
-﻿#-*- coding:utf-8 -*-
+#-*- coding:utf-8 -*-
 # 系统模块
 import Queue
 import sys, traceback
@@ -160,14 +160,32 @@ class EventEngine:
         """向事件队列中存入事件"""
         self.queue.put(event)
 
+class PriEventEngine(EventEngine):
+	def __init__(self, timerFreq = 1.0):
+		super(PriEventEngine, self).__init__(timerFreq)
+		self.queue = Queue.PriorityQueue()
+		
+    def put(self, event):
+        """向事件队列中存入事件"""
+		event_obj = (event.priority, event)
+        self.queue.put(event_obj)
+
+    def process(self, event_obj):
+        """处理事件"""
+        # 检查是否存在对该事件进行监听的处理函数
+		event = event_obj[1]
+        if event.type in self.handlers:
+            # 若存在，则按顺序将事件传递给处理函数执行
+            [handler(event) for handler in self.handlers[event.type]] 
+				
 ########################################################################
 class Event(object):
     """事件对象"""
     #----------------------------------------------------------------------
-    def __init__(self, type=None):
+    def __init__(self, type=None, priority = 100):
         """Constructor"""
         self.type = type      # 事件类型
-        self.priority = 10
+        self.priority = priority
         self.dict = {}         # 字典用于保存具体的事件数据
 
 #----------------------------------------------------------------------
