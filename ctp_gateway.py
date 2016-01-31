@@ -9,11 +9,15 @@ vtSymbol直接使用symbol
 
 import os
 import json
-
+from base import *
+from misc import *
 from vnctpmd import MdApi
 from vnctptd import TdApi
 from ctpDataType import *
 from vtGateway import *
+import logging
+import datetime
+import order
 
 # 以下为一些VT类型和CTP类型的映射字典
 # 价格类型映射
@@ -56,11 +60,8 @@ posiDirectionMap[DIRECTION_LONG] = defineDict["THOST_FTDC_PD_Long"]
 posiDirectionMap[DIRECTION_SHORT] = defineDict["THOST_FTDC_PD_Short"]
 posiDirectionMapReverse = {v:k for k,v in posiDirectionMap.items()}
 
-def get_tick_id(dt):
-    return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
-
 ########################################################################
-class CtpGateway(VtGateway):
+class CtpGateway(Gateway):
     """CTP接口"""
 
     #----------------------------------------------------------------------
@@ -86,7 +87,7 @@ class CtpGateway(VtGateway):
             log = VtLogData()
             log.gatewayName = self.gatewayName
             log.logContent = u'读取连接配置出错，请检查'
-			log.level = logging.WARNING
+            log.level = logging.WARNING
             self.onLog(log)
             return
         
@@ -102,7 +103,7 @@ class CtpGateway(VtGateway):
             log = VtLogData()
             log.gatewayName = self.gatewayName
             log.logContent = u'连接配置缺少字段，请检查'
-			log.level = logging.WARNING
+            log.level = logging.WARNING
             self.onLog(log)
             return            
         
@@ -121,12 +122,12 @@ class CtpGateway(VtGateway):
     #----------------------------------------------------------------------
     def sendOrder(self, iorder):
         """发单"""
-        return self.tdApi.sendOrder(orderReq)
+        return self.tdApi.sendOrder(iorder)
         
     #----------------------------------------------------------------------
     def cancelOrder(self, iorder):
         """撤单"""
-        self.tdApi.cancelOrder(cancelOrderReq)
+        self.tdApi.cancelOrder(iorder)
         
     #----------------------------------------------------------------------
     def qryAccount(self):
@@ -187,187 +188,187 @@ class CtpGateway(VtGateway):
         """设置是否要启动循环查询"""
         self.qryEnabled = qryEnabled
     
-	def setup_gateway_handler(self):
-		self.eventEngine.register(EVENT_MARKETDATA+self.gatewayName, self.rsp_market_data)
-		self.eventEngine.register(EVENT_QRYACCOUNT+self.gatewayName, self.rsp_qry_account)
-		self.eventEngine.register(EVENT_QRYPOSITION+self.gatewayName, self.rsp_qry_position)
-		self.eventEngine.register(EVENT_QRYTRADE+self.gatewayName, self.rsp_qry_trade)
-		self.eventEngine.register(EVENT_QRYORDER+self.gatewayName, self.rsp_qry_order)
-		self.eventEngine.register(EVENT_QRYINVESTOR+self.gatewayName, self.rsp_qry_investor)
-		self.eventEngine.register(EVENT_QRYINSTRUMENT+self.gatewayName, self.rsp_qry_instrument)
-		
-		self.eventEngine.register(EVENT_ERRORDERCANCEL+self.gatewayName, self.err_order_insert)
-		self.eventEngine.register(EVENT_ERRORDERINSERT+self.gatewayName, self.err_order_action)
-		self.eventEngine.register(EVENT_RTNTRADE+self.gatewayName, self.rtn_trade)
-		self.eventEngine.register(EVENT_RTNORDER+self.gatewayName, self.rtn_order)
-		
-	def onOrder(self, order):
-		pass
-		
-	def onTrade(self, trade):
-		pass
-		
-	def rtn_order(self, event):
-		data = event.dict['data']
+    def setup_gateway_handler(self):
+        self.eventEngine.register(EVENT_MARKETDATA+self.gatewayName, self.rsp_market_data)
+        self.eventEngine.register(EVENT_QRYACCOUNT+self.gatewayName, self.rsp_qry_account)
+        self.eventEngine.register(EVENT_QRYPOSITION+self.gatewayName, self.rsp_qry_position)
+        self.eventEngine.register(EVENT_QRYTRADE+self.gatewayName, self.rsp_qry_trade)
+        self.eventEngine.register(EVENT_QRYORDER+self.gatewayName, self.rsp_qry_order)
+        self.eventEngine.register(EVENT_QRYINVESTOR+self.gatewayName, self.rsp_qry_investor)
+        self.eventEngine.register(EVENT_QRYINSTRUMENT+self.gatewayName, self.rsp_qry_instrument)
+
+        self.eventEngine.register(EVENT_ERRORDERCANCEL+self.gatewayName, self.err_order_insert)
+        self.eventEngine.register(EVENT_ERRORDERINSERT+self.gatewayName, self.err_order_action)
+        self.eventEngine.register(EVENT_RTNTRADE+self.gatewayName, self.rtn_trade)
+        self.eventEngine.register(EVENT_RTNORDER+self.gatewayName, self.rtn_order)
+
+    def onOrder(self, order):
+        pass
+
+    def onTrade(self, trade):
+        pass
+
+    def rtn_order(self, event):
+        data = event.dict['data']
         newref = data['OrderRef']
-		if not newref.isdigit():
-			return
-		order_ref = int(newref)	
+        if not newref.isdigit():
+            return
+        order_ref = int(newref)
         self.orderRef = max(self.orderRef, order_ref)
         if (order_ref in self.ref2order):
             myorder = self.ref2order[order_ref]
             # only update sysID,
             status = myorder.on_order(sys_id = data['OrderSysID'], price = data['LimitPrice'], volume = 0)
-			if data['OrderStatus'] in [ '5', '2']:
-				myorder.on_cancel()
-				status = True
-			if myorder.trade_ref <= 0:
-				order = VtOrderData()
-				order.gatewayName = self.gatewayName
-				# 保存代码和报单号
-				order.symbol = data['InstrumentID']
-				order.exchange = exchangeMapReverse[data['ExchangeID']]
-				order.instID = order.symbol #'.'.join([order.symbol, order.exchange])
-				order.orderID = order_ref
-				order.orderSysID = data['OrderSysID']
-				# 方向
-				if data['Direction'] == '0':
-					order.direction = DIRECTION_LONG
-				elif data['Direction'] == '1':
-					order.direction = DIRECTION_SHORT
-				else:
-					order.direction = DIRECTION_UNKNOWN
-				# 开平
-				if data['CombOffsetFlag'] == '0':
-					order.offset = OFFSET_OPEN
-				elif data['CombOffsetFlag'] == '1':
-					order.offset = OFFSET_CLOSE
-				else:
-					order.offset = OFFSET_UNKNOWN
-				# 状态
-				if data['OrderStatus'] == '0':
-					order.status = STATUS_ALLTRADED
-				elif data['OrderStatus'] == '1':
-					order.status = STATUS_PARTTRADED
-				elif data['OrderStatus'] == '3':
-					order.status = STATUS_NOTTRADED
-				elif data['OrderStatus'] == '5':
-					order.status = STATUS_CANCELLED
-				else:
-					order.status = STATUS_UNKNOWN				
-				# 价格、报单量等数值
-				order.price = data['LimitPrice']
-				order.totalVolume = data['VolumeTotalOriginal']
-				order.tradedVolume = data['VolumeTraded']
-				order.orderTime = data['InsertTime']
-				order.cancelTime = data['CancelTime']
-				order.frontID = data['FrontID']
-				order.sessionID = data['SessionID']
-				order.order_ref = order_ref
-				self.gateway.onOrder(order)	
-				return				
+            if data['OrderStatus'] in [ '5', '2']:
+                myorder.on_cancel()
+                status = True
+            if myorder.trade_ref <= 0:
+                order = VtOrderData()
+                order.gatewayName = self.gatewayName
+                # 保存代码和报单号
+                order.symbol = data['InstrumentID']
+                order.exchange = exchangeMapReverse[data['ExchangeID']]
+                order.instID = order.symbol #'.'.join([order.symbol, order.exchange])
+                order.orderID = order_ref
+                order.orderSysID = data['OrderSysID']
+                # 方向
+                if data['Direction'] == '0':
+                    order.direction = DIRECTION_LONG
+                elif data['Direction'] == '1':
+                    order.direction = DIRECTION_SHORT
+                else:
+                    order.direction = DIRECTION_UNKNOWN
+                # 开平
+                if data['CombOffsetFlag'] == '0':
+                    order.offset = OFFSET_OPEN
+                elif data['CombOffsetFlag'] == '1':
+                    order.offset = OFFSET_CLOSE
+                else:
+                    order.offset = OFFSET_UNKNOWN
+                # 状态
+                if data['OrderStatus'] == '0':
+                    order.status = STATUS_ALLTRADED
+                elif data['OrderStatus'] == '1':
+                    order.status = STATUS_PARTTRADED
+                elif data['OrderStatus'] == '3':
+                    order.status = STATUS_NOTTRADED
+                elif data['OrderStatus'] == '5':
+                    order.status = STATUS_CANCELLED
+                else:
+                    order.status = STATUS_UNKNOWN
+                # 价格、报单量等数值
+                order.price = data['LimitPrice']
+                order.totalVolume = data['VolumeTotalOriginal']
+                order.tradedVolume = data['VolumeTraded']
+                order.orderTime = data['InsertTime']
+                order.cancelTime = data['CancelTime']
+                order.frontID = data['FrontID']
+                order.sessionID = data['SessionID']
+                order.order_ref = order_ref
+                self.gateway.onOrder(order)
+                return
             else:
-				if status:
-					event = Event(type=EVENT_ETRADEUPDATE)
-					event.dict['trade_ref'] = myorder.trade_ref
-					self.eventEngine.put(event)
-		else:
+                if status:
+                    event = Event(type=EVENT_ETRADEUPDATE)
+                    event.dict['trade_ref'] = myorder.trade_ref
+                    self.eventEngine.put(event)
+        else:
             log = VtLogData()
             log.gatewayName = self.gatewayName
             log.logContent = 'receive order update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
-			log.level = logging.WARNING
+            log.level = logging.WARNING
             self.gateway.onLog(log)
-			
-	def rtn_trade(self, event):
-		data = event.dict['data']
+
+    def rtn_trade(self, event):
+        data = event.dict['data']
         newref = data['OrderRef']
-		if not newref.isdigit():
-			return
-		order_ref = int(newref)	
+        if not newref.isdigit():
+            return
+        order_ref = int(newref)
         if order_ref in self.ref2order:
             myorder = self.ref2order[order_ref]
             myorder.on_trade(price = data['Price'], volume=data['Volume'], trade_id = data['TradeID'])
-			if myorder.trade_ref <= 0:
-				trade = VtTradeData()
-				trade.gatewayName = self.gatewayName
-				# 保存代码和报单号
-				trade.symbol = data['InstrumentID']
-				trade.exchange = exchangeMapReverse[data['ExchangeID']]
-				trade.vtSymbol = trade.symbol #'.'.join([trade.symbol, trade.exchange])
-				trade.tradeID = data['TradeID']
-				trade.vtTradeID = '.'.join([self.gatewayName, trade.tradeID])
-				trade.orderID = data['OrderRef']
-				trade.order_ref = order_ref
-				# 方向
-				trade.direction = directionMapReverse.get(data['Direction'], '')
-				# 开平
-				trade.offset = offsetMapReverse.get(data['OffsetFlag'], '')
-				# 价格、报单量等数值
-				trade.price = data['Price']
-				trade.volume = data['Volume']
-				trade.tradeTime = data['TradeTime']
-				# 推送
-				self.gateway.onTrade(trade)			
-			else:
-				event = Event(type=EVENT_ETRADEUPDATE)
-				event.dict['trade_ref'] = myorder.trade_ref
-				self.eventEngine.put(event)
-		else:
+            if myorder.trade_ref <= 0:
+                trade = VtTradeData()
+                trade.gatewayName = self.gatewayName
+                # 保存代码和报单号
+                trade.symbol = data['InstrumentID']
+                trade.exchange = exchangeMapReverse[data['ExchangeID']]
+                trade.vtSymbol = trade.symbol #'.'.join([trade.symbol, trade.exchange])
+                trade.tradeID = data['TradeID']
+                trade.vtTradeID = '.'.join([self.gatewayName, trade.tradeID])
+                trade.orderID = data['OrderRef']
+                trade.order_ref = order_ref
+                # 方向
+                trade.direction = directionMapReverse.get(data['Direction'], '')
+                # 开平
+                trade.offset = offsetMapReverse.get(data['OffsetFlag'], '')
+                # 价格、报单量等数值
+                trade.price = data['Price']
+                trade.volume = data['Volume']
+                trade.tradeTime = data['TradeTime']
+                # 推送
+                self.gateway.onTrade(trade)
+            else:
+                event = Event(type=EVENT_ETRADEUPDATE)
+                event.dict['trade_ref'] = myorder.trade_ref
+                self.eventEngine.put(event)
+        else:
             log = VtLogData()
             log.gatewayName = self.gatewayName
             log.logContent = 'receive trade update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
-			log.level = logging.WARNING
+            log.level = logging.WARNING
             self.gateway.onLog(log)
-		
-	def rsp_market_data(self, event):
-		data = event.dict['data']
-		if self.trading_day == 0:
-			self.trading_day = int(data['TradingDay'])
-		timestr = str(self.trading_day) + ' '+ str(data['UpdateTime']) + ' ' + str(data['UpdateMillisec']) + '000'
-		try:
-			timestamp = datetime.datetime.strptime(timestr, '%Y%m%d %H:%M:%S %f')
-		except:
-			print "Error to convert timestr = %s" % timestr
-			return
-		tick_id = get_tick_id(timestamp)
-		if data['ExchangeID'] == 'CZCE':
-			if (len(data['TradingDay'])>0):				
-				if (self.trading_day > int(data['TradingDay'])) and (tick_id >= 600000):
-					rtn_error = BaseObject(errorMsg="tick data is wrong, %s" % data)
-					self.onError(rtn_error)
-					return
-		tick = VtTickData()
-		tick.gatewayName = self.gatewayName
-		tick.symbol = data['InstrumentID']			
-		tick.instID = tick.symbol #'.'.join([tick.symbol, EXCHANGE_UNKNOWN])
-		tick.exchange = exchangeMapReverse.get(data['ExchangeID'], u'未知')
-		product = inst2product(tick.instID)
-		hrs = trading_hours(product, exch)
-		buffer = 5
-		tick_status = True
-		for ptime in hrs:
-			if (tick_id>=ptime[0]*1000-buffer) and (tick_id< ptime[1]*1000+buffer):
-				bad_tick = False
-				break
-		if bad_tick:
-			return
-		tick.timestamp = timestamp
-		tick.date = timestamp.date
-		tick.tick_id = tick_id	
-		tick.price = data['LastPrice']
-		tick.volume = data['Volume']
-		tick.openInterest = data['OpenInterest']
-		# CTP只有一档行情
-		tick.open = data['OpenPrice']
-		tick.high = data['HighestPrice']
-		tick.low = data['LowestPrice']
-		tick.prev_close = data['PreClosePrice']        
-		tick.upLimit = data['UpperLimitPrice']
-		tick.downLimit = data['LowerLimitPrice']
-		tick.bidPrice1 = data['BidPrice1']
-		tick.bidVol1 = data['BidVolume1']
-		tick.askPrice1 = data['AskPrice1']
-		tick.askVol1 = data['AskVolume1']
+
+    def rsp_market_data(self, event):
+        data = event.dict['data']
+        if self.trading_day == 0:
+            self.trading_day = int(data['TradingDay'])
+        timestr = str(self.trading_day) + ' '+ str(data['UpdateTime']) + ' ' + str(data['UpdateMillisec']) + '000'
+        try:
+            timestamp = datetime.datetime.strptime(timestr, '%Y%m%d %H:%M:%S %f')
+        except:
+            print "Error to convert timestr = %s" % timestr
+            return
+        tick_id = get_tick_id(timestamp)
+        if data['ExchangeID'] == 'CZCE':
+            if (len(data['TradingDay'])>0):
+                if (self.trading_day > int(data['TradingDay'])) and (tick_id >= 600000):
+                    rtn_error = BaseObject(errorMsg="tick data is wrong, %s" % data)
+                    self.onError(rtn_error)
+                    return
+        tick = VtTickData()
+        tick.gatewayName = self.gatewayName
+        tick.symbol = data['InstrumentID']
+        tick.instID = tick.symbol #'.'.join([tick.symbol, EXCHANGE_UNKNOWN])
+        tick.exchange = exchangeMapReverse.get(data['ExchangeID'], u'未知')
+        product = inst2product(tick.instID)
+        hrs = trading_hours(product, tick.exchange)
+        buffer = 5
+        tick_status = True
+        for ptime in hrs:
+            if (tick_id>=ptime[0]*1000-buffer) and (tick_id< ptime[1]*1000+buffer):
+                bad_tick = False
+                break
+        if bad_tick:
+            return
+        tick.timestamp = timestamp
+        tick.date = timestamp.date
+        tick.tick_id = tick_id
+        tick.price = data['LastPrice']
+        tick.volume = data['Volume']
+        tick.openInterest = data['OpenInterest']
+        # CTP只有一档行情
+        tick.open = data['OpenPrice']
+        tick.high = data['HighestPrice']
+        tick.low = data['LowestPrice']
+        tick.prev_close = data['PreClosePrice']
+        tick.upLimit = data['UpperLimitPrice']
+        tick.downLimit = data['LowerLimitPrice']
+        tick.bidPrice1 = data['BidPrice1']
+        tick.bidVol1 = data['BidVolume1']
+        tick.askPrice1 = data['AskPrice1']
+        tick.askVol1 = data['AskVolume1']
         # 通用事件
         event1 = Event(type=EVENT_TICK)
         event1.dict['data'] = tick
@@ -378,8 +379,8 @@ class CtpGateway(VtGateway):
         event2.dict['data'] = tick
         self.eventEngine.put(event2)
 
-	def rsp_qry_account(self, event):
-		data = event.dict['data']
+    def rsp_qry_account(self, event):
+        data = event.dict['data']
         self.qrt_account['preBalance'] = data['PreBalance']
         self.qrt_account['available'] = data['Available']
         self.qrt_account['commission'] = data['Commission']
@@ -392,86 +393,87 @@ class CtpGateway(VtGateway):
                            data['Mortgage'] - data['Withdraw'] + data['Deposit'] +
                            data['CloseProfit'] + data['PositionProfit'] + data['CashIn'] -
                            data['Commission'])
-    		
-	def rsp_qry_instrument(self, event):
-		pass
-		
-	def rsp_qry_position(self, event):
+
+    def rsp_qry_instrument(self, event):
+        pass
+
+    def rsp_qry_position(self, event):
         pposition = event.dict['data']
         isLast = event.dict['last']
         instID = pposition['InstrumentID']
         if (instID not in self.qry_pos):
-			self.qry_pos[instID]   = {'tday': [0, 0], 'yday': [0, 0]}
+            self.qry_pos[instID]   = {'tday': [0, 0], 'yday': [0, 0]}
         key = 'yday'
-		idx = 1
-		if pposition['PosiDirection'] == '2':
-			if pposition['PositionDate'] == '1':
-				key = 'tday'
-				idx = 0
-			else:
-				idx = 0
-		else:
-			if pposition.PositionDate == '1':
-				key = 'tday'
-		self.qry_pos[instID][key][idx] = pposition['Position']
-		self.qry_pos[instID]['yday'][idx] = pposition['YdPosition']
+        idx = 1
+        if pposition['PosiDirection'] == '2':
+            if pposition['PositionDate'] == '1':
+                key = 'tday'
+                idx = 0
+            else:
+                idx = 0
+        else:
+            if pposition.PositionDate == '1':
+                key = 'tday'
+        self.qry_pos[instID][key][idx] = pposition['Position']
+        self.qry_pos[instID]['yday'][idx] = pposition['YdPosition']
         if isLast:
             print self.qry_pos
             pass
-	
-	def rsp_qry_order(self, event):
+
+    def rsp_qry_order(self, event):
         sorder = event.dict['data']
         isLast = event.dict['last']
         if (len(sorder.OrderRef) == 0):
             return
         if not sorder['OrderRef'].isdigit():
             return
-        order_ref = int(sorder['OrderRef']
+        order_ref = int(sorder['OrderRef'])
         if (order_ref in self.ref2order):
             iorder = self.ref2order[order_ref]
             self.system_orders.append(order_ref)
             if iorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
                 status = iorder.on_order(sys_id = sorder['OrderSysID'], price = sorder['LimitPrice'], volume = sorder['VolumeTraded'])
                 if status:
-					event = Event(type=EVENT_ETRADEUPDATE)
-					event.dict['trade_ref'] = iorder.trade_ref
-					self.eventEngine.put(event)
+                    event = Event(type=EVENT_ETRADEUPDATE)
+                    event.dict['trade_ref'] = iorder.trade_ref
+                    self.eventEngine.put(event)
                 elif sorder.OrderStatus in ['3', '1', 'a']:
                     if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
                         iorder.status = order.OrderStatus.Sent
                         iorder.conditionals = {}
-						log = VtLogData()
-						log.gatewayName = self.gatewayName
-						log.logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
-						log.level = logging.INFO
-						self.gateway.onLog(log)
+                        log = VtLogData()
+                        log.gatewayName = self.gatewayName
+                        log.logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
+                        log.level = logging.INFO
+                        self.gateway.onLog(log)
                 elif sorder.OrderStatus in ['5', '2', '4']:
                     if iorder.status != order.OrderStatus.Cancelled:
                         iorder.on_cancel()
-						event = Event(type=EVENT_ETRADEUPDATE)
-						event.dict['trade_ref'] = iorder.trade_ref
-						self.eventEngine.put(event)
-						log = VtLogData()
-						log.gatewayName = self.gatewayName
-						log.logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
-						log.level = logging.INFO
-						self.gateway.onLog(log)
+                        event = Event(type=EVENT_ETRADEUPDATE)
+                        event.dict['trade_ref'] = iorder.trade_ref
+                        self.eventEngine.put(event)
+                        log = VtLogData()
+                        log.gatewayName = self.gatewayName
+                        log.logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
+                        log.level = logging.INFO
+                        self.gateway.onLog(log)
 
         if isLast:
             for order_ref in self.ref2order:
                 if (order_ref not in self.system_orders):
                     iorder = self.ref2order[order_ref]
                     iorder.on_cancel()
-					event = Event(type=EVENT_ETRADEUPDATE)
-					event.dict['trade_ref'] = iorder.trade_ref
-					self.eventEngine.put(event)
+                    event = Event(type=EVENT_ETRADEUPDATE)
+                    event.dict['trade_ref'] = iorder.trade_ref
+                    self.eventEngine.put(event)
             self.system_orders = []
-			
+
     def err_order_insert(self, event):
         '''
             ctp/交易所下单错误回报，不区分ctp和交易所正常情况下不应当出现
         '''
         porder = event.dict['data']
+        error = event.dict['error']
         if not porder['OrderRef'].isdigit():
             return
         order_ref = int(porder['OrderRef'])
@@ -479,51 +481,51 @@ class CtpGateway(VtGateway):
         if order_ref in self.ref2order:
             myorder = self.ref2order[order_ref]
             myorder.on_cancel()
-			event = Event(type=EVENT_ETRADEUPDATE)
-			event.dict['trade_ref'] = iorder.trade_ref
-			self.eventEngine.put(event)
-		log = VtLogData()
-		log.gatewayName = self.gatewayName
-		log.logContent = 'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s. ' % (order_ref, inst, error['ErrorMsg'])
-		log.level = logging.WARNING
-		if inst not in self.order_stats:
-			self.order_stats[inst] = {'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }
+            event = Event(type=EVENT_ETRADEUPDATE)
+            event.dict['trade_ref'] = myorder.trade_ref
+            self.eventEngine.put(event)
+        log = VtLogData()
+        log.gatewayName = self.gatewayName
+        log.logContent = 'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s. ' % (order_ref, inst, error['ErrorMsg'])
+        log.level = logging.WARNING
+        if inst not in self.order_stats:
+            self.order_stats[inst] = {'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }
         self.order_stats[inst]['failed'] += 1
         if self.order_stats[inst]['failed'] >= self.failed_order_limit:
             self.order_stats[inst]['status'] = False
             log.logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
-		self.gateway.onLog(log)
-		
+        self.gateway.onLog(log)
+
     def err_order_action(self, event):
         '''
             ctp/交易所撤单错误回报，不区分ctp和交易所必须处理，如果已成交，撤单后必然到达这个位置
         '''
         porder = event.dict['data']
         error = event.dict['error']
-		inst = porder['InstrumentID']
-		log = VtLogData()
-		log.gatewayName = self.gatewayName
-		log.logContent = 'Order Cancel is wrong, order_ref=%s, instrument=%s, error=%s. ' % (porder['OrderRef'], inst, error['ErrorMsg'])
-		log.level = logging.WARNING
+        inst = porder['InstrumentID']
+        log = VtLogData()
+        log.gatewayName = self.gatewayName
+        log.logContent = 'Order Cancel is wrong, order_ref=%s, instrument=%s, error=%s. ' % (porder['OrderRef'], inst, error['ErrorMsg'])
+        log.level = logging.WARNING
         if porder['OrderRef'].isdigit():
             order_ref = int(porder['OrderRef'])
             myorder = self.ref2order[order_ref]
             if int(error['ErrorID']) in [25,26] and myorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
                 myorder.on_cancel()
-				event = Event(type=EVENT_ETRADEUPDATE)
-				event.dict['trade_ref'] = myorder.trade_ref
-				self.eventEngine.put(event)
+                event = Event(type=EVENT_ETRADEUPDATE)
+                event.dict['trade_ref'] = myorder.trade_ref
+                self.eventEngine.put(event)
         #else:
         #    self.qry_commands.append(self.fetch_order)
         #    self.qry_commands.append(self.fetch_order)
-		if inst not in self.order_stats:
-			self.order_stats[inst] = {'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }
+        if inst not in self.order_stats:
+            self.order_stats[inst] = {'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }
         self.order_stats[inst]['failed'] += 1
         if self.order_stats[inst]['failed'] >= self.failed_order_limit:
             self.order_stats[inst]['status'] = False
             log.logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
-		self.gateway.onLog(log)
-			
+        self.gateway.onLog(log)
+
 ########################################################################
 class CtpMdApi(MdApi):
     """CTP行情API实现"""
@@ -547,7 +549,7 @@ class CtpMdApi(MdApi):
         self.password = EMPTY_STRING        # 密码
         self.brokerID = EMPTY_STRING        # 经纪商代码
         self.address = EMPTY_STRING         # 服务器地址
-		self.trading_day = 20160101
+        self.trading_day = 20160101
         
     #----------------------------------------------------------------------
     def onFrontConnected(self):
@@ -557,7 +559,7 @@ class CtpMdApi(MdApi):
         log = VtLogData()
         log.gatewayName = self.gatewayName
         log.logContent = u'行情服务器连接成功'
-		log.level = logging.INFO
+        log.level = logging.INFO
         self.gateway.onLog(log)
         self.login()
     
@@ -571,7 +573,7 @@ class CtpMdApi(MdApi):
         log = VtLogData()
         log.gatewayName = self.gatewayName
         log.logContent = u'行情服务器连接断开'
-		log.level = logging.INFO
+        log.level = logging.INFO
         self.gateway.onLog(log)        
         
     #---------------------------------------------------------------------- 
@@ -600,22 +602,22 @@ class CtpMdApi(MdApi):
             log = VtLogData()
             log.gatewayName = self.gatewayName
             log.logContent = u'行情服务器登录完成'
-			log.level = logging.INFO
+            log.level = logging.INFO
             self.gateway.onLog(log)
             
             # 重新订阅之前订阅的合约
             for subscribeReq in self.subscribedSymbols:
                 self.subscribe(subscribeReq)
             trade_day_str = self.GetTradingDay()
-			scur_day = int(self.agent.scur_day.strftime('%Y%m%d'))
+            scur_day = int(self.agent.scur_day.strftime('%Y%m%d'))
             if len(trade_day_str) > 0:
                 try:
                     self.trading_day = int(trade_day_str)
-					if self.trading_day > scur_day:
-						event = Event(type=EVENT_DAYSWITCH)
-						event.dict['log'] = u'换日: %s -> %s' % (self.agent.scur_day, trading_day)
-						event.dict['date'] = trading_day
-						self.eventEngine.put(event)
+                    if self.trading_day > scur_day:
+                        event = Event(type=EVENT_DAYSWITCH)
+                        event.dict['log'] = u'换日: %s -> %s' % (self.agent.scur_day, self.trading_day)
+                        event.dict['date'] = self.trading_day
+                        self.eventEngine.put(event)
                 except ValueError:
                     pass
         # 否则，推送错误信息
@@ -637,7 +639,7 @@ class CtpMdApi(MdApi):
             log = VtLogData()
             log.gatewayName = self.gatewayName
             log.logContent = u'行情服务器登出完成'
-			log.level = logging.INFO
+            log.level = logging.INFO
             self.gateway.onLog(log)
                 
         # 否则，推送错误信息
@@ -663,18 +665,19 @@ class CtpMdApi(MdApi):
     #----------------------------------------------------------------------  
     def onRtnDepthMarketData(self, data):
         """行情推送"""
-		if (data['LastPrice'] > data['UpperLimitPrice']) or (data['LastPrice'] < data['LowerLimitPrice']) or \
-		   (data['AskPrice1'] >= data['UpperLimitPrice'] and data['BidPrice1'] <= data['LowerLimitPrice']) or \
-		   (data['BidPrice1'] > = data['AskPrice1']):
-			log = VtLogData()
-			log.gatewayName = self.gatewayName
-			log.logContent = u'MD:error in market data for %s LastPrice=%s, BidPrice=%s, AskPrice=%s' %(dp.InstrumentID, dp.LastPrice, dp.BidPrice1,dp.AskPrice1)
-			log.level = logging.DEBUG
-			self.gateway.onLog(log)
-			return	
-		event = Event(type = EVENT_MARKETDATA + self.gatewayName)
+        if (data['LastPrice'] > data['UpperLimitPrice']) or (data['LastPrice'] < data['LowerLimitPrice']) or \
+                (data['AskPrice1'] >= data['UpperLimitPrice'] and data['BidPrice1'] <= data['LowerLimitPrice']) or \
+                (data['BidPrice1'] >= data['AskPrice1']):
+            log = VtLogData()
+            log.gatewayName = self.gatewayName
+            log.logContent = u'MD:error in market data for %s LastPrice=%s, BidPrice=%s, AskPrice=%s' % \
+                             (data['InstrumentID'], data['LastPrice'], data['BidPrice1'], data['AskPrice1'])
+            log.level = logging.DEBUG
+            self.gateway.onLog(log)
+            return
+        event = Event(type = EVENT_MARKETDATA + self.gatewayName)
         event.dict['data'] = data
-		event.dict['gateway'] = self.gatewayName
+        event.dict['gateway'] = self.gatewayName
         self.eventEngine.put(event)
         
     #---------------------------------------------------------------------- 
@@ -780,7 +783,7 @@ class CtpTdApi(TdApi):
         log = VtLogData()
         log.gatewayName = self.gatewayName
         log.logContent = u'交易服务器连接成功'
-		log.level = logging.INFO
+        log.level = logging.INFO
         self.gateway.onLog(log)
         
         self.login()
@@ -795,7 +798,7 @@ class CtpTdApi(TdApi):
         log = VtLogData()
         log.gatewayName = self.gatewayName
         log.logContent = u'交易服务器连接断开'
-		log.level = logging.INFO
+        log.level = logging.INFO
         self.gateway.onLog(log)      
     
     #----------------------------------------------------------------------
@@ -832,14 +835,14 @@ class CtpTdApi(TdApi):
         # 否则，推送错误信息
         else:
             self.loginStatus = False
-			self.gateway.tdConnected = False
-			err = VtErrorData()
+            self.gateway.tdConnected = False
+            err = VtErrorData()
             err.gatewayName = self.gateway
             err.errorID = error['ErrorID']
             err.errorMsg = error['ErrorMsg'].decode('gbk')
             self.gateway.onError(err)			
-			time.sleep(30)
-			self.login()
+            time.sleep(30)
+            self.login()
     
     #----------------------------------------------------------------------
     def onRspUserLogout(self, data, error, n, last):
@@ -880,11 +883,11 @@ class CtpTdApi(TdApi):
         err.errorID = error['ErrorID']
         err.errorMsg = error['ErrorMsg'].decode('gbk')
         self.gateway.onError(err)
-		
+
         event2 = Event(type=EVENT_ERRORDERINSERT + self.gatewayName)
         event2.dict['data'] = data
         event2.dict['error'] = error
-		event2.dict['gateway'] = self.gatewayName
+        event2.dict['gateway'] = self.gatewayName
         self.eventEngine.put(event2) 
  
     
@@ -911,7 +914,7 @@ class CtpTdApi(TdApi):
         event.dict['data'] = data
         event.dict['error'] = error
         self.eventEngine.put(event)     
-		
+
         err = VtErrorData()
         err.gatewayName = self.gatewayName
         err.errorID = error['ErrorID']
@@ -924,15 +927,15 @@ class CtpTdApi(TdApi):
         event = Event(type=EVENT_ERRORDERCANCEL + self.gatewayName)
         event.dict['data'] = data
         event.dict['error'] = error
-		event.dict['gateway'] = self.gatewayName
+        event.dict['gateway'] = self.gatewayName
         self.eventEngine.put(event) 
-		
+
         err = VtErrorData()
         err.gatewayName = self.gatewayName
         err.errorID = error['ErrorID']
         err.errorMsg = error['ErrorMsg'].decode('gbk')
         self.gateway.onError(err)
-		
+
     #----------------------------------------------------------------------
     def onRspOrderAction(self, data, error, n, last):
         """撤单错误（柜台）"""
@@ -945,9 +948,9 @@ class CtpTdApi(TdApi):
         event2 = Event(type=EVENT_ERRORDERCANCEL + self.gatewayName)
         event2.dict['data'] = data
         event2.dict['error'] = error
-		event2.dict['gateway'] = self.gatewayName
+        event2.dict['gateway'] = self.gatewayName
         self.eventEngine.put(event2) 
-		
+
     #----------------------------------------------------------------------
     def onRspQueryMaxOrderVolume(self, data, error, n, last):
         """"""
@@ -956,10 +959,10 @@ class CtpTdApi(TdApi):
     #----------------------------------------------------------------------
     def onRspSettlementInfoConfirm(self, data, error, n, last):
         """确认结算信息回报"""
-		self.gateway.tdConnected = True
+        self.gateway.tdConnected = True
         event = Event(type=EVENT_TDLOGIN)
         self.eventEngine.put(event)         
-		
+
         # 查询合约代码
         # self.reqID += 1
         # self.reqQryInstrument({}, self.reqID)

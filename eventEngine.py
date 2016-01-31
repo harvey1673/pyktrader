@@ -161,23 +161,23 @@ class EventEngine:
         self.queue.put(event)
 
 class PriEventEngine(EventEngine):
-	def __init__(self, timerFreq = 1.0):
-		super(PriEventEngine, self).__init__(timerFreq)
-		self.queue = Queue.PriorityQueue()
-		
+    def __init__(self, timerFreq = 1.0):
+        super(PriEventEngine, self).__init__(timerFreq)
+        self.queue = Queue.PriorityQueue()
+
     def put(self, event):
         """向事件队列中存入事件"""
-		event_obj = (event.priority, event)
+        event_obj = (event.priority, event)
         self.queue.put(event_obj)
 
     def process(self, event_obj):
         """处理事件"""
         # 检查是否存在对该事件进行监听的处理函数
-		event = event_obj[1]
+        event = event_obj[1]
         if event.type in self.handlers:
             # 若存在，则按顺序将事件传递给处理函数执行
             [handler(event) for handler in self.handlers[event.type]] 
-				
+
 ########################################################################
 class Event(object):
     """事件对象"""
