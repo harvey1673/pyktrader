@@ -1497,7 +1497,7 @@ class CtpTdApi(TdApi):
         self.reqOrderInsert(req, self.reqID)
     
     #----------------------------------------------------------------------
-    def cancelOrder(self, cancelOrderReq):
+    def cancelOrder(self, iorder):
         """撤单"""
         inst = iorder.instrument
         self.reqID += 1
