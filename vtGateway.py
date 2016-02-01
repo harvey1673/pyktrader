@@ -95,21 +95,18 @@ class gateway(object):
     def onError(self, error):
         """错误信息推送"""
         # 通用事件
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = error.errorMsg
-		log.level = logging.WARNING
-        event1 = Event(type=EVENT_LOG)
-        event1.dict['data'] = log
-        self.eventEngine.put(event1)    
+        logContent = error.errorMsg
+		self.onLog(logContent, level = logging.WARNING)   
         
     #----------------------------------------------------------------------
-    def onLog(self, log):
+    def onLog(self, log_content, level = logging.DEBUG):
         """日志推送"""
         # 通用事件
-        event1 = Event(type=EVENT_LOG)
-        event1.dict['data'] = log
-        self.eventEngine.put(event1)
+        event = Event(type=EVENT_LOG)
+        event.dict['data'] = log_content
+		event.dict['gateway'] = self.gatewayName 
+		event.dict['level'] = level
+        self.eventEngine.put(event)
         
     #----------------------------------------------------------------------
     def onContract(self, contract):
