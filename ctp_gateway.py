@@ -1,3 +1,4 @@
+
 # encoding: UTF-8
 
 '''
@@ -75,6 +76,10 @@ class CtpGateway(Gateway):
         self.mdConnected = False        # 行情API连接状态，登录完成后为True
         self.tdConnected = False        # 交易API连接状态
         self.qryEnabled = False         # 是否要启动循环查询
+		
+		self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
+		self.order_constraints = {	'total_submit': 2000, 'total_cancel': 2000, 'total_failure':500, \
+									'submit_limit': 200,  'cancel_limit': 200,  'failure_limit': 200 }
         
     #----------------------------------------------------------------------
     def connect(self):
@@ -84,11 +89,8 @@ class CtpGateway(Gateway):
         try:
             f = file(fileName)
         except IOError:
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = u'读取连接配置出错，请检查'
-            log.level = logging.WARNING
-            self.onLog(log)
+            logContent = u'读取连接配置出错，请检查'
+            self.onLog(logContent, level = logging.WARNING)
             return
         
         # 解析json文件
@@ -100,11 +102,8 @@ class CtpGateway(Gateway):
             tdAddress = str(setting['tdAddress'])
             mdAddress = str(setting['mdAddress'])
         except KeyError:
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = u'连接配置缺少字段，请检查'
-            log.level = logging.WARNING
-            self.onLog(log)
+            logContent = u'连接配置缺少字段，请检查'
+            self.onLog(logContent, level = logging.WARNING)
             return            
         
         # 创建行情和交易接口对象
@@ -122,12 +121,49 @@ class CtpGateway(Gateway):
     #----------------------------------------------------------------------
     def sendOrder(self, iorder):
         """发单"""
-        return self.tdApi.sendOrder(iorder)
+        inst = iorder.instrument
+        if not self.order_stats[inst.name]['status']:
+			iorder.on_cancel()
+			if iorder.trade_ref > 0:
+				event = Event(type=EVENT_ETRADEUPDATE)
+				event.dict['trade_ref'] = iorder.trade_ref
+				self.eventEngine.put(event)
+			logContent = 'Canceling order = %s for instrument = %s is disabled for trading due to position control' % (iorder.order_ref, inst.name)
+            self.onLog( logContent, level = logging.WARNING)
+			return
+        # 上期所不支持市价单
+        if (iorder.price_type == OPT_MARKET_ORDER):
+            if (inst.exchange == 'SHFE' or inst.exchange == 'CFFEX'):
+                iorder.price_type = OPT_LIMIT_ORDER
+                if iorder.direction == ORDER_BUY:
+                    iorder.limit_price = inst.up_limit
+                else:
+                    iorder.limit_price = inst.down_limit
+				self.onLog('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, inst.name), level = logging.DEBUG)
+            else:
+                iorder.limit_price = 0.0
+        iorder.status = order.OrderStatus.Sent		
+		self.trader.sendOrder(iorder)
+        
+		self.order_stats[inst]['submit'] += 1
+        self.order_stats['total_submit'] += 1
+		
+        if self.order_stats[inst.name]['submitted'] >= self.order_constraints['submit_limit']:
+            self.order_stats[inst.name]['status'] = False
+        if self.order_stats['total_submit'] >= self.order_constraints['total_submit']:
+            for instID in self.order_stats:
+                self.order_stats[instID]['status'] = False
+        return
         
     #----------------------------------------------------------------------
     def cancelOrder(self, iorder):
         """撤单"""
-        self.tdApi.cancelOrder(iorder)
+        self.trader.cancelOrder(iorder)
+        inst = iorder.instrument
+        self.order_stats[inst.name]['cancel'] += 1
+        self.order_stats['total_cancel'] += 1
+        self.onLog( u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' % (iorder.order_ref, \
+                            iorder.sys_id, inst.exchange, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume), level = logging.DEBUG)     		
         
     #----------------------------------------------------------------------
     def qryAccount(self):
@@ -265,7 +301,7 @@ class CtpGateway(Gateway):
                 order.frontID = data['FrontID']
                 order.sessionID = data['SessionID']
                 order.order_ref = order_ref
-                self.gateway.onOrder(order)
+                self.onOrder(order)
                 return
             else:
                 if status:
@@ -273,11 +309,8 @@ class CtpGateway(Gateway):
                     event.dict['trade_ref'] = myorder.trade_ref
                     self.eventEngine.put(event)
         else:
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = 'receive order update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
-            log.level = logging.WARNING
-            self.gateway.onLog(log)
+            logContent = 'receive order update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
+            self.onLog(logContent, level = logging.WARNING)
 
     def rtn_trade(self, event):
         data = event.dict['data']
@@ -308,17 +341,14 @@ class CtpGateway(Gateway):
                 trade.volume = data['Volume']
                 trade.tradeTime = data['TradeTime']
                 # 推送
-                self.gateway.onTrade(trade)
+                self.onTrade(trade)
             else:
                 event = Event(type=EVENT_ETRADEUPDATE)
                 event.dict['trade_ref'] = myorder.trade_ref
                 self.eventEngine.put(event)
         else:
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = 'receive trade update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
-            log.level = logging.WARNING
-            self.gateway.onLog(log)
+            logContent = 'receive trade update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
+            self.onLog(logContent, level = logging.WARNING)
 
     def rsp_market_data(self, event):
         data = event.dict['data']
@@ -381,12 +411,12 @@ class CtpGateway(Gateway):
 
     def rsp_qry_account(self, event):
         data = event.dict['data']
-        self.qrt_account['preBalance'] = data['PreBalance']
-        self.qrt_account['available'] = data['Available']
-        self.qrt_account['commission'] = data['Commission']
-        self.qrt_account['margin'] = data['CurrMargin']
-        self.qrt_account['closeProfit'] = data['CloseProfit']
-        self.qrt_account['positionProfit'] = data['PositionProfit']
+        self.qry_account['preBalance'] = data['PreBalance']
+        self.qry_account['available'] = data['Available']
+        self.qry_account['commission'] = data['Commission']
+        self.qry_account['margin'] = data['CurrMargin']
+        self.qry_account['closeProfit'] = data['CloseProfit']
+        self.qry_account['positionProfit'] = data['PositionProfit']
         
         # 这里的balance和快期中的账户不确定是否一样，需要测试
         self.qrt_account['balance'] = (data['PreBalance'] - data['PreCredit'] - data['PreMortgage'] +
@@ -441,22 +471,16 @@ class CtpGateway(Gateway):
                     if iorder.status != order.OrderStatus.Sent or iorder.conditionals != {}:
                         iorder.status = order.OrderStatus.Sent
                         iorder.conditionals = {}
-                        log = VtLogData()
-                        log.gatewayName = self.gatewayName
-                        log.logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
-                        log.level = logging.INFO
-                        self.gateway.onLog(log)
+                        logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
+                        self.onLog(logContent, level = logging.INFO)
                 elif sorder.OrderStatus in ['5', '2', '4']:
                     if iorder.status != order.OrderStatus.Cancelled:
                         iorder.on_cancel()
                         event = Event(type=EVENT_ETRADEUPDATE)
                         event.dict['trade_ref'] = iorder.trade_ref
                         self.eventEngine.put(event)
-                        log = VtLogData()
-                        log.gatewayName = self.gatewayName
-                        log.logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
-                        log.level = logging.INFO
-                        self.gateway.onLog(log)
+                        logContent = 'order status for OrderSysID = %s, Inst=%s is set to %s, but should be waiting in exchange queue' % (iorder.sys_id, iorder.instrument.name, iorder.status)
+                        self.onLog(logContent, level = logging.INFO)
 
         if isLast:
             for order_ref in self.ref2order:
@@ -484,17 +508,15 @@ class CtpGateway(Gateway):
             event = Event(type=EVENT_ETRADEUPDATE)
             event.dict['trade_ref'] = myorder.trade_ref
             self.eventEngine.put(event)
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = 'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s. ' % (order_ref, inst, error['ErrorMsg'])
-        log.level = logging.WARNING
+        logContent = 'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s. ' % (order_ref, inst, error['ErrorMsg'])
         if inst not in self.order_stats:
-            self.order_stats[inst] = {'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }
-        self.order_stats[inst]['failed'] += 1
-        if self.order_stats[inst]['failed'] >= self.failed_order_limit:
+            self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
+        self.order_stats[inst]['failure'] += 1
+		#self.order_stats['total_failure'] += 1
+        if self.order_stats[inst]['failure'] >= self.order_constraints['failure_limit']:
             self.order_stats[inst]['status'] = False
-            log.logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
-        self.gateway.onLog(log)
+            logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
+        self.onLog(logContent, level = log.level = logging.WARNING)
 
     def err_order_action(self, event):
         '''
@@ -503,10 +525,7 @@ class CtpGateway(Gateway):
         porder = event.dict['data']
         error = event.dict['error']
         inst = porder['InstrumentID']
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = 'Order Cancel is wrong, order_ref=%s, instrument=%s, error=%s. ' % (porder['OrderRef'], inst, error['ErrorMsg'])
-        log.level = logging.WARNING
+        logContent = 'Order Cancel is wrong, order_ref=%s, instrument=%s, error=%s. ' % (porder['OrderRef'], inst, error['ErrorMsg'])
         if porder['OrderRef'].isdigit():
             order_ref = int(porder['OrderRef'])
             myorder = self.ref2order[order_ref]
@@ -519,12 +538,13 @@ class CtpGateway(Gateway):
         #    self.qry_commands.append(self.fetch_order)
         #    self.qry_commands.append(self.fetch_order)
         if inst not in self.order_stats:
-            self.order_stats[inst] = {'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }
-        self.order_stats[inst]['failed'] += 1
-        if self.order_stats[inst]['failed'] >= self.failed_order_limit:
+            self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
+        self.order_stats[inst]['failure'] += 1
+		#self.order_stats['total_failure'] += 1
+        if self.order_stats[inst]['failure'] >= self.order_constraints['failure_limit']:
             self.order_stats[inst]['status'] = False
-            log.logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
-        self.gateway.onLog(log)
+            logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
+        self.onLog(logContent, level = log.level = logging.WARNING)
 
 ########################################################################
 class CtpMdApi(MdApi):
@@ -555,12 +575,8 @@ class CtpMdApi(MdApi):
     def onFrontConnected(self):
         """服务器连接"""
         self.connectionStatus = True
-        
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = u'行情服务器连接成功'
-        log.level = logging.INFO
-        self.gateway.onLog(log)
+        logContent = u'行情服务器连接成功'
+        self.gateway.onLog(logContent, level = logging.INFO)
         self.login()
     
     #----------------------------------------------------------------------  
@@ -569,12 +585,8 @@ class CtpMdApi(MdApi):
         self.connectionStatus = False
         self.loginStatus = False
         self.gateway.mdConnected = False
-        
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = u'行情服务器连接断开'
-        log.level = logging.INFO
-        self.gateway.onLog(log)        
+        logContent = u'行情服务器连接断开'
+        self.gateway.onLog(logContent, level = logging.INFO)      
         
     #---------------------------------------------------------------------- 
     def onHeartBeatWarning(self, n):
@@ -598,12 +610,8 @@ class CtpMdApi(MdApi):
         if (error['ErrorID'] == 0) and last:
             self.loginStatus = True
             self.gateway.mdConnected = True
-            
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = u'行情服务器登录完成'
-            log.level = logging.INFO
-            self.gateway.onLog(log)
+            logContent = u'行情服务器登录完成'
+            self.gateway.onLog(logContent, level = logging.INFO)
             
             # 重新订阅之前订阅的合约
             for subscribeReq in self.subscribedSymbols:
@@ -635,12 +643,8 @@ class CtpMdApi(MdApi):
         if error['ErrorID'] == 0:
             self.loginStatus = False
             self.gateway.tdConnected = False
-            
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = u'行情服务器登出完成'
-            log.level = logging.INFO
-            self.gateway.onLog(log)
+            logContent = u'行情服务器登出完成'
+            self.gateway.onLog(logContent, level = logging.INFO)
                 
         # 否则，推送错误信息
         else:
@@ -668,12 +672,9 @@ class CtpMdApi(MdApi):
         if (data['LastPrice'] > data['UpperLimitPrice']) or (data['LastPrice'] < data['LowerLimitPrice']) or \
                 (data['AskPrice1'] >= data['UpperLimitPrice'] and data['BidPrice1'] <= data['LowerLimitPrice']) or \
                 (data['BidPrice1'] >= data['AskPrice1']):
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = u'MD:error in market data for %s LastPrice=%s, BidPrice=%s, AskPrice=%s' % \
+            logContent = u'MD:error in market data for %s LastPrice=%s, BidPrice=%s, AskPrice=%s' % \
                              (data['InstrumentID'], data['LastPrice'], data['BidPrice1'], data['AskPrice1'])
-            log.level = logging.DEBUG
-            self.gateway.onLog(log)
+            self.gateway.onLog(logContent, level = logging.DEBUG)
             return
         event = Event(type = EVENT_MARKETDATA + self.gatewayName)
         event.dict['data'] = data
@@ -779,12 +780,8 @@ class CtpTdApi(TdApi):
     def onFrontConnected(self):
         """服务器连接"""
         self.connectionStatus = True
-        
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = u'交易服务器连接成功'
-        log.level = logging.INFO
-        self.gateway.onLog(log)
+        logContent = u'交易服务器连接成功'
+        self.gateway.onLog(log, level = logging.INFO)
         
         self.login()
     
@@ -794,12 +791,9 @@ class CtpTdApi(TdApi):
         self.connectionStatus = False
         self.loginStatus = False
         self.gateway.tdConnected = False
-        
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = u'交易服务器连接断开'
-        log.level = logging.INFO
-        self.gateway.onLog(log)      
+
+        logContent = u'交易服务器连接断开'
+        self.gateway.onLog(log, level = logging.INFO)     
     
     #----------------------------------------------------------------------
     def onHeartBeatWarning(self, n):
@@ -819,11 +813,8 @@ class CtpTdApi(TdApi):
             self.frontID = str(data['FrontID'])
             self.sessionID = str(data['SessionID'])
             self.loginStatus = True
-            
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = u'交易服务器登录完成'
-            self.gateway.onLog(log)
+            logContent = u'交易服务器登录完成'
+            self.gateway.onLog(log, level = logging.INFO)    
             
             # 确认结算信息
             req = {}
@@ -851,11 +842,8 @@ class CtpTdApi(TdApi):
         if error['ErrorID'] == 0:
             self.loginStatus = False
             self.gateway.tdConnected = False
-            
-            log = VtLogData()
-            log.gatewayName = self.gatewayName
-            log.logContent = u'交易服务器登出完成'
-            self.gateway.onLog(log)
+            logContent = u'交易服务器登出完成'
+            self.gateway.onLog(log, level = logging.INFO)    
                 
         # 否则，推送错误信息
         else:
@@ -966,10 +954,8 @@ class CtpTdApi(TdApi):
         # 查询合约代码
         # self.reqID += 1
         # self.reqQryInstrument({}, self.reqID)
-        log = VtLogData()
-        log.gatewayName = self.gatewayName
-        log.logContent = u'结算信息确认完成'
-        self.gateway.onLog(log)
+        logContent = u'结算信息确认完成'
+        self.gateway.onLog(log, level = logging.INFO)
     
     #----------------------------------------------------------------------
     def onRspQryTradingAccount(self, data, error, n, last):
@@ -980,11 +966,8 @@ class CtpTdApi(TdApi):
             event.dict['last'] = last
             self.eventEngine.put(event)         
         else:
-            event = Event(type=EVENT_LOG)
-            log = u'资金账户查询回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
-            event.dict['log'] = log
-            event.dict['level'] = logging.DEBUG
-            self.eventEngine.put(event)
+            logContent = u'资金账户查询回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
+            self.gateway.onLog(log, level = logging.DEBUG)
 
     #----------------------------------------------------------------------
     def onRspParkedOrderInsert(self, data, error, n, last):
@@ -1041,11 +1024,8 @@ class CtpTdApi(TdApi):
             event.dict['last'] = last
             self.eventEngine.put(event)         
         else:
-            event = Event(type=EVENT_LOG)
-            log = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
-            event.dict['log'] = log
-            event.dict['level'] = logging.DEBUG
-            self.eventEngine.put(event)
+            logContent = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
+            self.gateway.onLog(logContent, level = logging.DEBUG)
     
     #----------------------------------------------------------------------
     def onRspQryTrade(self, data, error, n, last):
@@ -1057,10 +1037,8 @@ class CtpTdApi(TdApi):
             self.eventEngine.put(event)         
         else:
             event = Event(type=EVENT_LOG)
-            log = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
-            event.dict['log'] = log
-            event.dict['level'] = logging.DEBUG
-            self.eventEngine.put(event)
+            logContent = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
+            self.gateway.onLog(logContent, level = logging.DEBUG)
     
     #----------------------------------------------------------------------
     def onRspQryInvestorPosition(self, data, error, n, last):
@@ -1071,11 +1049,8 @@ class CtpTdApi(TdApi):
             event.dict['last'] = last
             self.eventEngine.put(event)         
         else:
-            event = Event(type=EVENT_LOG)
-            log = u'持仓查询回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
-            event.dict['log'] = log
-            event.dict['level'] = logging.DEBUG
-            self.eventEngine.put(event)
+            logContent = u'持仓查询回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
+            self.gateway.onLog(logContent, level = logging.DEBUG)
 
     #----------------------------------------------------------------------
     def onRspQryInvestor(self, data, error, n, last):
@@ -1086,11 +1061,8 @@ class CtpTdApi(TdApi):
             event.dict['last'] = last
             self.eventEngine.put(event)         
         else:
-            event = Event(type=EVENT_LOG)
-            log = u'合约投资者回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
-            event.dict['log'] = log
-            event.dict['level'] = logging.DEBUG
-            self.eventEngine.put(event)
+            logContent = u'合约投资者回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
+            self.gateway.onLog(logContent, level = logging.DEBUG)
     
     #----------------------------------------------------------------------
     def onRspQryTradingCode(self, data, error, n, last):
@@ -1126,11 +1098,8 @@ class CtpTdApi(TdApi):
             event.dict['last'] = last
             self.eventEngine.put(event)         
         else:
-            event = Event(type=EVENT_LOG)
-            log = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
-            event.dict['log'] = log
-            event.dict['level'] = logging.DEBUG
-            self.eventEngine.put(event)
+            logContent = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
+            self.gateway.onLog(logContent, level = logging.DEBUG)
     
     #----------------------------------------------------------------------
     def onRspQryDepthMarketData(self, data, error, n, last):
@@ -1496,61 +1465,56 @@ class CtpTdApi(TdApi):
         self.reqQryInvestorPosition(req, self.reqID)
         
     #----------------------------------------------------------------------
-    def sendOrder(self, orderReq):
+    def sendOrder(self, iorder):
         """发单"""
         self.reqID += 1
-        self.orderRef += 1
-        
+        self.orderRef = max(self.orderRef, iorder.order_ref)
         req = {}
-        
-        req['InstrumentID'] = orderReq.symbol
-        req['LimitPrice'] = orderReq.price
-        req['VolumeTotalOriginal'] = orderReq.volume
+        req['InstrumentID'] = inst.name
+        req['LimitPrice'] = iorder.limit_price
+        req['VolumeTotalOriginal'] = iorder.volume
         
         # 下面如果由于传入的类型本接口不支持，则会返回空字符串
         try:
-            req['OrderPriceType'] = priceTypeMap[orderReq.priceType]
-            req['Direction'] = directionMap[orderReq.direction]
-            req['CombOffsetFlag'] = offsetMap[orderReq.offset]
+            req['OrderPriceType'] = priceTypeMap[iorder.price_type]
+            req['Direction'] = directionMap[iorder.direction]
+            req['CombOffsetFlag'] = offsetMap[iorder.action_type]
         except KeyError:
             return ''
             
-        req['OrderRef'] = str(self.orderRef)
+        req['OrderRef'] = str(iorder.order_ref)
         req['InvestorID'] = self.userID
         req['UserID'] = self.userID
         req['BrokerID'] = self.brokerID
-        
         req['CombHedgeFlag'] = defineDict['THOST_FTDC_HF_Speculation']       # 投机单
         req['ContingentCondition'] = defineDict['THOST_FTDC_CC_Immediately'] # 立即发单
         req['ForceCloseReason'] = defineDict['THOST_FTDC_FCC_NotForceClose'] # 非强平
         req['IsAutoSuspend'] = 0                                             # 非自动挂起
         req['TimeCondition'] = defineDict['THOST_FTDC_TC_GFD']               # 今日有效
         req['VolumeCondition'] = defineDict['THOST_FTDC_VC_AV']              # 任意成交量
-        req['MinVolume'] = 1                                                 # 最小成交量为1
-        
+        req['MinVolume'] = 1                                                 # 最小成交量为1       
+		
         self.reqOrderInsert(req, self.reqID)
-        
-        # 返回订单号（字符串），便于某些算法进行动态管理
-        vtOrderID = '.'.join([self.gatewayName, str(self.orderRef)])
-        return vtOrderID
     
     #----------------------------------------------------------------------
     def cancelOrder(self, cancelOrderReq):
         """撤单"""
+        inst = iorder.instrument
         self.reqID += 1
-
         req = {}
-        
-        req['InstrumentID'] = cancelOrderReq.symbol
-        req['ExchangeID'] = cancelOrderReq.exchange
-        req['OrderRef'] = cancelOrderReq.orderID
-        req['FrontID'] = cancelOrderReq.frontID
-        req['SessionID'] = cancelOrderReq.sessionID
-        
+        req['InstrumentID'] = iorder.instID
+        req['ExchangeID'] = inst.exchange
         req['ActionFlag'] = defineDict['THOST_FTDC_AF_Delete']
         req['BrokerID'] = self.brokerID
         req['InvestorID'] = self.userID
-        
+		
+		if len(iorder.sys_id) >0:
+			req['OrderSysID'] = iorder.sys_id
+		else:
+			req['OrderRef'] = str(iorder.order_ref)
+			req['FrontID'] = self.frontID
+			req['SessionID'] = self.sessionID
+
         self.reqOrderAction(req, self.reqID)
         
     #----------------------------------------------------------------------
