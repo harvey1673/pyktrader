@@ -8,26 +8,26 @@ from vtConstant import *
 
 
 ########################################################################
-class gateway(object):
+class Gateway(object):
     """交易接口"""
 
     #----------------------------------------------------------------------
     def __init__(self, agent, gatewayName):
         """Constructor"""
         self.gatewayName = gatewayName
-		self.agent = None
-		self.eventEngine = None
-		if agent != None:
-        	self.agent = agent
-			self.eventEngine = agent.event_engine
-		self.qry_account = {}
-		self.qry_pos = {}
-		
+        self.agent = None
+        self.eventEngine = None
+        if agent != None:
+            self.agent = agent
+            self.eventEngine = agent.event_engine
+        self.qry_account = {}
+        self.qry_pos = {}
+
     #----------------------------------------------------------------------
-	def event_subscribe(self):
-		pass
-		
-	def onTick(self, tick):
+    def event_subscribe(self):
+        pass
+
+    def onTick(self, tick):
         """市场行情推送"""
         # 通用事件
         event1 = Event(type=EVENT_TICK)
@@ -96,7 +96,7 @@ class gateway(object):
         """错误信息推送"""
         # 通用事件
         logContent = error.errorMsg
-		self.onLog(logContent, level = logging.WARNING)   
+        self.onLog(logContent, level = logging.WARNING)
         
     #----------------------------------------------------------------------
     def onLog(self, log_content, level = logging.DEBUG):
@@ -104,8 +104,8 @@ class gateway(object):
         # 通用事件
         event = Event(type=EVENT_LOG)
         event.dict['data'] = log_content
-		event.dict['gateway'] = self.gatewayName 
-		event.dict['level'] = level
+        event.dict['gateway'] = self.gatewayName
+        event.dict['level'] = level
         self.eventEngine.put(event)
         
     #----------------------------------------------------------------------
@@ -265,7 +265,7 @@ class VtOrderData(VtBaseData):
         self.orderID = EMPTY_STRING             # 订单编号
         self.order_ref = EMPTY_STRING           # 订单在vt系统中的唯一编号，通常是 Gateway名.订单编号
         self.orderSysID = EMPTY_STRING
-		
+
         # 报单相关
         self.direction = EMPTY_UNICODE          # 报单方向
         self.offset = EMPTY_UNICODE             # 报单开平仓
@@ -355,7 +355,7 @@ class VtLogData(VtBaseData):
         
         self.logTime = time.strftime('%X', time.localtime())    # 日志生成时间
         self.logContent = EMPTY_UNICODE                         # 日志信息
-		self.level = logging.DEBUG
+        self.level = logging.DEBUG
 
 
 ########################################################################

@@ -76,10 +76,10 @@ class CtpGateway(Gateway):
         self.mdConnected = False        # 行情API连接状态，登录完成后为True
         self.tdConnected = False        # 交易API连接状态
         self.qryEnabled = False         # 是否要启动循环查询
-		
-		self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
-		self.order_constraints = {	'total_submit': 2000, 'total_cancel': 2000, 'total_failure':500, \
-									'submit_limit': 200,  'cancel_limit': 200,  'failure_limit': 200 }
+
+        self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
+        self.order_constraints = {	'total_submit': 2000, 'total_cancel': 2000, 'total_failure':500, \
+                                    'submit_limit': 200,  'cancel_limit': 200,  'failure_limit': 200 }
         
     #----------------------------------------------------------------------
     def connect(self):
@@ -123,14 +123,14 @@ class CtpGateway(Gateway):
         """发单"""
         inst = iorder.instrument
         if not self.order_stats[inst.name]['status']:
-			iorder.on_cancel()
-			if iorder.trade_ref > 0:
-				event = Event(type=EVENT_ETRADEUPDATE)
-				event.dict['trade_ref'] = iorder.trade_ref
-				self.eventEngine.put(event)
-			logContent = 'Canceling order = %s for instrument = %s is disabled for trading due to position control' % (iorder.order_ref, inst.name)
+            iorder.on_cancel()
+            if iorder.trade_ref > 0:
+                event = Event(type=EVENT_ETRADEUPDATE)
+                event.dict['trade_ref'] = iorder.trade_ref
+                self.eventEngine.put(event)
+            logContent = 'Canceling order = %s for instrument = %s is disabled for trading due to position control' % (iorder.order_ref, inst.name)
             self.onLog( logContent, level = logging.WARNING)
-			return
+            return
         # 上期所不支持市价单
         if (iorder.price_type == OPT_MARKET_ORDER):
             if (inst.exchange == 'SHFE' or inst.exchange == 'CFFEX'):
@@ -139,15 +139,15 @@ class CtpGateway(Gateway):
                     iorder.limit_price = inst.up_limit
                 else:
                     iorder.limit_price = inst.down_limit
-				self.onLog('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, inst.name), level = logging.DEBUG)
+                self.onLog('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, inst.name), level = logging.DEBUG)
             else:
                 iorder.limit_price = 0.0
         iorder.status = order.OrderStatus.Sent		
-		self.trader.sendOrder(iorder)
+        self.trader.sendOrder(iorder)
         
-		self.order_stats[inst]['submit'] += 1
+        self.order_stats[inst]['submit'] += 1
         self.order_stats['total_submit'] += 1
-		
+
         if self.order_stats[inst.name]['submitted'] >= self.order_constraints['submit_limit']:
             self.order_stats[inst.name]['status'] = False
         if self.order_stats['total_submit'] >= self.order_constraints['total_submit']:
@@ -512,11 +512,11 @@ class CtpGateway(Gateway):
         if inst not in self.order_stats:
             self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
         self.order_stats[inst]['failure'] += 1
-		#self.order_stats['total_failure'] += 1
+        #self.order_stats['total_failure'] += 1
         if self.order_stats[inst]['failure'] >= self.order_constraints['failure_limit']:
             self.order_stats[inst]['status'] = False
             logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
-        self.onLog(logContent, level = log.level = logging.WARNING)
+        self.onLog(logContent, level = logging.WARNING)
 
     def err_order_action(self, event):
         '''
@@ -540,11 +540,11 @@ class CtpGateway(Gateway):
         if inst not in self.order_stats:
             self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
         self.order_stats[inst]['failure'] += 1
-		#self.order_stats['total_failure'] += 1
+        #self.order_stats['total_failure'] += 1
         if self.order_stats[inst]['failure'] >= self.order_constraints['failure_limit']:
             self.order_stats[inst]['status'] = False
             logContent += 'Failed order reaches the limit, disable instrument = %s' % inst
-        self.onLog(logContent, level = log.level = logging.WARNING)
+        self.onLog(logContent, level = logging.WARNING)
 
 ########################################################################
 class CtpMdApi(MdApi):
@@ -781,7 +781,7 @@ class CtpTdApi(TdApi):
         """服务器连接"""
         self.connectionStatus = True
         logContent = u'交易服务器连接成功'
-        self.gateway.onLog(log, level = logging.INFO)
+        self.gateway.onLog(logContent, level = logging.INFO)
         
         self.login()
     
@@ -793,7 +793,7 @@ class CtpTdApi(TdApi):
         self.gateway.tdConnected = False
 
         logContent = u'交易服务器连接断开'
-        self.gateway.onLog(log, level = logging.INFO)     
+        self.gateway.onLog(logContent, level = logging.INFO)
     
     #----------------------------------------------------------------------
     def onHeartBeatWarning(self, n):
@@ -814,7 +814,7 @@ class CtpTdApi(TdApi):
             self.sessionID = str(data['SessionID'])
             self.loginStatus = True
             logContent = u'交易服务器登录完成'
-            self.gateway.onLog(log, level = logging.INFO)    
+            self.gateway.onLog(logContent, level = logging.INFO)
             
             # 确认结算信息
             req = {}
@@ -843,7 +843,7 @@ class CtpTdApi(TdApi):
             self.loginStatus = False
             self.gateway.tdConnected = False
             logContent = u'交易服务器登出完成'
-            self.gateway.onLog(log, level = logging.INFO)    
+            self.gateway.onLog(logContent, level = logging.INFO)
                 
         # 否则，推送错误信息
         else:
@@ -955,7 +955,7 @@ class CtpTdApi(TdApi):
         # self.reqID += 1
         # self.reqQryInstrument({}, self.reqID)
         logContent = u'结算信息确认完成'
-        self.gateway.onLog(log, level = logging.INFO)
+        self.gateway.onLog(logContent, level = logging.INFO)
     
     #----------------------------------------------------------------------
     def onRspQryTradingAccount(self, data, error, n, last):
@@ -967,7 +967,7 @@ class CtpTdApi(TdApi):
             self.eventEngine.put(event)         
         else:
             logContent = u'资金账户查询回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
-            self.gateway.onLog(log, level = logging.DEBUG)
+            self.gateway.onLog(logContent, level = logging.DEBUG)
 
     #----------------------------------------------------------------------
     def onRspParkedOrderInsert(self, data, error, n, last):
@@ -1470,7 +1470,7 @@ class CtpTdApi(TdApi):
         self.reqID += 1
         self.orderRef = max(self.orderRef, iorder.order_ref)
         req = {}
-        req['InstrumentID'] = inst.name
+        req['InstrumentID'] = iorder.instrument.name
         req['LimitPrice'] = iorder.limit_price
         req['VolumeTotalOriginal'] = iorder.volume
         
@@ -1493,7 +1493,7 @@ class CtpTdApi(TdApi):
         req['TimeCondition'] = defineDict['THOST_FTDC_TC_GFD']               # 今日有效
         req['VolumeCondition'] = defineDict['THOST_FTDC_VC_AV']              # 任意成交量
         req['MinVolume'] = 1                                                 # 最小成交量为1       
-		
+
         self.reqOrderInsert(req, self.reqID)
     
     #----------------------------------------------------------------------
@@ -1507,13 +1507,13 @@ class CtpTdApi(TdApi):
         req['ActionFlag'] = defineDict['THOST_FTDC_AF_Delete']
         req['BrokerID'] = self.brokerID
         req['InvestorID'] = self.userID
-		
-		if len(iorder.sys_id) >0:
-			req['OrderSysID'] = iorder.sys_id
-		else:
-			req['OrderRef'] = str(iorder.order_ref)
-			req['FrontID'] = self.frontID
-			req['SessionID'] = self.sessionID
+
+        if len(iorder.sys_id) >0:
+            req['OrderSysID'] = iorder.sys_id
+        else:
+            req['OrderRef'] = str(iorder.order_ref)
+            req['FrontID'] = self.frontID
+            req['SessionID'] = self.sessionID
 
         self.reqOrderAction(req, self.reqID)
         
