@@ -1,4 +1,3 @@
-
 # encoding: UTF-8
 
 '''
@@ -188,34 +187,26 @@ class CtpGateway(Gateway):
         """初始化连续查询"""
         if self.qryEnabled:
             # 需要循环的查询函数列表
-            self.qryFunctionList = [self.qryAccount, self.qryPosition]
+            self.qry_commands = [self.qryAccount, self.qryPosition]
             
-            self.qryCount = 0           # 查询触发倒计时
-            self.qryTrigger = 2         # 查询触发点
-            self.qryNextFunction = 0    # 上次运行的查询函数索引
-            
-            self.startQuery()
+            self.qry_count = 0           # 查询触发倒计时
+            self.qry_trigger = 2         # 查询触发点
+            self.start_query()
     
     #----------------------------------------------------------------------
     def query(self, event):
         """注册到事件处理引擎上的查询函数"""
-        self.qryCount += 1
+        self.qry_count += 1
         
-        if self.qryCount > self.qryTrigger:
+        if self.qry_count > self.qry_trigger:
             # 清空倒计时
             self.qryCount = 0
-            
-            # 执行查询函数
-            function = self.qryFunctionList[self.qryNextFunction]
-            function()
-            
-            # 计算下次查询函数的索引，如果超过了列表长度，则重新设为0
-            self.qryNextFunction += 1
-            if self.qryNextFunction == len(self.qryFunctionList):
-                self.qryNextFunction = 0
+			if len(self.qry_commands)>0:
+            self.qry_commands[0]()
+            del self.qry_commands[0]            
     
     #----------------------------------------------------------------------
-    def startQuery(self):
+    def start_query(self):
         """启动连续查询"""
         self.eventEngine.register(EVENT_TIMER, self.query)
     
@@ -228,7 +219,7 @@ class CtpGateway(Gateway):
         self.eventEngine.register(EVENT_MARKETDATA+self.gatewayName, self.rsp_market_data)
         self.eventEngine.register(EVENT_QRYACCOUNT+self.gatewayName, self.rsp_qry_account)
         self.eventEngine.register(EVENT_QRYPOSITION+self.gatewayName, self.rsp_qry_position)
-        self.eventEngine.register(EVENT_QRYTRADE+self.gatewayName, self.rsp_qry_trade)
+        self.eventEngine.register(EVENT_QRYTRADE+self.gatewayName, self.rsp_qry_order)
         self.eventEngine.register(EVENT_QRYORDER+self.gatewayName, self.rsp_qry_order)
         self.eventEngine.register(EVENT_QRYINVESTOR+self.gatewayName, self.rsp_qry_investor)
         self.eventEngine.register(EVENT_QRYINSTRUMENT+self.gatewayName, self.rsp_qry_instrument)
@@ -534,9 +525,8 @@ class CtpGateway(Gateway):
                 event = Event(type=EVENT_ETRADEUPDATE)
                 event.dict['trade_ref'] = myorder.trade_ref
                 self.eventEngine.put(event)
-        #else:
-        #    self.qry_commands.append(self.fetch_order)
-        #    self.qry_commands.append(self.fetch_order)
+        else:
+			self.qry_commands.append(self.qryOrder)
         if inst not in self.order_stats:
             self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
         self.order_stats[inst]['failure'] += 1
@@ -563,7 +553,7 @@ class CtpMdApi(MdApi):
         self.connectionStatus = False       # 连接状态
         self.loginStatus = False            # 登录状态
         
-        self.subscribedSymbols = set()      # 已订阅合约代码        
+        self.instruments = []      # 已订阅合约代码        
         
         self.userID = EMPTY_STRING          # 账号
         self.password = EMPTY_STRING        # 密码
@@ -614,8 +604,8 @@ class CtpMdApi(MdApi):
             self.gateway.onLog(logContent, level = logging.INFO)
             
             # 重新订阅之前订阅的合约
-            for subscribeReq in self.subscribedSymbols:
-                self.subscribe(subscribeReq)
+            for instID in self.instruments:
+                self.subscribe(instID)
             trade_day_str = self.GetTradingDay()
             scur_day = int(self.agent.scur_day.strftime('%Y%m%d'))
             if len(trade_day_str) > 0:
@@ -728,9 +718,10 @@ class CtpMdApi(MdApi):
         """订阅合约"""
         # 这里的设计是，如果尚未登录就调用了订阅方法
         # 则先保存订阅请求，登录完成后会自动订阅
-        if self.loginStatus:
-            self.subscribeMarketData(str(subscribeReq.symbol))
-        self.subscribedSymbols.add(subscribeReq)   
+        if subscribeReq.symbol not in self.instruments:
+			self.instruments.append(subscribeReq.symbol) 
+			if self.loginStatus:
+				self.subscribeMarketData(str(subscribeReq.symbol))
         
     #----------------------------------------------------------------------
     def login(self):
@@ -1450,6 +1441,22 @@ class CtpTdApi(TdApi):
             self.reqUserLogin(req, self.reqID)   
         
     #----------------------------------------------------------------------
+	def qryOrder(self):
+		self.reqID += 1
+		req = {}
+        req['BrokerID'] = self.brokerID
+        req['InvestorID'] = self.userID
+        self.reqQryOrder(req, self.reqID)
+
+    #----------------------------------------------------------------------
+	def qryTrade(self):
+		self.reqID += 1
+		req = {}
+        req['BrokerID'] = self.brokerID
+        req['InvestorID'] = self.userID
+        self.reqQryTrade(req, self.reqID)
+		
+	#----------------------------------------------------------------------
     def qryAccount(self):
         """查询账户"""
         self.reqID += 1
