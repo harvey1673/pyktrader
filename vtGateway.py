@@ -1,9 +1,10 @@
 # encoding: UTF-8
 
 import time
-
+import workdays
+import json
+from misc import *
 from eventEngine import *
-
 from vtConstant import *
 
 
@@ -12,16 +13,30 @@ class Gateway(object):
     """交易接口"""
 
     #----------------------------------------------------------------------
-    def __init__(self, agent, gatewayName):
+    def __init__(self, agent = None, gatewayName = 'Gateway'):
         """Constructor"""
         self.gatewayName = gatewayName
-        self.agent = None
+        self.agent = agent
         self.eventEngine = None
         if agent != None:
-            self.agent = agent
             self.eventEngine = agent.event_engine
         self.qry_account = {}
         self.qry_pos = {}
+		self.ref2order = {}
+		self.folder = ''
+		self.positions = {}
+		self.eod_flag = False
+		self.acc_info = {	'available': 0, 
+							'locked_margin': 0, 
+							'used_margin': 0,
+							'margin_cap': 1500000,
+							'curr_capital': 1000000,
+							'prev_capital': 1000000,
+							'pnl_total': 0,
+							'yday_pnl': 0,
+							'tday_pnl': 0,
+							'available': 0,
+							}
 
     #----------------------------------------------------------------------
     def event_subscribe(self):
@@ -35,7 +50,7 @@ class Gateway(object):
         self.eventEngine.put(event1)
         
         # 特定合约代码的事件
-        event2 = Event(type=EVENT_TICK+tick.instID)
+        event2 = Event(type=EVENT_TICK + tick.instID)
         event2.dict['data'] = tick
         self.eventEngine.put(event2)
     
@@ -48,7 +63,7 @@ class Gateway(object):
         self.eventEngine.put(event1)
         
         # 特定合约的成交事件
-        event2 = Event(type=EVENT_TRADE+trade.instID)
+        event2 = Event(type=EVENT_TRADE + trade.order_ref)
         event2.dict['data'] = trade
         self.eventEngine.put(event2)        
     
@@ -61,7 +76,7 @@ class Gateway(object):
         self.eventEngine.put(event1)
         
         # 特定订单编号的事件
-        event2 = Event(type=EVENT_ORDER+order.vtOrderID)
+        event2 = Event(type=EVENT_ORDER + order.order_ref)
         event2.dict['data'] = order
         self.eventEngine.put(event2)
     
@@ -116,6 +131,72 @@ class Gateway(object):
         event1.dict['data'] = contract
         self.eventEngine.put(event1)        
     
+	def get_local_positions(self, tday):
+        pos_date = tday
+        logfile = self.folder + 'EOD_Pos_' + pos_date.strftime('%y%m%d')+'.csv'
+        if not os.path.isfile(logfile):
+            pos_date = workdays.workday(pos_date, -1, CHN_Holidays)
+            logfile = self.folder + 'EOD_Pos_' + pos_date.strftime('%y%m%d')+'.csv'
+            if not os.path.isfile(logfile):
+                print "no prior position file is found"
+				return False
+        else:
+            self.eod_flag = True
+        with open(logfile, 'rb') as f:
+            reader = csv.reader(f)
+            for idx, row in enumerate(reader):
+                if row[0] == 'capital':
+                    self.prev_capital = float(row[1])
+                elif row[0] == 'pos':
+                    inst = row[1]
+                    if inst in self.positions:
+                        self.positions[inst].pos_yday.long = int(row[2]) 
+                        self.positions[inst].pos_yday.short = int(row[3])
+        return True		
+	
+	def save_local_positions(self, tday):
+        file_prefix = self.folder
+        logfile = file_prefix + 'EOD_Pos_' + tday.strftime('%y%m%d')+'.csv'
+        if os.path.isfile(logfile):
+            return False
+        else:
+            with open(logfile,'wb') as log_file:
+                file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
+                for inst in self.positions:
+                    pos = self.positions[inst]
+                    pos.re_calc()
+                self.calc_margin()
+                file_writer.writerow(['capital', self.curr_capital])
+                for inst in self.positions:
+                    pos = self.positions[inst]
+					if abs(pos.curr_pos.long) + abs(pos.curr_pos.short) > 0:
+						file_writer.writerow(['pos', inst, pos.curr_pos.long, pos.curr_pos.short])
+            return True
+
+    def calc_margin(self):
+        locked_margin = 0
+        used_margin = 0
+        yday_pnl = 0
+        tday_pnl = 0
+        for instID in self.positions:
+            inst = self.agent.instruments[instID]
+            pos = self.positions[instID]
+            under_price = 0.0
+            if (inst.ptype == instrument.ProductType.Option):
+                under_price = self.agent.instruments[inst.underlying].price
+            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
+            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price) 
+            used_margin += pos.curr_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
+            used_margin += pos.curr_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price)
+            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close) * inst.multiple
+            tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
+            tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple            
+        self.acc_info['locked_margin'] = locked_margin
+        self.acc_info['used_margin'] = used_margin
+        self.acc_info['pnl_total'] = yday_pnl + tday_pnl
+        self.acc_info['curr_capital'] = self.prev_capital + self.pnl_total
+        self.acc_info['available'] = self.curr_capital - self.locked_margin
+		
     #----------------------------------------------------------------------
     def connect(self):
         """连接"""
@@ -262,9 +343,9 @@ class VtOrderData(VtBaseData):
         self.exchange = EMPTY_STRING            # 交易所代码
         self.instID = EMPTY_STRING            # 合约在vt系统中的唯一代码，通常是 合约代码.交易所代码
         
-        self.orderID = EMPTY_STRING             # 订单编号
-        self.order_ref = EMPTY_STRING           # 订单在vt系统中的唯一编号，通常是 Gateway名.订单编号
-        self.orderSysID = EMPTY_STRING
+        self.orderID = EMPTY_STRING             # 订单编号 local order ID
+        self.order_ref = EMPTY_STRING           # for Order class object ID
+        self.orderSysID = EMPTY_STRING			$ remote order ID
 
         # 报单相关
         self.direction = EMPTY_UNICODE          # 报单方向
