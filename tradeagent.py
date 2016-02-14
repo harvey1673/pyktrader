@@ -1,6 +1,7 @@
 #-*- coding:utf-8 -*-
 import workdays
 import time
+import json
 import copy
 import datetime
 import logging
@@ -25,8 +26,6 @@ MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
 
-def get_tick_id(dt):
-    return ((dt.hour+6)%24)*100000+dt.minute*1000+dt.second*10+dt.microsecond/100000
 
 def get_tick_num(dt):
     return ((dt.hour+6)%24)*36000+dt.minute*600+dt.second*10+dt.microsecond/100000
@@ -34,18 +33,6 @@ def get_tick_num(dt):
 def get_min_id(dt):
     return ((dt.hour+6)%24)*100+dt.minute
 
-def trading_hours(product, exch):
-    hrs = [(1500, 1615), (1630, 1730), (1930, 2100)]
-    if exch in ['SSE', 'SZE']:
-        hrs = [(1530, 1730), (1900, 2100)]
-    elif exch == 'CFFEX':
-        hrs = [(1515, 1730), (1900, 2115)]
-    else:
-        if product in night_session_markets:
-            night_idx = night_session_markets[product]
-            hrs = [night_trading_hrs[night_idx]] + hrs  
-    return hrs 
-                    
 class Agent(object):
  
     def __init__(self, name, trader, cuser, instruments, strategies = [], tday=datetime.date.today(), config_file = None):
@@ -55,40 +42,33 @@ class Agent(object):
         '''
         self.tick_id = 0
         self.timer_count = 0
-        folder = 
-        if 'folder' in config:
-            folder = config['folder']
-        daily_data_days = 60
-        if 'daily_data_days' in config:
-            daily_data_days = config['daily_data_days']   
-        min_data_days = 5
-        if 'min_data_days' in config:
-            min_data_days = config['min_data_days']        
-        live_trading = False
-        if 'live_trading' in config:
-            live_trading = config['live_trading']  
-        self.logger = logging.getLogger('.'.join([name, 'agent']))
         self.name = name
+        config = {}
+        with open(config_file, 'r') as infile:
+            config = json.load(infile)
         self.folder = config.get('folder', self.name + os.path.sep)
+        self.live_trading = config.get('live_trading', False)
+        self.logger = logging.getLogger('.'.join([name, 'agent']))
         self.initialized = False
-		self.eod_flag = False
+        self.eod_flag = False
         self.scur_day = tday
         #保存分钟数据标志
         self.save_flag = False  #默认不保存
-        self.live_trading = live_trading
         self.tick_db_table = config.get('tick_db_table', 'fut_tick')
         self.min_db_table  = config.get('min_db_table', 'fut_min')
         self.daily_db_table = config.get('daily_db_table', 'fut_daily')
         # market data
         self.daily_data_days = config.get('daily_data_days', 30)
         self.min_data_days = config.get('min_data_days', 5)
+
         self.instruments = {}
         self.tick_data  = {}
         self.day_data  = {}
         self.min_data  = {}
         self.cur_min = {}
         self.cur_day = {}  
-        self.positions= {} 
+
+        self.positions= {}
         self.day_data_func = {}
         self.min_data_func = {}
         self.inst2strat = {}            

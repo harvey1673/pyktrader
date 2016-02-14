@@ -201,9 +201,9 @@ class CtpGateway(Gateway):
         if self.qry_count > self.qry_trigger:
             # 清空倒计时
             self.qryCount = 0
-			if len(self.qry_commands)>0:
-            self.qry_commands[0]()
-            del self.qry_commands[0]            
+            if len(self.qry_commands)>0:
+                self.qry_commands[0]()
+                del self.qry_commands[0]
     
     #----------------------------------------------------------------------
     def start_query(self):
@@ -526,7 +526,7 @@ class CtpGateway(Gateway):
                 event.dict['trade_ref'] = myorder.trade_ref
                 self.eventEngine.put(event)
         else:
-			self.qry_commands.append(self.qryOrder)
+            self.qry_commands.append(self.qryOrder)
         if inst not in self.order_stats:
             self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
         self.order_stats[inst]['failure'] += 1
@@ -719,9 +719,9 @@ class CtpMdApi(MdApi):
         # 这里的设计是，如果尚未登录就调用了订阅方法
         # 则先保存订阅请求，登录完成后会自动订阅
         if subscribeReq.symbol not in self.instruments:
-			self.instruments.append(subscribeReq.symbol) 
-			if self.loginStatus:
-				self.subscribeMarketData(str(subscribeReq.symbol))
+            self.instruments.append(subscribeReq.symbol)
+            if self.loginStatus:
+                self.subscribeMarketData(str(subscribeReq.symbol))
         
     #----------------------------------------------------------------------
     def login(self):
@@ -1441,22 +1441,22 @@ class CtpTdApi(TdApi):
             self.reqUserLogin(req, self.reqID)   
         
     #----------------------------------------------------------------------
-	def qryOrder(self):
-		self.reqID += 1
-		req = {}
+    def qryOrder(self):
+        self.reqID += 1
+        req = {}
         req['BrokerID'] = self.brokerID
         req['InvestorID'] = self.userID
         self.reqQryOrder(req, self.reqID)
 
     #----------------------------------------------------------------------
-	def qryTrade(self):
-		self.reqID += 1
-		req = {}
+    def qryTrade(self):
+        self.reqID += 1
+        req = {}
         req['BrokerID'] = self.brokerID
         req['InvestorID'] = self.userID
         self.reqQryTrade(req, self.reqID)
-		
-	#----------------------------------------------------------------------
+
+    #----------------------------------------------------------------------
     def qryAccount(self):
         """查询账户"""
         self.reqID += 1

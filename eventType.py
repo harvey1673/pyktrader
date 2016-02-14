@@ -21,21 +21,30 @@ EVENT_TDDISCONNECTED = 'eTdDisconnected'
 EVENT_MARKETDATA = 'eMarketData'            # 行情推送事件
 EVENT_MARKETDATA_CONTRACT = 'eMarketData.'  # 特定合约的行情事件
 
+EVENT_TICK = 'eTick'            # 行情推送事件
+EVENT_CONTRACT = 'eContract'   #
+
+EVENT_RTNTRADE = 'eRtnTrade'                      # 成交推送事件
 EVENT_TRADE = 'eTrade'                      # 成交推送事件
 EVENT_TRADE_CONTRACT = 'eTrade.'            # 特定合约的成交事件
 
+EVENT_RTNORDER = 'eRtnOrder'                      # 报单推送事件
 EVENT_ORDER = 'eOrder'                      # 报单推送事件
 EVENT_ORDER_ORDERREF = 'eOrder.'            # 特定报单号的报单事件
 
 EVENT_POSITION = 'ePosition'                # 持仓查询回报事件
-
+EVENT_QRYPOSITION = 'eQryPosition'                # 持仓查询回报事件
 EVENT_INSTRUMENT = 'eInstrument'            # 合约查询回报事件
+EVENT_QRYINSTRUMENT = 'eQryInstrument'            # 合约查询回报事件
 EVENT_INVESTOR = 'eInvestor'                # 投资者查询回报事件
+EVENT_QRYINVESTOR = 'eQryInvestor'                # 投资者查询回报事件
+EVENT_QRYACCOUNT = 'eQryAccount'                  # 账户查询回报事件
 EVENT_ACCOUNT = 'eAccount'                  # 账户查询回报事件
 
 EVENT_MARGINRATE = 'eMarginRate'
 EVENT_DAYSWITCH = 'eDaySwitch'
 
+EVENT_ETRADEUPDATE = 'eTradeUpdate'
 EVENT_ERRORDERINSERT = 'eErrOrderInsert'
 EVENT_ERRORDERCANCEL = 'eErrOrderCancel'
 EVENT_QRYORDER = 'eQryOrder'   

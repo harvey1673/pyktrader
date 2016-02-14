@@ -1,6 +1,9 @@
 # encoding: UTF-8
 
 import time
+import os
+import instrument
+import csv
 import workdays
 import json
 from misc import *
@@ -22,21 +25,21 @@ class Gateway(object):
             self.eventEngine = agent.event_engine
         self.qry_account = {}
         self.qry_pos = {}
-		self.ref2order = {}
-		self.folder = ''
-		self.positions = {}
-		self.eod_flag = False
-		self.acc_info = {	'available': 0, 
-							'locked_margin': 0, 
-							'used_margin': 0,
-							'margin_cap': 1500000,
-							'curr_capital': 1000000,
-							'prev_capital': 1000000,
-							'pnl_total': 0,
-							'yday_pnl': 0,
-							'tday_pnl': 0,
-							'available': 0,
-							}
+        self.ref2order = {}
+        self.folder = ''
+        self.positions = {}
+        self.eod_flag = False
+        self.acc_info = {	'available': 0,
+                            'locked_margin': 0,
+                            'used_margin': 0,
+                            'margin_cap': 1500000,
+                            'curr_capital': 1000000,
+                            'prev_capital': 1000000,
+                            'pnl_total': 0,
+                            'yday_pnl': 0,
+                            'tday_pnl': 0,
+                            'available': 0,
+                            }
 
     #----------------------------------------------------------------------
     def event_subscribe(self):
@@ -131,7 +134,7 @@ class Gateway(object):
         event1.dict['data'] = contract
         self.eventEngine.put(event1)        
     
-	def get_local_positions(self, tday):
+    def get_local_positions(self, tday):
         pos_date = tday
         logfile = self.folder + 'EOD_Pos_' + pos_date.strftime('%y%m%d')+'.csv'
         if not os.path.isfile(logfile):
@@ -139,7 +142,7 @@ class Gateway(object):
             logfile = self.folder + 'EOD_Pos_' + pos_date.strftime('%y%m%d')+'.csv'
             if not os.path.isfile(logfile):
                 print "no prior position file is found"
-				return False
+                return False
         else:
             self.eod_flag = True
         with open(logfile, 'rb') as f:
@@ -153,8 +156,8 @@ class Gateway(object):
                         self.positions[inst].pos_yday.long = int(row[2]) 
                         self.positions[inst].pos_yday.short = int(row[3])
         return True		
-	
-	def save_local_positions(self, tday):
+
+    def save_local_positions(self, tday):
         file_prefix = self.folder
         logfile = file_prefix + 'EOD_Pos_' + tday.strftime('%y%m%d')+'.csv'
         if os.path.isfile(logfile):
@@ -169,8 +172,8 @@ class Gateway(object):
                 file_writer.writerow(['capital', self.curr_capital])
                 for inst in self.positions:
                     pos = self.positions[inst]
-					if abs(pos.curr_pos.long) + abs(pos.curr_pos.short) > 0:
-						file_writer.writerow(['pos', inst, pos.curr_pos.long, pos.curr_pos.short])
+                    if abs(pos.curr_pos.long) + abs(pos.curr_pos.short) > 0:
+                        file_writer.writerow(['pos', inst, pos.curr_pos.long, pos.curr_pos.short])
             return True
 
     def calc_margin(self):
@@ -196,7 +199,7 @@ class Gateway(object):
         self.acc_info['pnl_total'] = yday_pnl + tday_pnl
         self.acc_info['curr_capital'] = self.prev_capital + self.pnl_total
         self.acc_info['available'] = self.curr_capital - self.locked_margin
-		
+
     #----------------------------------------------------------------------
     def connect(self):
         """连接"""
@@ -345,7 +348,7 @@ class VtOrderData(VtBaseData):
         
         self.orderID = EMPTY_STRING             # 订单编号 local order ID
         self.order_ref = EMPTY_STRING           # for Order class object ID
-        self.orderSysID = EMPTY_STRING			$ remote order ID
+        self.orderSysID = EMPTY_STRING			# remote order ID
 
         # 报单相关
         self.direction = EMPTY_UNICODE          # 报单方向
