@@ -33,127 +33,22 @@ def get_tick_num(dt):
 def get_min_id(dt):
     return ((dt.hour+6)%24)*100+dt.minute
 
-class Agent(object):
- 
-    def __init__(self, name, trader, cuser, instruments, strategies = [], tday=datetime.date.today(), config_file = None):
-        '''
-            trader为交易对象
-            tday为当前日,为0则为当日
-        '''
-        self.tick_id = 0
-        self.timer_count = 0
-        self.name = name
-        config = {}
-        with open(config_file, 'r') as infile:
-            config = json.load(infile)
-        self.folder = config.get('folder', self.name + os.path.sep)
-        self.live_trading = config.get('live_trading', False)
-        self.logger = logging.getLogger('.'.join([name, 'agent']))
-        self.initialized = False
-        self.eod_flag = False
-        self.scur_day = tday
-        #保存分钟数据标志
-        self.save_flag = False  #默认不保存
-        self.tick_db_table = config.get('tick_db_table', 'fut_tick')
-        self.min_db_table  = config.get('min_db_table', 'fut_min')
-        self.daily_db_table = config.get('daily_db_table', 'fut_daily')
-        # market data
-        self.daily_data_days = config.get('daily_data_days', 30)
-        self.min_data_days = config.get('min_data_days', 5)
+class MktDataManagerMixin(object):
 
-        self.instruments = {}
+	def __init__(self, config):
         self.tick_data  = {}
         self.day_data  = {}
         self.min_data  = {}
         self.cur_min = {}
-        self.cur_day = {}  
-
-        self.positions= {}
+        self.cur_day = {}  		
         self.day_data_func = {}
         self.min_data_func = {}
-        self.inst2strat = {}            
-        self.add_instruments(instruments, self.scur_day)
-        self.strategies = {}
-        self.strat_list = []
-        for strat in strategies:
-            self.add_strategy(strat)
-        ###交易
-        self.ref2order = {}    #orderref==>order
-        self.ref2trade = {}
-        #self.queued_orders = []     #因为保证金原因等待发出的指令(合约、策略族、基准价、基准时间(到秒))
+        self.daily_data_days = config.get('daily_data_days', 25)
+        self.min_data_days = config.get('min_data_days', 1)
+        self.tick_db_table = config.get('tick_db_table', 'fut_tick')
+        self.min_db_table  = config.get('min_db_table', 'fut_min')
+        self.daily_db_table = config.get('daily_db_table', 'fut_daily')
 
-        self.eventEngine = EventEngine(1)
-        self.eventEngine.register(EVENT_LOG, self.log_handler)
-        self.eventEngine.register(EVENT_TICK, self.rtn_tick)
-        self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
-        self.cancel_protect_period = 200
-        self.market_order_tick_multiple = 5
-
-        self.init_init()    #init中的init,用于子类的处理
-
-    def set_capital_limit(self, margin_cap):
-        self.margin_cap = margin_cap
-
-    def log_handler(self, event):
-        lvl = event.dict['level']
-        self.logger.log(lvl, event.dict['log'])
-
-    def td_disconnected(self, event):
-        pass
-
-    def time_scheduler(self, event):
-        if self.timer_count % 1800:
-            if self.tick_id >= 2100000-10:
-                min_id = get_min_id(datetime.datetime.now())
-                if (min_id >= 2116) and (self.eod_flag == False):
-                    self.qry_commands.append(self.run_eod)
-
-    def add_instruments(self, names, tday):
-        add_names = [ name for name in names if name not in self.instruments]
-        for name in add_names:
-            if name.isdigit():
-                if len(name) == 8:
-                    self.instruments[name] = instrument.StockOptionInst(name)
-                else:
-                    self.instruments[name] = instrument.Stock(name)
-            else:
-                if len(name) > 10:
-                    self.instruments[name] = instrument.FutOptionInst(name)
-                else:
-                    self.instruments[name] = instrument.Future(name)
-            self.instruments[name].update_param(tday)                    
-            self.tick_data[name] = []
-            self.day_data[name]  = pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])
-            self.min_data[name]  = {1: pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}
-            self.cur_min[name]   = dict([(item, 0) for item in min_data_list])
-            self.cur_day[name]   = dict([(item, 0) for item in day_data_list])  
-            self.positions[name] = order.Position(self.instruments[name])
-            self.day_data_func[name] = []
-            self.min_data_func[name] = {}    
-            self.qry_pos[name]   = {'tday': [0, 0], 'yday': [0, 0]}
-            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-            self.cur_day[name]['date'] = tday
-            if name not in self.inst2strat:
-                self.inst2strat[name] = {}
-        
-    def add_strategy(self, strat):
-        self.add_instruments(strat.instIDs, self.scur_day)
-        for instID in strat.instIDs:
-            self.inst2strat[instID][strat.name] = []
-        self.strategies[strat.name] = strat
-        self.strat_list.append(strat.name)
-        strat.agent = self
-        strat.reset()
-                 
-    def initialize(self, event):
-        '''
-            初始化，如保证金率，账户资金等
-        '''
-        self.isSettlementInfoConfirmed = True
-        if not self.initialized:
-            for inst in self.instruments:
-                self.instruments[inst].update_param(self.scur_day)
-   
     def register_data_func(self, inst, freq, fobj):
         if inst not in self.day_data_func:
             self.day_data_func[inst] = []
@@ -234,7 +129,294 @@ class Agent(object):
                         for fobj in self.min_data_func[inst][m]:
                             ts = fobj.sfunc(df)
                             df[ts.name]= pd.Series(ts, index=df.index)
+
+    def get_min_id(self, tick_id):
+        return int(tick_id/1000)
+    
+    def conv_bar_id(self, min_id):
+        return int(min_id/100)*60 + min_id % 100 + 1
+            
+    def update_min_bar(self, tick):
+        inst = tick.instID
+        tick_dt = tick.timestamp
+        tick_id = tick.tick_id
+        tick_min = self.get_min_id(tick_id)
+        if (self.cur_min[inst]['min_id'] > tick_min):
+            return False
+        if (self.cur_day[inst]['open'] == 0.0):
+            self.cur_day[inst]['open'] = tick.price
+            self.logger.debug('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, tick.price, tick.tick_id))
+        self.cur_day[inst]['close'] = tick.price
+        self.cur_day[inst]['high']  = tick.high
+        self.cur_day[inst]['low']   = tick.low
+        self.cur_day[inst]['openInterest'] = tick.openInterest
+        self.cur_day[inst]['volume'] = tick.volume
+        self.cur_day[inst]['date'] = tick_dt.date()
+        if (tick_min == self.cur_min[inst]['min_id']):
+            self.tick_data[inst].append(tick)
+            self.cur_min[inst]['close'] = tick.price
+            if self.cur_min[inst]['high'] < tick.price:
+                self.cur_min[inst]['high'] = tick.price
+            if self.cur_min[inst]['low'] > tick.price:
+                self.cur_min[inst]['low'] = tick.price
+        else:
+            if (len(self.tick_data[inst]) > 0):
+                last_tick = self.tick_data[inst][-1]
+                self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+                self.cur_min[inst]['openInterest'] = last_tick.openInterest            
+                self.cur_min[inst]['volume'] = last_tick.volume
+				self.min_switch(inst)
+            self.tick_data[inst] = []
+			self.cur_min[inst] = {}
+            self.cur_min[inst]['open']  = tick.price
+            self.cur_min[inst]['close'] = tick.price
+            self.cur_min[inst]['high']  = tick.price
+            self.cur_min[inst]['low']   = tick.price
+            self.cur_min[inst]['min_id']  = tick_min
+            self.cur_min[inst]['openInterest'] = tick.openInterest
+            self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
+            if ((tick_min>0) and (tick.price>0)): 
+                self.tick_data[inst].append(tick)
+        return True
+    
+    def min_switch(self, inst):
+		if self.cur_min[inst]['close'] == 0:
+            return
+        if self.cur_min[inst]['low'] == 0:
+            self.cur_min[inst]['low'] = self.cur_min[inst]['close']
+        if self.cur_min[inst]['high'] >= MKT_DATA_BIGNUMBER - 1000:
+            self.cur_min[inst]['high'] = self.cur_min[inst]['close']
+        min_id = self.cur_min[inst]['min_id']
+        bar_id = self.conv_bar_id(min_id)
+        df = self.min_data[inst][1]
+        mysqlaccess.insert_min_data_to_df(df, self.cur_min[inst])
+        for m in self.min_data_func[inst]:
+            df_m = self.min_data[inst][m]
+            if m > 1 and bar_id % m == 0:
+                s_start = self.cur_min[inst]['datetime'] - datetime.timedelta(minutes=m)
+                slices = df[df.index>s_start]
+                new_data = {'open':slices['open'][0],'high':max(slices['high']), \
+                            'low': min(slices['low']),'close': slices['close'][-1],\
+                            'volume': sum(slices['volume']), 'min_id':slices['min_id'][0]}
+                df_m.loc[s_start] = pd.Series(new_data)
+            if bar_id % m == 0:
+                for fobj in self.min_data_func[inst][m]:
+                    fobj.rfunc(df_m)
+		event = Event(type=EVENT_MIN_BAR, priority = 10)
+		event.dict['min_id'] = min_id
+		event.dict['bar_id'] = bar_id 
+		event.dict['instID'] = inst
+		self.eventEngine.put(event)				
+        if self.save_flag:
+			event1 = Event(type=EVENT_DB_WRITE, priority = 500)
+			event1.dict['data'] = self.tick_data[inst]
+			event1.dict['type'] = EVENT_TICK
+			event1.dict['instID'] = inst
+			self.eventEngine.put(event1)			
+			event2 = Event(type=EVENT_DB_WRITE, priority = 500)
+			event2.dict['data'] = self.cur_min[inst]
+			event2.dict['type'] = EVENT_MIN_BAR
+			event2.dict['instID'] = inst
+			self.eventEngine.put(event2)
         return
+
+    def day_finalize(self, event):
+		insts = event.dict['data']
+        for inst in insts:
+            if not self.instruments[inst].day_finalized:
+                self.instruments[inst].day_finalized = True
+                if (len(self.tick_data[inst]) > 0) :
+                    last_tick = self.tick_data[inst][-1]
+                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
+                    self.min_switch(inst) 
+                if (self.cur_day[inst]['close']>0):
+                    mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
+                    df = self.day_data[inst]
+                    for fobj in self.day_data_func[inst]:
+                        fobj.rfunc(df)
+                    if self.save_flag:
+						event = Event(type=EVENT_DB_WRITE, priority = 500)
+						event.dict['data'] = self.cur_day[inst]
+						event.dict['type'] = EVENT_MKTDATA_EOD
+						event.dict['instID'] = inst
+						self.eventEngine.put(event)
+		
+	def write_mkt_data(self, event):
+		inst = event.dict['instID']
+		type = event.dict['type']
+		data = event.dict['data']
+		if type == EVENT_MIN_BAR:
+			mysqlaccess.insert_min_data(inst, data, dbtable = self.min_db_table)
+		elif type == EVENT_TICK:
+			mysqlaccess.bulkinsert_tick_data(inst, data, dbtable = self.tick_db_table)
+		elif type == EVENT_MKTDATA_EOD:
+			mysqlaccess.insert_daily_data(inst, data, dbtable = self.daily_db_table)
+		else:
+			pass
+			
+	def register_event_handler(self):
+		self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
+		self.eventEngine.register(EVENT_MKTDATA_EOD, self.day_finalize)
+	
+class Agent(MktDataMixin):
+ 
+    def __init__(self, name, trader, cuser, instruments, strategies = [], tday=datetime.date.today(), config_file = None):
+        '''
+            trader为交易对象
+            tday为当前日,为0则为当日
+        '''
+        self.tick_id = 0
+        self.timer_count = 0
+        self.name = name
+        config = {}
+        with open(config_file, 'r') as infile:
+            config = json.load(infile)
+        self.folder = config.get('folder', self.name + os.path.sep)
+        self.live_trading = config.get('live_trading', False)
+        self.logger = logging.getLogger('.'.join([name, 'agent']))
+        
+		self.initialized = False
+        self.eod_flag = False
+        self.scur_day = tday
+
+        self.instruments = {}
+        self.positions = {}
+		self.gateways = {}
+		gateway_dict = config.get('gateway', {})
+		for gateway_name in gateway_dict:
+			gway_class = eval(gateway_dict[gateway_name]['class'])
+			self.add_gateway(gway_class, gateway_name)
+		
+        self.inst2strat = {}            
+        self.strat_list = []
+		self.strategies = {}
+		
+        strat_files = config.get('strat_files', [])
+		for sfile in strat_files:
+			strat_conf = json.load(sfile)
+			strat_class = strat_conf['class']
+			strat_args  = strat_conf['args']
+			strat = strat_class(**strat_args)
+			self.strat_list.append(strat)
+			strat_name = strat.name
+			self.strategies[strat_name] = strat
+
+        ###交易
+        self.ref2order = {}    #orderref==>order
+        self.ref2trade = {}
+		self.event_period = config.get('event_period', 1.0)
+        self.eventEngine = EventEngine(self.event_period)
+        self.cancel_protect_period = config.get('cancel_protect_period', 200)
+        self.market_order_tick_multiple = config.get('market_order_tick_multiple', 5)
+		self.register_event_handler()
+        self.init_init()    #init中的init,用于子类的处理
+
+	def register_event_handler(self):
+		super(Agent, self).register_event_handler()
+        self.eventEngine.register(EVENT_LOG, self.log_handler)
+        self.eventEngine.register(EVENT_TICK, self.rtn_tick)
+        self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
+		
+	def restart(self):
+		self.add_instruments(instruments, self.scur_day)
+        for strat in strategies:
+            self.add_strategy(strat)
+
+	def add_gateway(self, gateway, gateway_name=None):
+        """创建接口"""
+        self.gateways[gateway_name] = gateway(self.eventEngine, gateway_name)
+
+    def connect(self, gateway_name):
+        """连接特定名称的接口"""
+        if gateway_name in self.gateways:
+            gateway = self.gateways[gateway_name]
+            gateway.connect()
+        else:
+            self.logger.warning(u'接口不存在：%s' %gatewayName)
+        
+    #----------------------------------------------------------------------
+    def subscribe(self, subscribeReq, gateway_name):
+        """订阅特定接口的行情"""
+        if gateway_name in self.gateways:
+            gateway = self.gateways[gateway_name]
+            gateway.subscribe(subscribeReq)
+        else:
+            self.logger.warning(u'接口不存在：%s' %gateway_name)        
+        
+    #----------------------------------------------------------------------
+    def send_order(self, iorder, gateway_name):
+        """对特定接口发单"""
+        if gateway_name in self.gateways:
+            gateway = self.gateways[gateway_name]
+            return gateway.sendOrder(iorder)
+        else:
+            self.logger.warning(u'接口不存在：%s' % gateway_name)        
+    
+    #----------------------------------------------------------------------
+    def cancel_order(self, iorder, gateway_name):
+        """对特定接口撤单"""
+        if gateway_name in self.gateways:
+            gateway = self.gateways[gateway_name]
+            gateway.cancelOrder(iorder)
+        else:
+            self.logger.warning(u'接口不存在：%s' % gateway_name)   
+			
+    def set_capital_limit(self, margin_cap):
+        self.margin_cap = margin_cap
+
+    def log_handler(self, event):
+        lvl = event.dict['level']
+        self.logger.log(lvl, event.dict['log'])
+
+    def time_scheduler(self, event):
+        if self.timer_count % 1800:
+            if self.tick_id >= 2100000-10:
+                min_id = get_min_id(datetime.datetime.now())
+                if (min_id >= 2116) and (self.eod_flag == False):
+                    self.qry_commands.append(self.run_eod)
+
+    def add_instruments(self, names, tday):
+        add_names = [ name for name in names if name not in self.instruments]
+        for name in add_names:
+            if name.isdigit():
+                if len(name) == 8:
+                    self.instruments[name] = instrument.StockOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Stock(name)
+            else:
+                if len(name) > 10:
+                    self.instruments[name] = instrument.FutOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Future(name)
+            self.instruments[name].update_param(tday)                    
+
+            self.positions[name] = order.Position(self.instruments[name])
+            self.day_data_func[name] = []
+            self.min_data_func[name] = {}    
+            self.qry_pos[name]   = {'tday': [0, 0], 'yday': [0, 0]}
+            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+            self.cur_day[name]['date'] = tday
+            if name not in self.inst2strat:
+                self.inst2strat[name] = {}
+        
+    def add_strategy(self, strat):
+        self.add_instruments(strat.instIDs, self.scur_day)
+        for instID in strat.instIDs:
+            self.inst2strat[instID][strat.name] = []
+        self.strategies[strat.name] = strat
+        self.strat_list.append(strat.name)
+        strat.agent = self
+        strat.reset()
+                 
+    def initialize(self, event):
+        '''
+            初始化，如保证金率，账户资金等
+        '''
+        self.isSettlementInfoConfirmed = True
+        if not self.initialized:
+            for inst in self.instruments:
+                self.instruments[inst].update_param(self.scur_day)
 
     def resume(self):
         if self.initialized:
@@ -320,132 +502,6 @@ class Agent(object):
             file_prefix = self.folder
             order.save_order_list(self.scur_day, self.ref2order, file_prefix)
             order.save_trade_list(self.scur_day, self.ref2trade, file_prefix)
-        return
-    
-    def update_instrument(self, tick):      
-        inst = tick.instID    
-        curr_tick = tick.tick_id
-        self.instruments[inst].up_limit   = tick.upLimit
-        self.instruments[inst].down_limit = tick.downLimit        
-        tick.askPrice1 = min(tick.askPrice1, tick.upLimit)
-        tick.bidPrice1 = max(tick.bidPrice1, tick.downLimit)
-        self.instruments[inst].last_update = curr_tick
-        self.instruments[inst].bid_price1 = tick.bidPrice1
-        self.instruments[inst].ask_price1 = tick.askPrice1
-        self.instruments[inst].mid_price = (tick.askPrice1 + tick.bidPrice1)/2.0
-        self.instruments[inst].bid_vol1   = tick.bidVol1
-        self.instruments[inst].ask_vol1   = tick.askVol1
-        self.instruments[inst].open_interest = tick.openInterest
-        last_volume = self.instruments[inst].volume
-        #self.logger.debug(u'MD:收到行情，inst=%s,time=%s，volume=%s,last_volume=%s' % (dp.InstrumentID,dp.UpdateTime,dp.Volume, last_volume))
-        if tick.volume > last_volume:
-            self.instruments[inst].price  = tick.price
-            self.instruments[inst].volume = tick.volume
-            self.instruments[inst].last_traded = curr_tick    
-        return True
-    
-    def get_bar_id(self, tick_id):
-        return int(tick_id/1000)
-    
-    def conv_bar_id(self, bar_id):
-        return int(bar_id/100)*60 + bar_id % 100 + 1
-            
-    def update_min_bar(self, tick):
-        inst = tick.instID
-        tick_dt = tick.timestamp
-        tick_id = tick.tick_id
-        tick_min = self.get_bar_id(tick_id)
-        if (self.cur_min[inst]['min_id'] > tick_min):
-            return False
-        if (tick_min == self.cur_min[inst]['min_id']):
-            self.tick_data[inst].append(tick)
-            self.cur_min[inst]['close'] = tick.price
-            if self.cur_min[inst]['high'] < tick.price:
-                self.cur_min[inst]['high'] = tick.price
-            if self.cur_min[inst]['low'] > tick.price:
-                self.cur_min[inst]['low'] = tick.price
-        else:
-            if (len(self.tick_data[inst]) > 0):
-                last_tick = self.tick_data[inst][-1]
-                self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                if (self.instruments[inst].ptype != instrument.ProductType.Option):
-                    self.min_switch(inst)
-                else:
-                    if self.save_flag:
-                        mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)              
-                self.cur_min[inst]['volume'] = last_tick.volume                                
-            self.tick_data[inst] = []
-            self.cur_min[inst]['open']  = tick.price
-            self.cur_min[inst]['close'] = tick.price
-            self.cur_min[inst]['high']  = tick.price
-            self.cur_min[inst]['low']   = tick.price
-            self.cur_min[inst]['min_id']  = tick_min
-            self.cur_min[inst]['openInterest'] = tick.openInterest
-            self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
-            if ((tick_min>0) and (tick.price>0)): 
-                self.tick_data[inst].append(tick)
-
-        for strat_name in self.inst2strat[inst]:
-            self.strategies[strat_name].run_tick(tick)
-        return True  
-    
-    def min_switch(self, inst):
-        if self.cur_min[inst]['close'] == 0:
-            return
-        if self.cur_min[inst]['low'] == 0:
-            self.cur_min[inst]['low'] = self.cur_min[inst]['close']
-        if self.cur_min[inst]['high'] >= MKT_DATA_BIGNUMBER - 1000:
-            self.cur_min[inst]['high'] = self.cur_min[inst]['close']
-        min_id = self.cur_min[inst]['min_id']
-        min_sn = self.conv_bar_id(min_id)
-        df = self.min_data[inst][1]
-        mysqlaccess.insert_min_data_to_df(df, self.cur_min[inst])
-        for m in self.min_data_func[inst]:
-            df_m = self.min_data[inst][m]
-            if m > 1 and min_sn % m == 0:
-                s_start = self.cur_min[inst]['datetime'] - datetime.timedelta(minutes=m)
-                slices = df[df.index>s_start]
-                new_data = {'open':slices['open'][0],'high':max(slices['high']), \
-                            'low': min(slices['low']),'close': slices['close'][-1],\
-                            'volume': sum(slices['volume']), 'min_id':slices['min_id'][0]}
-                df_m.loc[s_start] = pd.Series(new_data)
-                #print df_m.loc[s_start]
-            if min_sn % m == 0:
-                for fobj in self.min_data_func[inst][m]:
-                    fobj.rfunc(df_m)
-        if self.save_flag:
-            #print 'insert min data inst = %s, min = %s' % (inst, min_id)
-            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)
-            mysqlaccess.insert_min_data(inst, self.cur_min[inst], dbtable = self.min_db_table)        
-        for strat_name in self.inst2strat[inst]:
-            for m in self.inst2strat[inst][strat_name]:
-                if min_sn % m == 0:
-                    self.strategies[strat_name].run_min(inst, m)
-        return
-        
-    def day_finalize(self, insts):        
-        for inst in insts:
-            if not self.instruments[inst].day_finalized:
-                self.instruments[inst].day_finalized = True
-                self.logger.debug('finalizing the day for market data = %s, scur_date=%s' % (inst, self.scur_day))
-                if (len(self.tick_data[inst]) > 0) :
-                    last_tick = self.tick_data[inst][-1]
-                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
-                        self.min_switch(inst)
-                    else:
-                        if self.save_flag:
-                            mysqlaccess.bulkinsert_tick_data(inst, self.tick_data[inst], dbtable = self.tick_db_table)  
-                if (self.cur_day[inst]['close']>0):
-                    mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
-                    df = self.day_data[inst]
-                    if (self.instruments[inst].ptype != instrument.ProductType.Option):
-                        for fobj in self.day_data_func[inst]:
-                            fobj.rfunc(df)
-                    if self.save_flag:
-                        mysqlaccess.insert_daily_data(inst, self.cur_day[inst], dbtable = self.daily_db_table)
         return
     
     def run_eod(self):
@@ -538,39 +594,48 @@ class Agent(object):
         self.eventEngine.register(EVENT_QRYORDER, self.rsp_qry_order)
         self.eventEngine.register(EVENT_QRYTRADE, self.rsp_qry_trade)
         self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
-        #self.eventEngine.register(EVENT_TDDISCONNECTED, self.td_disconnected)
         self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
 
-    def add_mdapi(self, api):
-        self.mdapis.append(api)
-
-    def set_spi(self,spi):
-        self.spi = spi
-    
-    def rtn_tick(self, event):#行情处理主循环
+    def update_instrument(self, tick):      
+        inst = tick.instID    
+        curr_tick = tick.tick_id
+        self.instruments[inst].up_limit   = tick.upLimit
+        self.instruments[inst].down_limit = tick.downLimit        
+        tick.askPrice1 = min(tick.askPrice1, tick.upLimit)
+        tick.bidPrice1 = max(tick.bidPrice1, tick.downLimit)
+        self.instruments[inst].last_update = curr_tick
+        self.instruments[inst].bid_price1 = tick.bidPrice1
+        self.instruments[inst].ask_price1 = tick.askPrice1
+        self.instruments[inst].mid_price = (tick.askPrice1 + tick.bidPrice1)/2.0
+        self.instruments[inst].bid_vol1   = tick.bidVol1
+        self.instruments[inst].ask_vol1   = tick.askVol1
+        self.instruments[inst].open_interest = tick.openInterest
+        last_volume = self.instruments[inst].volume       
+        if tick.volume > last_volume:
+            self.instruments[inst].price  = tick.price
+            self.instruments[inst].volume = tick.volume
+            self.instruments[inst].last_traded = curr_tick
+		
+    def run_tick(self, event):#行情处理主循环
         ctick = event.dict['data']
         if self.live_trading:
             now_ticknum = get_tick_num(datetime.datetime.now())
             cur_ticknum = get_tick_num(ctick.timestamp)
             if abs(cur_ticknum - now_ticknum)> MAX_REALTIME_DIFF:
                 self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, ticknum= %s, now_ticknum=%s' % (ctick.instID, cur_ticknum, now_ticknum))
-                return 0
-            
-        if (not self.update_instrument(ctick)):
-            return 0
-        inst = ctick.instID
-        if (self.cur_day[inst]['open'] == 0.0):
-            self.cur_day[inst]['open'] = ctick.price
-            self.logger.debug('open data is received for inst=%s, price = %s, tick_id = %s' % (inst, ctick.price, ctick.tick_id))
-        self.cur_day[inst]['close'] = ctick.price
-        self.cur_day[inst]['high']  = ctick.high
-        self.cur_day[inst]['low']   = ctick.low
-        self.cur_day[inst]['openInterest'] = ctick.openInterest
-        self.cur_day[inst]['volume'] = ctick.volume
-        self.cur_day[inst]['date'] = ctick.timestamp.date()
-        if( not self.update_min_bar(ctick)):
-            return 0
-        return 1
+        self.update_instrument(ctick)
+        if self.update_min_bar(ctick):
+			for strat_name in self.inst2strat[inst]:
+				self.strategies[strat_name].run_tick(tick)
+	
+	def run_min(self, event):
+		min_id = event.dict['min_id']
+		bar_id = event.dict['bar_id'] 
+		inst = event.dict['instID']
+        for strat_name in self.inst2strat[inst]:
+            for m in self.inst2strat[inst][strat_name]:
+                if bar_id % m == 0:
+                    self.strategies[strat_name].run_min(inst, m)
 
     def process_trade(self, exec_trade):
         all_orders = {}
@@ -728,7 +793,6 @@ class Agent(object):
             for order_ref in pending_orders:
                 self.send_order(self.ref2order[order_ref])
             self.save_state()
-    
 
     def trade_update(self, myorder):
         trade_ref = myorder.trade_ref
