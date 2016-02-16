@@ -33,9 +33,9 @@ def get_tick_num(dt):
 def get_min_id(dt):
     return ((dt.hour+6)%24)*100+dt.minute
 
-class MktDataManagerMixin(object):
+class MktDataMixin(object):
 
-	def __init__(self, config):
+    def __init__(self, config):
         self.tick_data  = {}
         self.day_data  = {}
         self.min_data  = {}
@@ -165,9 +165,9 @@ class MktDataManagerMixin(object):
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
                 self.cur_min[inst]['openInterest'] = last_tick.openInterest            
                 self.cur_min[inst]['volume'] = last_tick.volume
-				self.min_switch(inst)
+                self.min_switch(inst)
             self.tick_data[inst] = []
-			self.cur_min[inst] = {}
+            self.cur_min[inst] = {}
             self.cur_min[inst]['open']  = tick.price
             self.cur_min[inst]['close'] = tick.price
             self.cur_min[inst]['high']  = tick.price
@@ -180,7 +180,7 @@ class MktDataManagerMixin(object):
         return True
     
     def min_switch(self, inst):
-		if self.cur_min[inst]['close'] == 0:
+        if self.cur_min[inst]['close'] == 0:
             return
         if self.cur_min[inst]['low'] == 0:
             self.cur_min[inst]['low'] = self.cur_min[inst]['close']
@@ -202,26 +202,26 @@ class MktDataManagerMixin(object):
             if bar_id % m == 0:
                 for fobj in self.min_data_func[inst][m]:
                     fobj.rfunc(df_m)
-		event = Event(type=EVENT_MIN_BAR, priority = 10)
-		event.dict['min_id'] = min_id
-		event.dict['bar_id'] = bar_id 
-		event.dict['instID'] = inst
-		self.eventEngine.put(event)				
+        event = Event(type=EVENT_MIN_BAR, priority = 10)
+        event.dict['min_id'] = min_id
+        event.dict['bar_id'] = bar_id
+        event.dict['instID'] = inst
+        self.eventEngine.put(event)
         if self.save_flag:
-			event1 = Event(type=EVENT_DB_WRITE, priority = 500)
-			event1.dict['data'] = self.tick_data[inst]
-			event1.dict['type'] = EVENT_TICK
-			event1.dict['instID'] = inst
-			self.eventEngine.put(event1)			
-			event2 = Event(type=EVENT_DB_WRITE, priority = 500)
-			event2.dict['data'] = self.cur_min[inst]
-			event2.dict['type'] = EVENT_MIN_BAR
-			event2.dict['instID'] = inst
-			self.eventEngine.put(event2)
+            event1 = Event(type=EVENT_DB_WRITE, priority = 500)
+            event1.dict['data'] = self.tick_data[inst]
+            event1.dict['type'] = EVENT_TICK
+            event1.dict['instID'] = inst
+            self.eventEngine.put(event1)
+            event2 = Event(type=EVENT_DB_WRITE, priority = 500)
+            event2.dict['data'] = self.cur_min[inst]
+            event2.dict['type'] = EVENT_MIN_BAR
+            event2.dict['instID'] = inst
+            self.eventEngine.put(event2)
         return
 
     def day_finalize(self, event):
-		insts = event.dict['data']
+        insts = event.dict['data']
         for inst in insts:
             if not self.instruments[inst].day_finalized:
                 self.instruments[inst].day_finalized = True
@@ -236,29 +236,29 @@ class MktDataManagerMixin(object):
                     for fobj in self.day_data_func[inst]:
                         fobj.rfunc(df)
                     if self.save_flag:
-						event = Event(type=EVENT_DB_WRITE, priority = 500)
-						event.dict['data'] = self.cur_day[inst]
-						event.dict['type'] = EVENT_MKTDATA_EOD
-						event.dict['instID'] = inst
-						self.eventEngine.put(event)
-		
-	def write_mkt_data(self, event):
-		inst = event.dict['instID']
-		type = event.dict['type']
-		data = event.dict['data']
-		if type == EVENT_MIN_BAR:
-			mysqlaccess.insert_min_data(inst, data, dbtable = self.min_db_table)
-		elif type == EVENT_TICK:
-			mysqlaccess.bulkinsert_tick_data(inst, data, dbtable = self.tick_db_table)
-		elif type == EVENT_MKTDATA_EOD:
-			mysqlaccess.insert_daily_data(inst, data, dbtable = self.daily_db_table)
-		else:
-			pass
-			
-	def register_event_handler(self):
-		self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
-		self.eventEngine.register(EVENT_MKTDATA_EOD, self.day_finalize)
-	
+                        event = Event(type=EVENT_DB_WRITE, priority = 500)
+                        event.dict['data'] = self.cur_day[inst]
+                        event.dict['type'] = EVENT_MKTDATA_EOD
+                        event.dict['instID'] = inst
+                        self.eventEngine.put(event)
+
+    def write_mkt_data(self, event):
+        inst = event.dict['instID']
+        type = event.dict['type']
+        data = event.dict['data']
+        if type == EVENT_MIN_BAR:
+            mysqlaccess.insert_min_data(inst, data, dbtable = self.min_db_table)
+        elif type == EVENT_TICK:
+            mysqlaccess.bulkinsert_tick_data(inst, data, dbtable = self.tick_db_table)
+        elif type == EVENT_MKTDATA_EOD:
+            mysqlaccess.insert_daily_data(inst, data, dbtable = self.daily_db_table)
+        else:
+            pass
+
+    def register_event_handler(self):
+        self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
+        self.eventEngine.register(EVENT_MKTDATA_EOD, self.day_finalize)
+
 class Agent(MktDataMixin):
  
     def __init__(self, name, trader, cuser, instruments, strategies = [], tday=datetime.date.today(), config_file = None):
@@ -276,54 +276,82 @@ class Agent(MktDataMixin):
         self.live_trading = config.get('live_trading', False)
         self.logger = logging.getLogger('.'.join([name, 'agent']))
         
-		self.initialized = False
+        self.initialized = False
         self.eod_flag = False
         self.scur_day = tday
 
         self.instruments = {}
         self.positions = {}
-		self.gateways = {}
-		gateway_dict = config.get('gateway', {})
-		for gateway_name in gateway_dict:
-			gway_class = eval(gateway_dict[gateway_name]['class'])
-			self.add_gateway(gway_class, gateway_name)
-		
+        self.gateways = {}
+        gateway_dict = config.get('gateway', {})
+        for gateway_name in gateway_dict:
+            gway_class = eval(gateway_dict[gateway_name]['class'])
+            self.add_gateway(gway_class, gateway_name)
+
         self.inst2strat = {}            
         self.strat_list = []
-		self.strategies = {}
-		
+        self.strategies = {}
+
         strat_files = config.get('strat_files', [])
-		for sfile in strat_files:
-			strat_conf = json.load(sfile)
-			strat_class = strat_conf['class']
-			strat_args  = strat_conf['args']
-			strat = strat_class(**strat_args)
-			self.strat_list.append(strat)
-			strat_name = strat.name
-			self.strategies[strat_name] = strat
+        for sfile in strat_files:
+            strat_conf = json.load(sfile)
+            strat_class = strat_conf['class']
+            strat_args  = strat_conf['args']
+            strat = strat_class(**strat_args)
+            self.strat_list.append(strat)
+            strat_name = strat.name
+            self.strategies[strat_name] = strat
 
         ###交易
         self.ref2order = {}    #orderref==>order
         self.ref2trade = {}
-		self.event_period = config.get('event_period', 1.0)
+        self.event_period = config.get('event_period', 1.0)
         self.eventEngine = EventEngine(self.event_period)
         self.cancel_protect_period = config.get('cancel_protect_period', 200)
         self.market_order_tick_multiple = config.get('market_order_tick_multiple', 5)
-		self.register_event_handler()
+        self.register_event_handler()
         self.init_init()    #init中的init,用于子类的处理
 
-	def register_event_handler(self):
-		super(Agent, self).register_event_handler()
+    def register_event_handler(self):
+        super(Agent, self).register_event_handler()
         self.eventEngine.register(EVENT_LOG, self.log_handler)
         self.eventEngine.register(EVENT_TICK, self.rtn_tick)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
-		
-	def restart(self):
-		self.add_instruments(instruments, self.scur_day)
-        for strat in strategies:
-            self.add_strategy(strat)
 
-	def add_gateway(self, gateway, gateway_name=None):
+    def add_instruments(self, names, tday):
+        add_names = [ name for name in names if name not in self.instruments]
+        for name in add_names:
+            if name.isdigit():
+                if len(name) == 8:
+                    self.instruments[name] = instrument.StockOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Stock(name)
+            else:
+                if len(name) > 10:
+                    self.instruments[name] = instrument.FutOptionInst(name)
+                else:
+                    self.instruments[name] = instrument.Future(name)
+            self.instruments[name].update_param(tday)
+
+            self.positions[name] = order.Position(self.instruments[name])
+            self.day_data_func[name] = []
+            self.min_data_func[name] = {}
+            self.qry_pos[name]   = {'tday': [0, 0], 'yday': [0, 0]}
+            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+            self.cur_day[name]['date'] = tday
+            if name not in self.inst2strat:
+                self.inst2strat[name] = {}
+
+    def add_strategy(self, strat):
+        self.add_instruments(strat.instIDs, self.scur_day)
+        for instID in strat.instIDs:
+            self.inst2strat[instID][strat.name] = []
+        self.strategies[strat.name] = strat
+        self.strat_list.append(strat.name)
+        strat.agent = self
+        strat.reset()
+
+    def add_gateway(self, gateway, gateway_name=None):
         """创建接口"""
         self.gateways[gateway_name] = gateway(self.eventEngine, gateway_name)
 
@@ -361,7 +389,7 @@ class Agent(MktDataMixin):
             gateway.cancelOrder(iorder)
         else:
             self.logger.warning(u'接口不存在：%s' % gateway_name)   
-			
+
     def set_capital_limit(self, margin_cap):
         self.margin_cap = margin_cap
 
@@ -375,39 +403,6 @@ class Agent(MktDataMixin):
                 min_id = get_min_id(datetime.datetime.now())
                 if (min_id >= 2116) and (self.eod_flag == False):
                     self.qry_commands.append(self.run_eod)
-
-    def add_instruments(self, names, tday):
-        add_names = [ name for name in names if name not in self.instruments]
-        for name in add_names:
-            if name.isdigit():
-                if len(name) == 8:
-                    self.instruments[name] = instrument.StockOptionInst(name)
-                else:
-                    self.instruments[name] = instrument.Stock(name)
-            else:
-                if len(name) > 10:
-                    self.instruments[name] = instrument.FutOptionInst(name)
-                else:
-                    self.instruments[name] = instrument.Future(name)
-            self.instruments[name].update_param(tday)                    
-
-            self.positions[name] = order.Position(self.instruments[name])
-            self.day_data_func[name] = []
-            self.min_data_func[name] = {}    
-            self.qry_pos[name]   = {'tday': [0, 0], 'yday': [0, 0]}
-            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-            self.cur_day[name]['date'] = tday
-            if name not in self.inst2strat:
-                self.inst2strat[name] = {}
-        
-    def add_strategy(self, strat):
-        self.add_instruments(strat.instIDs, self.scur_day)
-        for instID in strat.instIDs:
-            self.inst2strat[instID][strat.name] = []
-        self.strategies[strat.name] = strat
-        self.strat_list.append(strat.name)
-        strat.agent = self
-        strat.reset()
                  
     def initialize(self, event):
         '''
@@ -418,7 +413,7 @@ class Agent(MktDataMixin):
             for inst in self.instruments:
                 self.instruments[inst].update_param(self.scur_day)
 
-    def resume(self):
+    def restart(self):
         if self.initialized:
             return 
         self.logger.debug('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
@@ -615,23 +610,23 @@ class Agent(MktDataMixin):
             self.instruments[inst].price  = tick.price
             self.instruments[inst].volume = tick.volume
             self.instruments[inst].last_traded = curr_tick
-		
+
     def run_tick(self, event):#行情处理主循环
-        ctick = event.dict['data']
+        tick = event.dict['data']
         if self.live_trading:
             now_ticknum = get_tick_num(datetime.datetime.now())
-            cur_ticknum = get_tick_num(ctick.timestamp)
+            cur_ticknum = get_tick_num(tick.timestamp)
             if abs(cur_ticknum - now_ticknum)> MAX_REALTIME_DIFF:
                 self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, ticknum= %s, now_ticknum=%s' % (ctick.instID, cur_ticknum, now_ticknum))
-        self.update_instrument(ctick)
-        if self.update_min_bar(ctick):
-			for strat_name in self.inst2strat[inst]:
-				self.strategies[strat_name].run_tick(tick)
-	
-	def run_min(self, event):
-		min_id = event.dict['min_id']
-		bar_id = event.dict['bar_id'] 
-		inst = event.dict['instID']
+        self.update_instrument(tick)
+        if self.update_min_bar(tick):
+            for strat_name in self.inst2strat[tick.instID]:
+                self.strategies[strat_name].run_tick(tick)
+
+    def run_min(self, event):
+        min_id = event.dict['min_id']
+        bar_id = event.dict['bar_id']
+        inst = event.dict['instID']
         for strat_name in self.inst2strat[inst]:
             for m in self.inst2strat[inst][strat_name]:
                 if bar_id % m == 0:
@@ -829,7 +824,7 @@ class SaveAgent(Agent):
         self.prepare_data_env(mid_day = True)
         self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
 
-    def resume(self):
+    def restart(self):
         self.eventEngine.start()
 
     def exit(self):
