@@ -49,6 +49,17 @@ class MktDataMixin(object):
         self.min_db_table  = config.get('min_db_table', 'fut_min')
         self.daily_db_table = config.get('daily_db_table', 'fut_daily')
 
+	def add_instrument(self, name):
+		self.tick_data[name] = []
+		self.day_data[name]  = pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest'])
+		self.min_data[name]  = {1: pd.DataFrame(columns=['open', 'high','low','close','volume','openInterest','min_id'])}
+		self.cur_day[name]   = dict([(item, 0) for item in day_data_list])  
+		self.cur_min[name]   = dict([(item, 0) for item in min_data_list])
+		self.day_data_func[name] = []
+		self.min_data_func[name] = {}    
+		self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
+		self.cur_day[name]['date'] = self.scur_day		
+	
     def register_data_func(self, inst, freq, fobj):
         if inst not in self.day_data_func:
             self.day_data_func[inst] = []
@@ -219,28 +230,43 @@ class MktDataMixin(object):
             event2.dict['instID'] = inst
             self.eventEngine.put(event2)
         return
+	
+	def mkt_data_sod(self, tday):
+        for inst in self.instruments:
+            self.tick_data[inst] = []
+            self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
+            self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
+            self.cur_day[inst]['date'] = tday
+            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(tday.toordinal())
+			
+    def mkt_data_eod(self):
+        for inst in self.instruments:
+			if (len(self.tick_data[inst]) > 0) :
+				last_tick = self.tick_data[inst][-1]
+				self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
+				self.cur_min[inst]['openInterest'] = last_tick.openInterest
+				self.min_switch(inst) 
+			if (self.cur_day[inst]['close']>0):
+				mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
+				df = self.day_data[inst]
+				for fobj in self.day_data_func[inst]:
+					fobj.rfunc(df)
+				if self.save_flag:
+					event = Event(type=EVENT_DB_WRITE, priority = 500)
+					event.dict['data'] = self.cur_day[inst]
+					event.dict['type'] = EVENT_MKTDATA_EOD
+					event.dict['instID'] = inst
+					self.eventEngine.put(event)
 
-    def day_finalize(self, event):
-        insts = event.dict['data']
-        for inst in insts:
-            if not self.instruments[inst].day_finalized:
-                self.instruments[inst].day_finalized = True
-                if (len(self.tick_data[inst]) > 0) :
-                    last_tick = self.tick_data[inst][-1]
-                    self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                    self.cur_min[inst]['openInterest'] = last_tick.openInterest
-                    self.min_switch(inst) 
-                if (self.cur_day[inst]['close']>0):
-                    mysqlaccess.insert_daily_data_to_df(self.day_data[inst], self.cur_day[inst])
-                    df = self.day_data[inst]
-                    for fobj in self.day_data_func[inst]:
-                        fobj.rfunc(df)
-                    if self.save_flag:
-                        event = Event(type=EVENT_DB_WRITE, priority = 500)
-                        event.dict['data'] = self.cur_day[inst]
-                        event.dict['type'] = EVENT_MKTDATA_EOD
-                        event.dict['instID'] = inst
-                        self.eventEngine.put(event)
+            if len(self.day_data[inst]) > 0:
+                d_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
+                df = self.day_data[inst]
+                self.day_data[inst] = df[df.index >= d_start]
+            m_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
+            for m in self.min_data[inst]:
+                if len(self.min_data[inst][m]) > 0:
+                    mdf = self.min_data[inst][m]
+                    self.min_data[inst][m] = mdf[mdf.index.date >= m_start]
 
     def write_mkt_data(self, event):
         inst = event.dict['instID']
@@ -257,7 +283,6 @@ class MktDataMixin(object):
 
     def register_event_handler(self):
         self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
-        self.eventEngine.register(EVENT_MKTDATA_EOD, self.day_finalize)
 
 class Agent(MktDataMixin):
  
@@ -276,7 +301,6 @@ class Agent(MktDataMixin):
         self.live_trading = config.get('live_trading', False)
         self.logger = logging.getLogger('.'.join([name, 'agent']))
         
-        self.initialized = False
         self.eod_flag = False
         self.scur_day = tday
 
@@ -285,12 +309,15 @@ class Agent(MktDataMixin):
         self.gateways = {}
         gateway_dict = config.get('gateway', {})
         for gateway_name in gateway_dict:
-            gway_class = eval(gateway_dict[gateway_name]['class'])
-            self.add_gateway(gway_class, gateway_name)
+            gateway_class = eval(gateway_dict[gateway_name]['class'])
+            self.add_gateway(gateway_class, gateway_name)
 
-        self.inst2strat = {}            
+        self.inst2strat = {}
+		self.inst2gateway = {}
         self.strat_list = []
         self.strategies = {}
+		self.ref2order = {}
+		self.ref2trade = {}
 
         strat_files = config.get('strat_files', [])
         for sfile in strat_files:
@@ -315,12 +342,23 @@ class Agent(MktDataMixin):
     def register_event_handler(self):
         super(Agent, self).register_event_handler()
         self.eventEngine.register(EVENT_LOG, self.log_handler)
-        self.eventEngine.register(EVENT_TICK, self.rtn_tick)
+        self.eventEngine.register(EVENT_TICK, self.run_tick)
+		self.eventEngine.register(EVENT_MIN_BAR, self.run_min)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
+        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)		
 
-    def add_instruments(self, names, tday):
-        add_names = [ name for name in names if name not in self.instruments]
-        for name in add_names:
+	def gateway_map(self, instID):
+		exch = self.instruments[instID].exchange
+		if exch in ['CZCE', 'DCE', 'SHFE', 'CFFEX']:
+			for key in self.gateways:
+				gateway = self.gateways[key]
+				gway_class = type(gateway).__name__
+				if 'Ctp' in gway_class:
+					return gateway
+		return None
+		
+    def add_instrument(self, name):
+        if name not in self.instruments:
             if name.isdigit():
                 if len(name) == 8:
                     self.instruments[name] = instrument.StockOptionInst(name)
@@ -331,29 +369,30 @@ class Agent(MktDataMixin):
                     self.instruments[name] = instrument.FutOptionInst(name)
                 else:
                     self.instruments[name] = instrument.Future(name)
-            self.instruments[name].update_param(tday)
-
-            self.positions[name] = order.Position(self.instruments[name])
-            self.day_data_func[name] = []
-            self.min_data_func[name] = {}
-            self.qry_pos[name]   = {'tday': [0, 0], 'yday': [0, 0]}
-            self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
-            self.cur_day[name]['date'] = tday
+            self.instruments[name].update_param(self.scur_day)
             if name not in self.inst2strat:
                 self.inst2strat[name] = {}
+			if name not in self.inst2gateway:
+				gateway = self.gateway_map(name)
+				if gateway != None:
+					self.inst2gateway[name] = gateway
+				else:
+					self.logger.warning("No Gateway is assigned to instID = %s" % name)
+			super(Agent, this).add_instrument(name)
 
     def add_strategy(self, strat):
-        self.add_instruments(strat.instIDs, self.scur_day)
-        for instID in strat.instIDs:
-            self.inst2strat[instID][strat.name] = []
-        self.strategies[strat.name] = strat
-        self.strat_list.append(strat.name)
-        strat.agent = self
-        strat.reset()
+		if strat not in self.strat_list:
+			self.strat_list.append(strat.name)
+			self.strategies[strat.name] = strat
+			strat.agent = self	
+		for instID in strat.instIDs:
+            self.add_instrument(instID)
+			self.inst2strat[instID][strat.name] = []
+		strat.reset()
 
     def add_gateway(self, gateway, gateway_name=None):
         """创建接口"""
-        self.gateways[gateway_name] = gateway(self.eventEngine, gateway_name)
+        self.gateways[gateway_name] = gateway(self, gateway_name)
 
     def connect(self, gateway_name):
         """连接特定名称的接口"""
@@ -398,39 +437,44 @@ class Agent(MktDataMixin):
         self.logger.log(lvl, event.dict['log'])
 
     def time_scheduler(self, event):
-        if self.timer_count % 1800:
+        if self.timer_count % int(1800 / self.event_period):
             if self.tick_id >= 2100000-10:
                 min_id = get_min_id(datetime.datetime.now())
                 if (min_id >= 2116) and (self.eod_flag == False):
                     self.qry_commands.append(self.run_eod)
-                 
-    def initialize(self, event):
-        '''
-            初始化，如保证金率，账户资金等
-        '''
-        self.isSettlementInfoConfirmed = True
-        if not self.initialized:
-            for inst in self.instruments:
-                self.instruments[inst].update_param(self.scur_day)
 
-    def restart(self):
-        if self.initialized:
-            return 
-        self.logger.debug('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
-        self.prepare_data_env(mid_day = True)
-        self.get_eod_positions()            
-        self.logger.debug('Prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
-        file_prefix = self.folder
-        self.ref2order = order.load_order_list(self.scur_day, file_prefix, self.positions)
+	def get_eod_positions(self):
+		for name in self.gateways:
+			self.gateways[name].load_local_positions(self.scur_day)
+	
+	def get_all_orders(self):
+		self.ref2order = {}
+		for name in self.gateways:
+			self.gateways[name].load_order_list(self.scur_day)
+			order_dict = self.gateways[name].id2order
+			for local_id in order_dict:
+				iorder = order_dict[local_id]
+				iorder.gateway = name
+				self.ref2order[iorder.order_ref] = iorder
         keys = self.ref2order.keys()
         if len(keys) > 1:
             keys.sort()
         for key in keys:
-            iorder =  self.ref2order[key]
+            iorder =  self.ref2order[key]			
             if len(iorder.conditionals)>0:
                 self.ref2order[key].conditionals = dict([(self.ref2order[o_id], iorder.conditionals[o_id]) 
                                                          for o_id in iorder.conditionals])
-        self.ref2trade = order.load_trade_list(self.scur_day, file_prefix)
+														 
+    def restart(self):
+        for strat_name in self.strat_list:
+            strat = self.strategies[strat_name]
+			self.add_strategy(strat)	
+        self.logger.debug('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
+        self.prepare_data_env(mid_day = True)
+        self.logger.debug('Prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
+        self.get_eod_positions()
+		self.get_all_orders()
+        self.ref2trade = order.load_trade_list(self.scur_day, self.folder)
         for trade_id in self.ref2trade:
             etrade = self.ref2trade[trade_id]
             orderdict = etrade.order_dict
@@ -440,16 +484,19 @@ class Agent(MktDataMixin):
         
         for strat_name in self.strat_list:
             strat = self.strategies[strat_name]
+			self.add_strategy(strat)
             strat.initialize()
             strat_trades = [etrade for etrade in self.ref2trade.values() if (etrade.strategy == strat.name) \
                             and (etrade.status != order.ETradeStatus.StratConfirm)]
             for trade in strat_trades:
                 strat.add_live_trades(trade)
             
-        for inst in self.positions:
-            self.positions[inst].re_calc()        
-        self.calc_margin()
-        self.initialized = True
+        for gway in self.gateways:
+			gateway = self.gateways[gway]
+			for inst in gateway.positions:
+				gateway.positions[inst].re_calc()        
+			gateway.calc_margin()
+		self.register_event_handler()
         self.eventEngine.start()
 
     def check_price_limit(self, inst, num_tick):
@@ -459,34 +506,6 @@ class Agent(MktDataMixin):
             return True
         else:
             return False
-
-    def calc_margin(self):
-        locked_margin = 0
-        used_margin = 0
-        yday_pnl = 0
-        tday_pnl = 0
-        for instID in self.instruments:
-            inst = self.instruments[instID]
-            pos = self.positions[instID]
-            under_price = 0.0
-            if (inst.ptype == instrument.ProductType.Option):
-                under_price = self.instruments[inst.underlying].price
-            #print inst.name, inst.marginrate, inst.calc_margin_amount(ORDER_BUY), inst.calc_margin_amount(ORDER_SELL)
-            locked_margin += pos.locked_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
-            locked_margin += pos.locked_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price) 
-            used_margin += pos.curr_pos.long * inst.calc_margin_amount(ORDER_BUY, under_price)
-            used_margin += pos.curr_pos.short * inst.calc_margin_amount(ORDER_SELL, under_price)
-            yday_pnl += (pos.pos_yday.long - pos.pos_yday.short) * (inst.price - inst.prev_close) * inst.multiple
-            tday_pnl += pos.tday_pos.long * (inst.price-pos.tday_avp.long) * inst.multiple
-            tday_pnl -= pos.tday_pos.short * (inst.price-pos.tday_avp.short) * inst.multiple
-            #print "inst=%s, yday_long=%s, yday_short=%s, tday_long=%s, tday_short=%s" % (instID, pos.pos_yday.long, pos.pos_yday.short, pos.tday_pos.long, pos.tday_pos.short)
-        self.locked_margin = locked_margin
-        self.used_margin = used_margin
-        self.pnl_total = yday_pnl + tday_pnl
-        self.curr_capital = self.prev_capital + self.pnl_total
-        self.available = self.curr_capital - self.locked_margin
-        self.logger.debug('calc_margin: curr_capital=%s, prev_capital=%s, pnl_tday=%s, pnl_yday=%s, locked_margin=%s, used_margin=%s, available=%s' \
-                        % (self.curr_capital, self.prev_capital, tday_pnl, yday_pnl, locked_margin, used_margin, self.available))
  
     def save_state(self):
         '''
@@ -494,18 +513,15 @@ class Agent(MktDataMixin):
         '''
         if not self.eod_flag:
             self.logger.debug(u'保存执行状态.....................')
-            file_prefix = self.folder
-            order.save_order_list(self.scur_day, self.ref2order, file_prefix)
-            order.save_trade_list(self.scur_day, self.ref2trade, file_prefix)
-        return
+            for gway in self.gateways:
+				self.gateways[gway].save_order_list()
+            order.save_trade_list(self.scur_day, self.ref2trade, self.folder)
     
     def run_eod(self):
-        self.day_finalize(self.instruments.keys())
-        if self.trader == None:
-            return
-        self.save_state()
+		if self.eod_flag:
+			return
         print 'run EOD process'
-        self.eod_flag = True
+		self.mkt_data_eod()
         pfilled_dict = {}
         for trade_id in self.ref2trade:
             etrade = self.ref2trade[trade_id]
@@ -520,76 +536,35 @@ class Agent(MktDataMixin):
                 pfilled_dict[trade_id] = etrade
         if len(pfilled_dict)>0:
             file_prefix = self.folder + 'PFILLED_'
-            order.save_trade_list(self.scur_day, pfilled_dict, file_prefix)    
+            order.save_trade_list(self.scur_day, pfilled_dict, file_prefix) 
         for strat_name in self.strat_list:
             strat = self.strategies[strat_name]
             strat.day_finalize()
-            strat.initialize()
-        self.calc_margin()
-        self.save_eod_positions()
-        eod_pos = {}
-        for inst in self.positions:
-            pos = self.positions[inst]
-            eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
+		self.save_state()
+        self.eod_flag = True
+		for name in self.gateways:
+			self.gateways[name].day_finalize(self.scur_day)
         self.ref2trade = {}
-        self.ref2order = {}
-        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
-        self.order_stats = dict([(inst,{'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }) for inst in self.instruments])
-        self.total_submitted = 0
-        self.total_cancelled = 0
-        self.prev_capital = self.curr_capital
-        for inst in self.positions:
-            self.positions[inst].pos_yday.long = eod_pos[inst][0] 
-            self.positions[inst].pos_yday.short = eod_pos[inst][1]
-            self.positions[inst].re_calc()
+		self.ref2order = {}
+        for inst in self.instruments:
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
             self.instruments[inst].volume = 0            
-        self.initialized = False
 
     def day_switch(self, event):
         newday = event.dict['date']
         if newday <= self.scur_day:
             return
         self.logger.info('switching the trading day from %s to %s, reset tick_id=%s to 0' % (self.scur_day, newday, self.tick_id))
-        self.day_finalize(self.instruments.keys())
-        self.isSettlementInfoConfirmed = False
         if not self.eod_flag:
             self.run_eod()
         self.scur_day = newday
-        for inst in self.instruments:
-            if len(self.day_data[inst]) > 0:
-                d_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
-                df = self.day_data[inst]
-                self.day_data[inst] = df[df.index >= d_start]
-            m_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
-            for m in self.min_data[inst]:
-                if len(self.min_data[inst][m]) > 0:
-                    mdf = self.min_data[inst][m]
-                    self.min_data[inst][m] = mdf[mdf.index.date >= m_start]
         self.tick_id = 0
         self.timer_count = 0
-        for inst in self.instruments:
-            self.tick_data[inst] = []
-            self.cur_min[inst] = dict([(item, 0) for item in min_data_list])
-            self.cur_day[inst] = dict([(item, 0) for item in day_data_list])
-            self.cur_day[inst]['date'] = newday
-            self.cur_min[inst]['datetime'] = datetime.datetime.fromordinal(newday.toordinal())
-            self.instruments[inst].day_finalized = False
+		super(Agent, self).mkt_data_sod(newday)
         self.eod_flag = False
                 
     def init_init(self):    #init中的init,用于子类的处理
-        self.eventEngine.register(EVENT_ORDER, self.rtn_order)
-        self.eventEngine.register(EVENT_TRADE, self.rtn_trade)
-        self.eventEngine.register(EVENT_ERRORDERINSERT, self.err_order_insert)
-        self.eventEngine.register(EVENT_ERRORDERCANCEL, self.err_order_action)
-        self.eventEngine.register(EVENT_MARGINRATE, self.rsp_qry_instrument_marginrate)
-        self.eventEngine.register(EVENT_ACCOUNT, self.rsp_qry_trading_account)
-        self.eventEngine.register(EVENT_INSTRUMENT, self.rsp_qry_instrument)
-        self.eventEngine.register(EVENT_POSITION, self.rsp_qry_position)
-        self.eventEngine.register(EVENT_QRYORDER, self.rsp_qry_order)
-        self.eventEngine.register(EVENT_QRYTRADE, self.rsp_qry_trade)
-        self.eventEngine.register(EVENT_TDLOGIN, self.initialize)
-        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
+		pass
 
     def update_instrument(self, tick):      
         inst = tick.instID    
@@ -647,9 +622,11 @@ class Agent(MktDataMixin):
             required_margin = 0
             for idx, (inst, v, otype) in enumerate(zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.order_types)):
                 orders = []
-                pos = self.positions[inst]
+				gway_name = self.inst2gateway[inst]
+				gateway = self.gateways[gway_name]
+                pos = gateway.positions[inst]
                 pos.re_calc()
-                self.calc_margin()
+                gateway.calc_margin()
                 if ((v>0) and (v > pos.can_close.long + pos.can_yclose.long + pos.can_open.long)) or \
                         ((v<0) and (-v > pos.can_close.short + pos.can_yclose.short + pos.can_open.short)):
                     self.logger.warning("ETrade %s is cancelled due to position limit on leg %s: %s" % (exec_trade.id, idx, inst))
@@ -674,7 +651,7 @@ class Agent(MktDataMixin):
                     order_type = OF_CLOSE
                     if (self.instruments[inst].exchange == "SHFE"):
                         order_type = OF_CLOSE_TDAY                        
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond, trade_ref )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond, trade_ref, gateway = gway_name )
                     orders.append(iorder)
                   
                 if (self.instruments[inst].exchange == "SHFE") and (abs(remained)>0) and (pos.can_yclose.short+pos.can_yclose.long>0):
@@ -691,7 +668,7 @@ class Agent(MktDataMixin):
                         cond = {}
                         if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                             cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond, trade_ref )
+                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond, trade_ref, gateway = gway_name )
                         orders.append(iorder)
                 
                 vol = abs(remained)
@@ -707,17 +684,15 @@ class Agent(MktDataMixin):
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond, trade_ref )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond, trade_ref, gateway = gway_name )
                     orders.append(iorder)
                 all_orders[inst] = orders
-                
-            if required_margin + self.locked_margin > self.margin_cap:
-                self.logger.warning("ETrade %s is cancelled due to margin cap: %s" % (exec_trade.id, inst))
-                exec_trade.status = order.ETradeStatus.Cancelled
-                strat = self.strategies[exec_trade.strategy]
-                strat.on_trade(exec_trade)
-                return False
-
+            #if required_margin + self.locked_margin > self.margin_cap:
+            #    self.logger.warning("ETrade %s is cancelled due to margin cap: %s" % (exec_trade.id, inst))
+            #    exec_trade.status = order.ETradeStatus.Cancelled
+            #    strat = self.strategies[exec_trade.strategy]
+            #    strat.on_trade(exec_trade)
+            #    return False
             exec_trade.order_dict = all_orders
             for inst in exec_trade.instIDs:
                 pos = self.positions[inst]
@@ -729,8 +704,6 @@ class Agent(MktDataMixin):
             exec_trade.status = order.ETradeStatus.Processed
             return pending_orders
         else:
-            #self.logger.debug("do not meet the limit price,etrade_id=%s, etrade_inst=%s,  curr price = %s, limit price = %s" % \
-            #                 (exec_trade.id, exec_trade.instIDs, curr_price, exec_trade.limit_price))
             return pending_orders
         
     def check_trade(self, exec_trade):
@@ -771,12 +744,13 @@ class Agent(MktDataMixin):
                                                 iorder.direction,
                                                 OPT_MARKET_ORDER,
                                                 cond,
-                                                trade_ref)
+                                                trade_ref, gateway = iorder.gateway)
                                     orders.append(norder)
                         if len(orders)>0:
                             new_orders[inst] = orders
                     for inst in new_orders:
-                        pos = self.positions[inst]
+						gateway = self.gateways[self.inst2gateway[inst]]
+                        pos = gateway.positions[inst]
                         for iorder in new_orders[inst]:
                             exec_trade.order_dict[inst].append(iorder)
                             pos.add_order(iorder)
@@ -822,9 +796,9 @@ class SaveAgent(Agent):
         self.save_flag = True
         self.live_trading = False
         self.prepare_data_env(mid_day = True)
-        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
 
     def restart(self):
+		self.register_event_handler()
         self.eventEngine.start()
 
     def exit(self):
