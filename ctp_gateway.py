@@ -79,6 +79,9 @@ class CtpGateway(Gateway):
         self.mdConnected = False        # 行情API连接状态，登录完成后为True
         self.tdConnected = False        # 交易API连接状态
         self.qryEnabled = False         # 是否要启动循环查询
+		self.qry_count = 0           # 查询触发倒计时
+        self.qry_trigger = 2         # 查询触发点
+		self.qry_commands = []
         
     #----------------------------------------------------------------------
     def connect(self):
@@ -107,10 +110,11 @@ class CtpGateway(Gateway):
         
         # 创建行情和交易接口对象
         self.mdApi.connect(userID, password, brokerID, mdAddress)
-        self.tdApi.connect(userID, password, brokerID, tdAddress)
-        
-        # 初始化并启动查询
-        self.initQuery()
+        if len(tdAddress) > 0:
+			self.tdApi.connect(userID, password, brokerID, tdAddress)
+		else:
+			self.tdApi = None
+			self.qryEnabled = False
     
     #----------------------------------------------------------------------
     def subscribe(self, subscribeReq):
@@ -142,7 +146,7 @@ class CtpGateway(Gateway):
             else:
                 iorder.limit_price = 0.0
         iorder.status = order.OrderStatus.Sent		
-        self.trader.sendOrder(iorder)
+        self.tdApi.sendOrder(iorder)
         
         self.order_stats[inst]['submit'] += 1
         self.order_stats['total_submit'] += 1
@@ -157,7 +161,7 @@ class CtpGateway(Gateway):
     #----------------------------------------------------------------------
     def cancelOrder(self, iorder):
         """撤单"""
-        self.trader.cancelOrder(iorder)
+        self.tdApi.cancelOrder(iorder)
         inst = iorder.instrument
         self.order_stats[inst.name]['cancel'] += 1
         self.order_stats['total_cancel'] += 1
@@ -181,42 +185,24 @@ class CtpGateway(Gateway):
             self.mdApi.close()
         if self.tdConnected:
             self.tdApi.close()
-        
-    #----------------------------------------------------------------------
-    def initQuery(self):
-        """初始化连续查询"""
-        if self.qryEnabled:
-            # 需要循环的查询函数列表
-            self.qry_commands = [self.qryAccount, self.qryPosition]
-            
-            self.qry_count = 0           # 查询触发倒计时
-            self.qry_trigger = 2         # 查询触发点
-            self.start_query()
     
     #----------------------------------------------------------------------
     def query(self, event):
         """注册到事件处理引擎上的查询函数"""
-        self.qry_count += 1
-        
-        if self.qry_count > self.qry_trigger:
-            # 清空倒计时
-            self.qryCount = 0
-            if len(self.qry_commands)>0:
-                self.qry_commands[0]()
-                del self.qry_commands[0]
-    
-    #----------------------------------------------------------------------
-    def start_query(self):
-        """启动连续查询"""
-        self.eventEngine.register(EVENT_TIMER, self.query)
+		if self.qryEnabled:
+			self.qry_count += 1        
+			if self.qry_count > self.qry_trigger:
+				self.qryCount = 0
+				if len(self.qry_commands)>0:
+					self.qry_commands[0]()
+					del self.qry_commands[0]
     
     #----------------------------------------------------------------------
     def setQryEnabled(self, qryEnabled):
         """设置是否要启动循环查询"""
         self.qryEnabled = qryEnabled
     
-    def register_event_handler(self):
-		super(CtpGateway, self).register_event_handler()		
+    def register_event_handler(self):	
         self.eventEngine.register(EVENT_MARKETDATA+self.gatewayName, self.rsp_market_data)
         self.eventEngine.register(EVENT_QRYACCOUNT+self.gatewayName, self.rsp_qry_account)
         self.eventEngine.register(EVENT_QRYPOSITION+self.gatewayName, self.rsp_qry_position)
@@ -228,6 +214,14 @@ class CtpGateway(Gateway):
         self.eventEngine.register(EVENT_ERRORDERINSERT+self.gatewayName, self.err_order_action)
         self.eventEngine.register(EVENT_RTNTRADE+self.gatewayName, self.rtn_trade)
         self.eventEngine.register(EVENT_RTNORDER+self.gatewayName, self.rtn_order)
+		self.eventEngine.register(EVENT_TIMER, self.query)
+		self.eventEngine.register(EVENT_TDLOGIN, self.rsp_td_login)
+	
+	def rsp_td_login(self, event):
+        self.qry_commands.append(self.tdApi.qryAccount)
+        self.qry_commands.append(self.tdApi.qryPosition)
+        self.qry_commands.append(self.tdApi.qryOrder)
+        self.qry_commands.append(self.tdApi.qryTrade)
 
     def onOrder(self, order):
         pass
@@ -526,7 +520,7 @@ class CtpGateway(Gateway):
                 event.dict['trade_ref'] = myorder.trade_ref
                 self.eventEngine.put(event)
         else:
-            self.qry_commands.append(self.qryOrder)
+            self.qry_commands.append(self.tdApi.qryOrder)
         if inst not in self.order_stats:
             self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
         self.order_stats[inst]['failure'] += 1
