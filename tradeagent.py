@@ -342,9 +342,10 @@ class Agent(MktDataMixin):
     def register_event_handler(self):
         super(Agent, self).register_event_handler()
         self.eventEngine.register(EVENT_LOG, self.log_handler)
-        self.eventEngine.register(EVENT_TICK, self.run_tick)
+        self.eventEngine.register(EVENT_TICK, self.run_tick) ETRADEUPDATE
 		self.eventEngine.register(EVENT_MIN_BAR, self.run_min)
-        self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
+        self.eventEngine.register(EVENT_ETRADEUPDATE, self.trade_update)
+		self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
         self.eventEngine.register(EVENT_TIMER, self.time_scheduler)		
 
 	def gateway_map(self, instID):
@@ -412,13 +413,14 @@ class Agent(MktDataMixin):
             self.logger.warning(u'接口不存在：%s' %gateway_name)        
         
     #----------------------------------------------------------------------
-    def send_order(self, iorder, gateway_name):
+    def send_order(self, iorder):
         """对特定接口发单"""
-        if gateway_name in self.gateways:
-            gateway = self.gateways[gateway_name]
-            return gateway.sendOrder(iorder)
-        else:
-            self.logger.warning(u'接口不存在：%s' % gateway_name)        
+		gateway_name = iorder.gateway
+        if gateway_name not in self.gateways:
+            self.logger.warning(u'接口不存在：%s' % gateway_name)
+			gateway_name = self.inst2gateway[iorder.instID]		
+        gateway = self.gateways[gateway_name]
+        gateway.sendOrder(iorder)
     
     #----------------------------------------------------------------------
     def cancel_order(self, iorder, gateway_name):
@@ -440,7 +442,7 @@ class Agent(MktDataMixin):
         if self.timer_count % int(1800 / self.event_period):
             if self.tick_id >= 2100000-10:
                 min_id = get_min_id(datetime.datetime.now())
-                if (min_id >= 2116) and (self.eod_flag == False):
+                if (min_id >= 2103) and (self.eod_flag == False):
                     self.qry_commands.append(self.run_eod)
 
 	def get_eod_positions(self):
@@ -496,6 +498,8 @@ class Agent(MktDataMixin):
 			for inst in gateway.positions:
 				gateway.positions[inst].re_calc()        
 			gateway.calc_margin()
+			gateway.register_event_handler()
+			gateway.connect()
 		self.register_event_handler()
         self.eventEngine.start()
 
@@ -763,8 +767,8 @@ class Agent(MktDataMixin):
                 self.send_order(self.ref2order[order_ref])
             self.save_state()
 
-    def trade_update(self, myorder):
-        trade_ref = myorder.trade_ref
+    def trade_update(self, event):
+		trade_ref = event.dict['trade_ref']
         mytrade = self.ref2trade[trade_ref]
         pending_orders = mytrade.update()
         if (mytrade.status == order.ETradeStatus.Done) or (mytrade.status == order.ETradeStatus.Cancelled):            
@@ -786,10 +790,11 @@ class Agent(MktDataMixin):
         for strat_name in self.strat_list:
             strat = self.strategies[strat_name]
             strat.save_state()
-        # 销毁API对象
-        self.trader = None
-        self.mdapis = []
-        #self.eventEngine = None
+		for name in self.gateways:
+			gateway = self.gateways[name]
+			gateway.close()
+			gateway.mdApi = None
+			gateway.tdApi = None
 
 class SaveAgent(Agent):
     def init_init(self):
@@ -801,10 +806,20 @@ class SaveAgent(Agent):
 		self.register_event_handler()
         self.eventEngine.start()
 
+	def register_event_handler(self):
+        self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
+        self.eventEngine.register(EVENT_LOG, self.log_handler)
+        self.eventEngine.register(EVENT_TICK, self.run_tick)
+        self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
+        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)	
+		
     def exit(self):
         self.eventEngine.stop()
-        self.trader = None
-        self.mdapis = []
+		for name in self.gateways:
+			gateway = self.gateways[name]
+			gateway.close()
+			gateway.mdApi = None
+			gateway.tdApi = None
 
 if __name__=="__main__":
     pass
