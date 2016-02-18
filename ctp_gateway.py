@@ -14,10 +14,14 @@ from misc import *
 from vnctpmd import MdApi
 from vnctptd import TdApi
 from ctpDataType import *
-from vtGateway import *
+from gateway import *
 import logging
 import datetime
 import order
+
+TERT_RESTART = 0 #从本交易日开始重传
+TERT_RESUME = 1 #从上次收到的续传
+TERT_QUICK = 2 #只传送登录后的流内容
 
 # 以下为一些VT类型和CTP类型的映射字典
 # 价格类型映射
@@ -75,10 +79,6 @@ class CtpGateway(Gateway):
         self.mdConnected = False        # 行情API连接状态，登录完成后为True
         self.tdConnected = False        # 交易API连接状态
         self.qryEnabled = False         # 是否要启动循环查询
-
-        self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
-        self.order_constraints = {	'total_submit': 2000, 'total_cancel': 2000, 'total_failure':500, \
-                                    'submit_limit': 200,  'cancel_limit': 200,  'failure_limit': 200 }
         
     #----------------------------------------------------------------------
     def connect(self):
@@ -127,7 +127,7 @@ class CtpGateway(Gateway):
                 event = Event(type=EVENT_ETRADEUPDATE)
                 event.dict['trade_ref'] = iorder.trade_ref
                 self.eventEngine.put(event)
-            logContent = 'Canceling order = %s for instrument = %s is disabled for trading due to position control' % (iorder.order_ref, inst.name)
+            logContent = 'Canceling order = %s for instrument = %s is disabled for trading due to position control' % (iorder.local_id, inst.name)
             self.onLog( logContent, level = logging.WARNING)
             return
         # 上期所不支持市价单
@@ -138,7 +138,7 @@ class CtpGateway(Gateway):
                     iorder.limit_price = inst.up_limit
                 else:
                     iorder.limit_price = inst.down_limit
-                self.onLog('sending limiting order_ref=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.order_ref, inst.name), level = logging.DEBUG)
+                self.onLog('sending limiting local_id=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.local_id, inst.name), level = logging.DEBUG)
             else:
                 iorder.limit_price = 0.0
         iorder.status = order.OrderStatus.Sent		
@@ -161,7 +161,7 @@ class CtpGateway(Gateway):
         inst = iorder.instrument
         self.order_stats[inst.name]['cancel'] += 1
         self.order_stats['total_cancel'] += 1
-        self.onLog( u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' % (iorder.order_ref, \
+        self.onLog( u'A_CC:取消命令: OrderRef=%s, OrderSysID=%s, exchange=%s, instID=%s, volume=%s, filled=%s, cancelled=%s' % (iorder.local_id, \
                             iorder.sys_id, inst.exchange, inst.name, iorder.volume, iorder.filled_volume, iorder.cancelled_volume), level = logging.DEBUG)     		
         
     #----------------------------------------------------------------------
@@ -215,7 +215,8 @@ class CtpGateway(Gateway):
         """设置是否要启动循环查询"""
         self.qryEnabled = qryEnabled
     
-    def setup_gateway_handler(self):
+    def register_event_handler(self):
+		super(CtpGateway, self).register_event_handler()		
         self.eventEngine.register(EVENT_MARKETDATA+self.gatewayName, self.rsp_market_data)
         self.eventEngine.register(EVENT_QRYACCOUNT+self.gatewayName, self.rsp_qry_account)
         self.eventEngine.register(EVENT_QRYPOSITION+self.gatewayName, self.rsp_qry_position)
@@ -223,7 +224,6 @@ class CtpGateway(Gateway):
         self.eventEngine.register(EVENT_QRYORDER+self.gatewayName, self.rsp_qry_order)
         self.eventEngine.register(EVENT_QRYINVESTOR+self.gatewayName, self.rsp_qry_investor)
         self.eventEngine.register(EVENT_QRYINSTRUMENT+self.gatewayName, self.rsp_qry_instrument)
-
         self.eventEngine.register(EVENT_ERRORDERCANCEL+self.gatewayName, self.err_order_insert)
         self.eventEngine.register(EVENT_ERRORDERINSERT+self.gatewayName, self.err_order_action)
         self.eventEngine.register(EVENT_RTNTRADE+self.gatewayName, self.rtn_trade)
@@ -240,10 +240,10 @@ class CtpGateway(Gateway):
         newref = data['OrderRef']
         if not newref.isdigit():
             return
-        order_ref = int(newref)
-        self.orderRef = max(self.orderRef, order_ref)
-        if (order_ref in self.ref2order):
-            myorder = self.ref2order[order_ref]
+        local_id = int(newref)
+        self.orderRef = max(self.orderRef, local_id)
+        if (local_id in self.id2order):
+            myorder = self.id2order[local_id]
             # only update sysID,
             status = myorder.on_order(sys_id = data['OrderSysID'], price = data['LimitPrice'], volume = 0)
             if data['OrderStatus'] in [ '5', '2']:
@@ -256,7 +256,7 @@ class CtpGateway(Gateway):
                 order.symbol = data['InstrumentID']
                 order.exchange = exchangeMapReverse[data['ExchangeID']]
                 order.instID = order.symbol #'.'.join([order.symbol, order.exchange])
-                order.orderID = order_ref
+                order.orderID = local_id
                 order.orderSysID = data['OrderSysID']
                 # 方向
                 if data['Direction'] == '0':
@@ -291,7 +291,7 @@ class CtpGateway(Gateway):
                 order.cancelTime = data['CancelTime']
                 order.frontID = data['FrontID']
                 order.sessionID = data['SessionID']
-                order.order_ref = order_ref
+                order.order_ref = myorder.order_ref
                 self.onOrder(order)
                 return
             else:
@@ -300,7 +300,7 @@ class CtpGateway(Gateway):
                     event.dict['trade_ref'] = myorder.trade_ref
                     self.eventEngine.put(event)
         else:
-            logContent = 'receive order update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
+            logContent = 'receive order update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], local_id)
             self.onLog(logContent, level = logging.WARNING)
 
     def rtn_trade(self, event):
@@ -308,9 +308,9 @@ class CtpGateway(Gateway):
         newref = data['OrderRef']
         if not newref.isdigit():
             return
-        order_ref = int(newref)
-        if order_ref in self.ref2order:
-            myorder = self.ref2order[order_ref]
+        local_id = int(newref)
+        if local_id in self.id2order:
+            myorder = self.id2order[local_id]
             myorder.on_trade(price = data['Price'], volume=data['Volume'], trade_id = data['TradeID'])
             if myorder.trade_ref <= 0:
                 trade = VtTradeData()
@@ -321,8 +321,8 @@ class CtpGateway(Gateway):
                 trade.vtSymbol = trade.symbol #'.'.join([trade.symbol, trade.exchange])
                 trade.tradeID = data['TradeID']
                 trade.vtTradeID = '.'.join([self.gatewayName, trade.tradeID])
-                trade.orderID = data['OrderRef']
-                trade.order_ref = order_ref
+                trade.orderID = local_id
+                trade.order_ref = myorder.order_ref
                 # 方向
                 trade.direction = directionMapReverse.get(data['Direction'], '')
                 # 开平
@@ -338,7 +338,7 @@ class CtpGateway(Gateway):
                 event.dict['trade_ref'] = myorder.trade_ref
                 self.eventEngine.put(event)
         else:
-            logContent = 'receive trade update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], order_ref)
+            logContent = 'receive trade update from other agents, InstID=%s, OrderRef=%s' % (data['InstrumentID'], local_id)
             self.onLog(logContent, level = logging.WARNING)
 
     def rsp_market_data(self, event):
@@ -448,10 +448,10 @@ class CtpGateway(Gateway):
             return
         if not sorder['OrderRef'].isdigit():
             return
-        order_ref = int(sorder['OrderRef'])
-        if (order_ref in self.ref2order):
-            iorder = self.ref2order[order_ref]
-            self.system_orders.append(order_ref)
+        local_id = int(sorder['OrderRef'])
+        if (local_id in self.id2order):
+            iorder = self.id2order[local_id]
+            self.system_orders.append(local_id)
             if iorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
                 status = iorder.on_order(sys_id = sorder['OrderSysID'], price = sorder['LimitPrice'], volume = sorder['VolumeTraded'])
                 if status:
@@ -474,9 +474,9 @@ class CtpGateway(Gateway):
                         self.onLog(logContent, level = logging.INFO)
 
         if isLast:
-            for order_ref in self.ref2order:
-                if (order_ref not in self.system_orders):
-                    iorder = self.ref2order[order_ref]
+            for local_id in self.id2order:
+                if (local_id not in self.system_orders):
+                    iorder = self.id2order[local_id]
                     iorder.on_cancel()
                     event = Event(type=EVENT_ETRADEUPDATE)
                     event.dict['trade_ref'] = iorder.trade_ref
@@ -491,15 +491,15 @@ class CtpGateway(Gateway):
         error = event.dict['error']
         if not porder['OrderRef'].isdigit():
             return
-        order_ref = int(porder['OrderRef'])
+        local_id = int(porder['OrderRef'])
         inst = porder['InstrumentID']
-        if order_ref in self.ref2order:
-            myorder = self.ref2order[order_ref]
+        if local_id in self.id2order:
+            myorder = self.id2order[local_id]
             myorder.on_cancel()
             event = Event(type=EVENT_ETRADEUPDATE)
             event.dict['trade_ref'] = myorder.trade_ref
             self.eventEngine.put(event)
-        logContent = 'OrderInsert is not accepted by CTP, order_ref=%s, instrument=%s, error=%s. ' % (order_ref, inst, error['ErrorMsg'])
+        logContent = 'OrderInsert is not accepted by CTP, local_id=%s, instrument=%s, error=%s. ' % (local_id, inst, error['ErrorMsg'])
         if inst not in self.order_stats:
             self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
         self.order_stats[inst]['failure'] += 1
@@ -516,10 +516,10 @@ class CtpGateway(Gateway):
         porder = event.dict['data']
         error = event.dict['error']
         inst = porder['InstrumentID']
-        logContent = 'Order Cancel is wrong, order_ref=%s, instrument=%s, error=%s. ' % (porder['OrderRef'], inst, error['ErrorMsg'])
+        logContent = 'Order Cancel is wrong, local_id=%s, instrument=%s, error=%s. ' % (porder['OrderRef'], inst, error['ErrorMsg'])
         if porder['OrderRef'].isdigit():
-            order_ref = int(porder['OrderRef'])
-            myorder = self.ref2order[order_ref]
+            local_id = int(porder['OrderRef'])
+            myorder = self.id2order[local_id]
             if int(error['ErrorID']) in [25,26] and myorder.status not in [order.OrderStatus.Cancelled, order.OrderStatus.Done]:
                 myorder.on_cancel()
                 event = Event(type=EVENT_ETRADEUPDATE)
@@ -1475,7 +1475,7 @@ class CtpTdApi(TdApi):
     def sendOrder(self, iorder):
         """发单"""
         self.reqID += 1
-        self.orderRef = max(self.orderRef, iorder.order_ref)
+        self.orderRef = max(self.orderRef, iorder.local_id)
         req = {}
         req['InstrumentID'] = iorder.instrument.name
         req['LimitPrice'] = iorder.limit_price
@@ -1489,7 +1489,7 @@ class CtpTdApi(TdApi):
         except KeyError:
             return ''
             
-        req['OrderRef'] = str(iorder.order_ref)
+        req['OrderRef'] = str(iorder.local_id)
         req['InvestorID'] = self.userID
         req['UserID'] = self.userID
         req['BrokerID'] = self.brokerID
@@ -1518,7 +1518,7 @@ class CtpTdApi(TdApi):
         if len(iorder.sys_id) >0:
             req['OrderSysID'] = iorder.sys_id
         else:
-            req['OrderRef'] = str(iorder.order_ref)
+            req['OrderRef'] = str(iorder.local_id)
             req['FrontID'] = self.frontID
             req['SessionID'] = self.sessionID
 
