@@ -120,7 +120,7 @@ def load_order_list(curr_date, file_prefix, positions):
                 iorder = Order(pos, float(row[10]), int(row[4]), int(row[11]),
                                row[7], row[8], row[9], cond)
                 iorder.sys_id = row[1]
-				iorder.local_id = row[2]
+                iorder.local_id = row[2]
                 iorder.filled_volume = int(row[5])
                 iorder.filled_price = float(row[6])
                 iorder.order_ref = int(row[0])
@@ -222,7 +222,7 @@ class Order(object):
         self.limit_price = limit_price        #开仓基准价
         self.start_tick  = order_time
         self.order_ref = next(self.id_generator)
-		self.local_id  = self.order_ref
+        self.local_id  = self.order_ref
         ##衍生
         self.instrument = position.instrument
         self.sys_id = ''
@@ -238,7 +238,7 @@ class Order(object):
         self.cancelled_volume = 0
         self.filled_orders = []
         self.conditionals = conditionals
-		self.gateway = gateway
+        self.gateway = gateway
         if len(self.conditionals) == 0:
             self.status = OrderStatus.Ready
         else:
@@ -306,9 +306,9 @@ class Order(object):
 
         ####头寸
 class Position(object):
-    def __init__(self, instrument = instrument, gateway = gateway):
+    def __init__(self, instrument, gateway = 'CTP'):
         self.instrument = instrument
-		self.gateway = gateway
+        self.gateway = gateway
         self.orders = []    #元素为Order
         self.tday_pos = BaseObject(long=0, short=0) 
         self.tday_avp = BaseObject(long=0.0, short=0.0)
@@ -401,12 +401,12 @@ class Position(object):
         return (self.can_yclose.long, self.can_yclose.short)
 
     def add_orders(self, orders):
-		for iorder in orders:
-			self.add_order(iorder)
+        for iorder in orders:
+            self.add_order(iorder)
     
     def add_order(self, order):
         self.orders.append(order)
-		self.gateway.id2order[order.local_id] = order
+        self.gateway.id2order[order.local_id] = order
 
     def __str__(self):
         return unicode(self).encode('utf-8')

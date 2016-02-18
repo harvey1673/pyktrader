@@ -79,22 +79,22 @@ class CtpGateway(Gateway):
         self.mdConnected = False        # 行情API连接状态，登录完成后为True
         self.tdConnected = False        # 交易API连接状态
         self.qryEnabled = False         # 是否要启动循环查询
-		self.qry_count = 0           # 查询触发倒计时
+        self.qry_count = 0           # 查询触发倒计时
         self.qry_trigger = 2         # 查询触发点
-		self.qry_commands = []
+        self.qry_commands = []
         
     #----------------------------------------------------------------------
     def connect(self):
         """连接"""
         # 载入json文件
-        fileName = self.agent.folder + self.gatewayName + '_connect.json'
+        fileName = self.file_prefix + 'connect.json'
         try:
             f = file(fileName)
         except IOError:
             logContent = u'读取连接配置出错，请检查'
             self.onLog(logContent, level = logging.WARNING)
             return
-        
+
         # 解析json文件
         setting = json.load(f)
         try:
@@ -111,10 +111,10 @@ class CtpGateway(Gateway):
         # 创建行情和交易接口对象
         self.mdApi.connect(userID, password, brokerID, mdAddress)
         if len(tdAddress) > 0:
-			self.tdApi.connect(userID, password, brokerID, tdAddress)
-		else:
-			self.tdApi = None
-			self.qryEnabled = False
+            self.tdApi.connect(userID, password, brokerID, tdAddress)
+        else:
+            self.tdApi = None
+            self.qryEnabled = False
     
     #----------------------------------------------------------------------
     def subscribe(self, subscribeReq):
@@ -189,13 +189,13 @@ class CtpGateway(Gateway):
     #----------------------------------------------------------------------
     def query(self, event):
         """注册到事件处理引擎上的查询函数"""
-		if self.qryEnabled:
-			self.qry_count += 1        
-			if self.qry_count > self.qry_trigger:
-				self.qryCount = 0
-				if len(self.qry_commands)>0:
-					self.qry_commands[0]()
-					del self.qry_commands[0]
+        if self.qryEnabled:
+            self.qry_count += 1
+            if self.qry_count > self.qry_trigger:
+                self.qryCount = 0
+                if len(self.qry_commands)>0:
+                    self.qry_commands[0]()
+                    del self.qry_commands[0]
     
     #----------------------------------------------------------------------
     def setQryEnabled(self, qryEnabled):
@@ -214,10 +214,10 @@ class CtpGateway(Gateway):
         self.eventEngine.register(EVENT_ERRORDERINSERT+self.gatewayName, self.err_order_action)
         self.eventEngine.register(EVENT_RTNTRADE+self.gatewayName, self.rtn_trade)
         self.eventEngine.register(EVENT_RTNORDER+self.gatewayName, self.rtn_order)
-		self.eventEngine.register(EVENT_TIMER, self.query)
-		self.eventEngine.register(EVENT_TDLOGIN, self.rsp_td_login)
-	
-	def rsp_td_login(self, event):
+        self.eventEngine.register(EVENT_TIMER, self.query)
+        self.eventEngine.register(EVENT_TDLOGIN, self.rsp_td_login)
+
+    def rsp_td_login(self, event):
         self.qry_commands.append(self.tdApi.qryAccount)
         self.qry_commands.append(self.tdApi.qryPosition)
         self.qry_commands.append(self.tdApi.qryOrder)
@@ -235,7 +235,7 @@ class CtpGateway(Gateway):
         if not newref.isdigit():
             return
         local_id = int(newref)
-        self.orderRef = max(self.orderRef, local_id)
+        self.tdApi.orderRef = max(self.tdApi.orderRef, local_id)
         if (local_id in self.id2order):
             myorder = self.id2order[local_id]
             # only update sysID,
@@ -410,6 +410,9 @@ class CtpGateway(Gateway):
                            data['Commission'])
 
     def rsp_qry_instrument(self, event):
+        pass
+
+    def rsp_qry_investor(self, event):
         pass
 
     def rsp_qry_position(self, event):
@@ -600,8 +603,8 @@ class CtpMdApi(MdApi):
             # 重新订阅之前订阅的合约
             for instID in self.instruments:
                 self.subscribe(instID)
-            trade_day_str = self.GetTradingDay()
-            scur_day = int(self.agent.scur_day.strftime('%Y%m%d'))
+            trade_day_str = self.getTradingDay()
+            scur_day = int(self.gateway.agent.scur_day.strftime('%Y%m%d'))
             if len(trade_day_str) > 0:
                 try:
                     self.trading_day = int(trade_day_str)
@@ -609,7 +612,7 @@ class CtpMdApi(MdApi):
                         event = Event(type=EVENT_DAYSWITCH)
                         event.dict['log'] = u'换日: %s -> %s' % (self.agent.scur_day, self.trading_day)
                         event.dict['date'] = self.trading_day
-                        self.eventEngine.put(event)
+                        self.gateway.eventEngine.put(event)
                 except ValueError:
                     pass
         # 否则，推送错误信息
@@ -663,7 +666,7 @@ class CtpMdApi(MdApi):
         event = Event(type = EVENT_MARKETDATA + self.gatewayName)
         event.dict['data'] = data
         event.dict['gateway'] = self.gatewayName
-        self.eventEngine.put(event)
+        self.gateway.eventEngine.put(event)
         
     #---------------------------------------------------------------------- 
     def onRspSubForQuoteRsp(self, data, error, n, last):
@@ -687,15 +690,15 @@ class CtpMdApi(MdApi):
         self.password = password            # 密码
         self.brokerID = brokerID            # 经纪商代码
         self.address = address              # 服务器地址
-        
+
         # 如果尚未建立服务器连接，则进行连接
         if not self.connectionStatus:
             # 创建C++环境中的API对象，这里传入的参数是需要用来保存.con文件的文件夹路径
-            path = os.getcwd() + '\\temp\\' + self.gatewayName + '\\'
+            path = self.gateway.file_prefix + 'tmp\\'
             if not os.path.exists(path):
                 os.makedirs(path)
-            self.createFtdcMdApi(path)
-            
+
+            self.createFtdcMdApi(str(path))
             # 注册服务器地址
             self.registerFront(self.address)
             
@@ -861,8 +864,7 @@ class CtpTdApi(TdApi):
         event2.dict['data'] = data
         event2.dict['error'] = error
         event2.dict['gateway'] = self.gatewayName
-        self.eventEngine.put(event2) 
- 
+        self.gateway.eventEngine.put(event2)
     
     #----------------------------------------------------------------------
     def onRtnOrder(self, data):
@@ -870,7 +872,7 @@ class CtpTdApi(TdApi):
         # 更新最大报单编号
         event = Event(type=EVENT_RTNORDER + self.gatewayName)
         event.dict['data'] = data
-        self.eventEngine.put(event)
+        self.gateway.eventEngine.put(event)
     
     #----------------------------------------------------------------------
     def onRtnTrade(self, data):
@@ -878,7 +880,7 @@ class CtpTdApi(TdApi):
         # 创建报单数据对象
         event = Event(type=EVENT_RTNTRADE+self.gatewayName)
         event.dict['data'] = data
-        self.eventEngine.put(event)
+        self.gateway.eventEngine.put(event)
     
     #----------------------------------------------------------------------
     def onErrRtnOrderInsert(self, data, error):
@@ -886,7 +888,7 @@ class CtpTdApi(TdApi):
         event = Event(type=EVENT_ERRORDERINSERT + self.gatewayName)
         event.dict['data'] = data
         event.dict['error'] = error
-        self.eventEngine.put(event)     
+        self.gateway.eventEngine.put(event)
 
         err = VtErrorData()
         err.gatewayName = self.gatewayName
@@ -901,7 +903,7 @@ class CtpTdApi(TdApi):
         event.dict['data'] = data
         event.dict['error'] = error
         event.dict['gateway'] = self.gatewayName
-        self.eventEngine.put(event) 
+        self.gateway.eventEngine.put(event)
 
         err = VtErrorData()
         err.gatewayName = self.gatewayName
@@ -922,7 +924,7 @@ class CtpTdApi(TdApi):
         event2.dict['data'] = data
         event2.dict['error'] = error
         event2.dict['gateway'] = self.gatewayName
-        self.eventEngine.put(event2) 
+        self.gateway.eventEngine.put(event2)
 
     #----------------------------------------------------------------------
     def onRspQueryMaxOrderVolume(self, data, error, n, last):
@@ -934,7 +936,7 @@ class CtpTdApi(TdApi):
         """确认结算信息回报"""
         self.gateway.tdConnected = True
         event = Event(type=EVENT_TDLOGIN)
-        self.eventEngine.put(event)         
+        self.gateway.eventEngine.put(event)
 
         # 查询合约代码
         # self.reqID += 1
@@ -949,7 +951,7 @@ class CtpTdApi(TdApi):
             event = Event(type=EVENT_QRYACCOUNT + self.gatewayName )
             event.dict['data'] = data
             event.dict['last'] = last
-            self.eventEngine.put(event)         
+            self.gateway.eventEngine.put(event)
         else:
             logContent = u'资金账户查询回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
             self.gateway.onLog(logContent, level = logging.DEBUG)
@@ -1007,7 +1009,7 @@ class CtpTdApi(TdApi):
             event = Event(type=EVENT_QRYORDER + self.gatewayName )
             event.dict['data'] = data
             event.dict['last'] = last
-            self.eventEngine.put(event)         
+            self.gateway.eventEngine.put(event)
         else:
             logContent = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
             self.gateway.onLog(logContent, level = logging.DEBUG)
@@ -1019,7 +1021,7 @@ class CtpTdApi(TdApi):
             event = Event(type=EVENT_QRYTRADE + self.gatewayName )
             event.dict['data'] = data
             event.dict['last'] = last
-            self.eventEngine.put(event)         
+            self.gateway.eventEngine.put(event)
         else:
             event = Event(type=EVENT_LOG)
             logContent = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
@@ -1032,7 +1034,7 @@ class CtpTdApi(TdApi):
             event = Event(type=EVENT_QRYPOSITION + self.gatewayName )
             event.dict['data'] = data
             event.dict['last'] = last
-            self.eventEngine.put(event)         
+            self.gateway.eventEngine.put(event)
         else:
             logContent = u'持仓查询回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
             self.gateway.onLog(logContent, level = logging.DEBUG)
@@ -1044,7 +1046,7 @@ class CtpTdApi(TdApi):
             event = Event(type=EVENT_QRYINVESTOR + self.gatewayName )
             event.dict['data'] = data
             event.dict['last'] = last
-            self.eventEngine.put(event)         
+            self.gateway.eventEngine.put(event)
         else:
             logContent = u'合约投资者回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
             self.gateway.onLog(logContent, level = logging.DEBUG)
@@ -1081,7 +1083,7 @@ class CtpTdApi(TdApi):
             event = Event(type=EVENT_QRYINSTRUMENT + self.gatewayName )
             event.dict['data'] = data
             event.dict['last'] = last
-            self.eventEngine.put(event)         
+            self.gateway.eventEngine.put(event)
         else:
             logContent = u'交易错误回报，错误代码：' + unicode(error['ErrorID']) + u',' + u'错误信息：' + error['ErrorMsg'].decode('gbk')
             self.gateway.onLog(logContent, level = logging.DEBUG)
@@ -1406,10 +1408,10 @@ class CtpTdApi(TdApi):
         # 如果尚未建立服务器连接，则进行连接
         if not self.connectionStatus:
             # 创建C++环境中的API对象，这里传入的参数是需要用来保存.con文件的文件夹路径
-            path = os.getcwd() + '\\temp\\' + self.gatewayName + '\\'
+            path = self.gateway.file_prefix + 'tmp\\'
             if not os.path.exists(path):
                 os.makedirs(path)
-            self.createFtdcTraderApi(path)
+            self.createFtdcTraderApi(str(path))
             
             # 注册服务器地址
             self.registerFront(self.address)

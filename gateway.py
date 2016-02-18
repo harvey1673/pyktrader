@@ -17,19 +17,16 @@ class Gateway(object):
     """交易接口"""
 
     #----------------------------------------------------------------------
-    def __init__(self, agent = None, gatewayName = 'Gateway'):
+    def __init__(self, agent, gatewayName = 'Gateway'):
         """Constructor"""
         self.gatewayName = gatewayName
         self.agent = agent
         self.eventEngine = None
-        self.file_prefix = ''
-		if agent != None:
-            self.eventEngine = agent.event_engine
-			self.file_prefix = agent.folder + gatewayName + '_'
+        self.eventEngine = agent.eventEngine
+        self.file_prefix = agent.folder + gatewayName + '_'
         self.qry_account = {}
         self.qry_pos = {}
         self.id2order = {}
-        self.file_prefix = ''
         self.positions = {}
         self.eod_flag = False
         self.account_info = {	'available': 0,
@@ -47,32 +44,32 @@ class Gateway(object):
         self.order_constraints = {	'total_submit': 2000, 'total_cancel': 2000, 'total_failure':500, \
                                     'submit_limit': 200,  'cancel_limit': 200,  'failure_limit': 200 }
     #----------------------------------------------------------------------
-	def initialize(self):
-		pass
-	
-	def day_finalize(self, tday):
-		self.save_local_positions(tday)
-		eod_pos = {}
-		for inst in self.positions:
-			pos = self.positions[inst]
-			eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
-		self.id2order  = {}
-		self.positions = {}
-		self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
-		for inst in eod_pos:
-			if sum(eod_pos)>0:
-				self.positions[inst] = order.Position(self.agent.instruments[inst], self)
-				self.positions[inst].pos_yday.long = eod_pos[inst][0] 
-				self.positions[inst].pos_yday.short = eod_pos[inst][1]
-				self.positions[inst].re_calc()
-		self.account_info['prev_capital'] = self.account_info['curr_capital']
-		
-	def add_instrument(self, instID):
-		if instID not in self.positions:
-			self.positions[instID] = order.Position(self.agent.instruments[instID], self)
-		if instID not in self.qry_pos:
-			self.qry_pos[instID]   = {'tday': [0, 0], 'yday': [0, 0]}
-		
+    def initialize(self):
+        pass
+
+    def day_finalize(self, tday):
+        self.save_local_positions(tday)
+        eod_pos = {}
+        for inst in self.positions:
+            pos = self.positions[inst]
+            eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
+        self.id2order  = {}
+        self.positions = {}
+        self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
+        for inst in eod_pos:
+            if sum(eod_pos)>0:
+                self.positions[inst] = order.Position(self.agent.instruments[inst], self)
+                self.positions[inst].pos_yday.long = eod_pos[inst][0]
+                self.positions[inst].pos_yday.short = eod_pos[inst][1]
+                self.positions[inst].re_calc()
+        self.account_info['prev_capital'] = self.account_info['curr_capital']
+
+    def add_instrument(self, instID):
+        if instID not in self.positions:
+            self.positions[instID] = order.Position(self.agent.instruments[instID], self)
+        if instID not in self.qry_pos:
+            self.qry_pos[instID]   = {'tday': [0, 0], 'yday': [0, 0]}
+
     def event_subscribe(self):
         pass
 
@@ -165,12 +162,12 @@ class Gateway(object):
         event1.dict['data'] = contract
         self.eventEngine.put(event1)        
     
-	def save_order_list(self, tday):
-		order.save_order_list(tday, self.id2order, self.file_prefix)
-		
-	def load_order_list(self, tday):
-		self.id2order = order.load_order_list(tday, self.file_prefix, self.positions)
-														 
+    def save_order_list(self, tday):
+        order.save_order_list(tday, self.id2order, self.file_prefix)
+
+    def load_order_list(self, tday):
+        self.id2order = order.load_order_list(tday, self.file_prefix, self.positions)
+
     def load_local_positions(self, tday):
         pos_date = tday
         logfile = self.file_prefix + 'EODPos_' + pos_date.strftime('%y%m%d')+'.csv'
@@ -179,7 +176,7 @@ class Gateway(object):
             logfile = self.file_prefix + 'EODPos_' + pos_date.strftime('%y%m%d')+'.csv'
             if not os.path.isfile(logfile):
                 logContent = "no prior position file is found"
-				self.onLog(logContent, level = logging.INFO)
+                self.onLog(logContent, level = logging.INFO)
                 return False
         else:
             self.eod_flag = True
@@ -190,11 +187,11 @@ class Gateway(object):
                     self.account_info['prev_capital'] = float(row[1])
                 elif row[0] == 'pos':
                     inst = row[1]
-					if inst in self.agent.instruments:
-						if inst not in self.positions:
-							self.positions[inst] = order.Position(self.instruments[inst], self)
-						self.positions[inst].pos_yday.long = int(row[2]) 
-						self.positions[inst].pos_yday.short = int(row[3])
+                    if inst in self.agent.instruments:
+                        if inst not in self.positions:
+                            self.positions[inst] = order.Position(self.instruments[inst], self)
+                        self.positions[inst].pos_yday.long = int(row[2])
+                        self.positions[inst].pos_yday.short = int(row[3])
         return True
 
     def save_local_positions(self, tday):
@@ -209,7 +206,7 @@ class Gateway(object):
                     pos = self.positions[inst]
                     pos.re_calc()
                 self.calc_margin()
-                file_writer.writerow(['capital', self.account_info['curr_capital'])
+                file_writer.writerow(['capital', self.account_info['curr_capital']])
                 for inst in self.positions:
                     pos = self.positions[inst]
                     if abs(pos.curr_pos.long) + abs(pos.curr_pos.short) > 0:
@@ -237,8 +234,8 @@ class Gateway(object):
         self.account_info['locked_margin'] = locked_margin
         self.account_info['used_margin'] = used_margin
         self.account_info['pnl_total'] = yday_pnl + tday_pnl
-        self.account_info['curr_capital'] = self.prev_capital + self.pnl_total
-        self.account_info['available'] = self.curr_capital - self.locked_margin
+        self.account_info['curr_capital'] = self.account_info['prev_capital'] + self.account_info['pnl_total']
+        self.account_info['available'] = self.account_info['curr_capital'] - self.account_info['locked_margin']
 
     #----------------------------------------------------------------------
     def connect(self):
@@ -275,8 +272,8 @@ class Gateway(object):
         """关闭"""
         pass
 
-	def register_event_handler(self):
-		pass
+    def register_event_handler(self):
+        pass
 
 ########################################################################
 class VtBaseData(object):
