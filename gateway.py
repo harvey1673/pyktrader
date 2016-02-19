@@ -21,7 +21,6 @@ class Gateway(object):
         """Constructor"""
         self.gatewayName = gatewayName
         self.agent = agent
-        self.eventEngine = None
         self.eventEngine = agent.eventEngine
         self.file_prefix = agent.folder + gatewayName + '_'
         self.qry_account = {}
