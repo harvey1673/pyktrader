@@ -78,10 +78,12 @@ class CtpGateway(Gateway):
         
         self.mdConnected = False        # 行情API连接状态，登录完成后为True
         self.tdConnected = False        # 交易API连接状态
-        self.qryEnabled = False         # 是否要启动循环查询
+        self.auto_db_update = False
+		self.qryEnabled = False         # 是否要启动循环查询
         self.qry_count = 0           # 查询触发倒计时
         self.qry_trigger = 2         # 查询触发点
         self.qry_commands = []
+		self.qry_instruments = {}
         
     #----------------------------------------------------------------------
     def connect(self):
@@ -109,9 +111,15 @@ class CtpGateway(Gateway):
             return            
         
         # 创建行情和交易接口对象
-        self.mdApi.connect(userID, password, brokerID, mdAddress)
-        if len(tdAddress) > 0:
+		if len(tdAddress) > 0:
+			self.mdApi.connect(userID, password, brokerID, mdAddress)
+			self.mdConnected = False
+        else:
+			self.mdApi = None
+			
+		if len(tdAddress) > 0:
             self.tdApi.connect(userID, password, brokerID, tdAddress)
+			self.tdConnected = False
         else:
             self.tdApi = None
             self.qryEnabled = False
@@ -119,7 +127,7 @@ class CtpGateway(Gateway):
     #----------------------------------------------------------------------
     def subscribe(self, subscribeReq):
         """订阅行情"""
-        self.mdApi.subscribe(subscribeReq)
+        self.mdApi.subscribe(subscribeReq.symbol)
         
     #----------------------------------------------------------------------
     def sendOrder(self, iorder):
@@ -215,7 +223,7 @@ class CtpGateway(Gateway):
         self.eventEngine.register(EVENT_RTNTRADE+self.gatewayName, self.rtn_trade)
         self.eventEngine.register(EVENT_RTNORDER+self.gatewayName, self.rtn_order)
         self.eventEngine.register(EVENT_TIMER, self.query)
-        self.eventEngine.register(EVENT_TDLOGIN, self.rsp_td_login)
+        self.eventEngine.register(EVENT_TDLOGIN+self.gatewayName, self.rsp_td_login)
 
     def rsp_td_login(self, event):
         self.qry_commands.append(self.tdApi.qryAccount)
@@ -410,7 +418,22 @@ class CtpGateway(Gateway):
                            data['Commission'])
 
     def rsp_qry_instrument(self, event):
-        pass
+		data = event.dict['data']
+		last = event.dict['last']
+		if data['ProductClass'] == '1' and data['ExchangeID'] in ['CZCE', 'DCE', 'SHFE', 'CFFEX']:
+			cont = {}
+            cont['instID'] = data['InstrumentID']			
+            cont['margin_l'] = data['LongMarginRatio']
+            cont['margin_s'] = data['ShortMarginRatio']
+            cont['start_date'] = datetime.datetime.strptime(data['OpenDate'],'%Y%M%d').date()
+            cont['expiry'] = datetime.datetime.strptime(data['ExpireDate'],'%Y%M%d').date()
+            cont['product_code'] = data['ProductID']
+			cont['exchange'] = data['ExchangeID']
+			instID = cont['instID']
+			self.qry_instruments[instID] = cont
+        if last and self.auto_db_update:
+			for instID in self.qry_instruments:
+				mysqlaccess.insert_cont_data(self.qry_instruments[instID])
 
     def rsp_qry_investor(self, event):
         pass
@@ -711,14 +734,14 @@ class CtpMdApi(MdApi):
                 self.login()
         
     #----------------------------------------------------------------------
-    def subscribe(self, subscribeReq):
+    def subscribe(self, symbol):
         """订阅合约"""
         # 这里的设计是，如果尚未登录就调用了订阅方法
         # 则先保存订阅请求，登录完成后会自动订阅
-        if subscribeReq.symbol not in self.instruments:
-            self.instruments.append(subscribeReq.symbol)
+        if symbol not in self.instruments:
+            self.instruments.append(symbol)
             if self.loginStatus:
-                self.subscribeMarketData(str(subscribeReq.symbol))
+                self.subscribeMarketData(str(symbol))
         
     #----------------------------------------------------------------------
     def login(self):
@@ -935,7 +958,7 @@ class CtpTdApi(TdApi):
     def onRspSettlementInfoConfirm(self, data, error, n, last):
         """确认结算信息回报"""
         self.gateway.tdConnected = True
-        event = Event(type=EVENT_TDLOGIN)
+        event = Event(type=EVENT_TDLOGIN+self.gatewayName)
         self.gateway.eventEngine.put(event)
 
         # 查询合约代码
@@ -1466,7 +1489,13 @@ class CtpTdApi(TdApi):
         req['BrokerID'] = self.brokerID
         req['InvestorID'] = self.userID
         self.reqQryInvestorPosition(req, self.reqID)
-        
+    
+	#----------------------------------------------------------------------    
+	def qryInstrument(self):
+		self.reqID += 1
+		req = {}
+		self.reqQryInstrument(req, self.reqID)
+		
     #----------------------------------------------------------------------
     def sendOrder(self, iorder):
         """发单"""
