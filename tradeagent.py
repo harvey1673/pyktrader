@@ -13,6 +13,7 @@ import os
 import csv
 import instrument
 import ctp_gateway
+from gateway import *
 import pandas as pd
 from base import *
 from misc import *
@@ -172,12 +173,13 @@ class MktDataMixin(object):
             if self.cur_min[inst]['low'] > tick.price:
                 self.cur_min[inst]['low'] = tick.price
         else:
+            last_vol = self.cur_min[inst]['volume']
             if (len(self.tick_data[inst]) > 0):
                 last_tick = self.tick_data[inst][-1]
                 self.cur_min[inst]['volume'] = last_tick.volume - self.cur_min[inst]['volume']
-                self.cur_min[inst]['openInterest'] = last_tick.openInterest            
-                self.cur_min[inst]['volume'] = last_tick.volume
+                self.cur_min[inst]['openInterest'] = last_tick.openInterest
                 self.min_switch(inst)
+                last_vol = last_tick.volume
             self.tick_data[inst] = []
             self.cur_min[inst] = {}
             self.cur_min[inst]['open']  = tick.price
@@ -185,6 +187,7 @@ class MktDataMixin(object):
             self.cur_min[inst]['high']  = tick.price
             self.cur_min[inst]['low']   = tick.price
             self.cur_min[inst]['min_id']  = tick_min
+            self.cur_min[inst]['volume']  = last_vol
             self.cur_min[inst]['openInterest'] = tick.openInterest
             self.cur_min[inst]['datetime'] = tick_dt.replace(second=0, microsecond=0)
             if ((tick_min>0) and (tick.price>0)): 
@@ -313,7 +316,7 @@ class Agent(MktDataMixin):
         for gateway_name in gateway_dict:
             gateway_class = eval(gateway_dict[gateway_name]['class'])
             self.add_gateway(gateway_class, gateway_name)
-
+        self.type2gateway = {}
         self.inst2strat = {}
         self.inst2gateway = {}
         self.strat_list = []
@@ -324,7 +327,7 @@ class Agent(MktDataMixin):
         strat_files = config.get('strat_files', [])
         for sfile in strat_files:
             strat_conf = json.load(sfile)
-            strat_class = strat_conf['class']
+            strat_class = eval(strat_conf['class'])
             strat_args  = strat_conf['args']
             strat = strat_class(**strat_args)
             self.strat_list.append(strat)
@@ -339,9 +342,9 @@ class Agent(MktDataMixin):
         self.init_init()    #init中的init,用于子类的处理
 
     def register_event_handler(self):
-		for key in self.gateways:
+        for key in self.gateways:
             gateway = self.gateways[key]
-			gateway.register_event_handler()	
+            gateway.register_event_handler()
         self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
         self.eventEngine.register(EVENT_LOG, self.log_handler)
         self.eventEngine.register(EVENT_TICK, self.run_tick)
@@ -379,13 +382,13 @@ class Agent(MktDataMixin):
                 gateway = self.gateway_map(name)
                 if gateway != None:
                     self.inst2gateway[name] = gateway
-					subreq = VtSubscribeReq()
-					subreq.symbol = name
-					subreq.exchange = self.instruments[name].exchange
-					subreq.productClass = self.instruments[name].ptype
-					subreq.currency = self.instruments[name].ccy
-					subreq.expiry = self.instruments[name].expiry				
-					gateway.subscribe(subreq)
+                    subreq = VtSubscribeReq()
+                    subreq.symbol = name
+                    subreq.exchange = self.instruments[name].exchange
+                    subreq.productClass = self.instruments[name].ptype
+                    subreq.currency = self.instruments[name].ccy
+                    subreq.expiry = self.instruments[name].expiry
+                    gateway.subscribe(subreq)
                 else:
                     self.logger.warning("No Gateway is assigned to instID = %s" % name)
             super(Agent, self).add_instrument(name)
@@ -809,57 +812,58 @@ class SaveAgent(Agent):
         self.save_flag = True
         self.live_trading = False
         self.prepare_data_env(mid_day = True)
-		self.register_event_handler()
-		self.eventEngine.start()
-		self.type2gateway = {}
-		for key in self.gateways:
+        self.register_event_handler()
+        for key in self.gateways:
             gateway = self.gateways[key]
             gway_class = type(gateway).__name__
             if 'Ctp' in gway_class:
-				self.type2gateway['CTP'] = gateway
-			elif 'Lts' in gway_class:
-				self.type2gateway['LTS'] = gateway
-			elif 'Ib' in gway_class:
-				self.type2gateway['IB'] = gateway
-			elif 'Ksgold' in gway_class:
-				self.type2gateway['KSGOLD'] = gateway
-			elif 'Ksotp' in gway_class:
-				self.type2gateway['KSOTP'] = gateway
-			elif 'Femas' in gway_class:
-				self.type2gateway['FEMAS'] = gateway
+                self.type2gateway['CTP'] = gateway
+            elif 'Lts' in gway_class:
+                self.type2gateway['LTS'] = gateway
+            elif 'Ib' in gway_class:
+                self.type2gateway['IB'] = gateway
+            elif 'Ksgold' in gway_class:
+                self.type2gateway['KSGOLD'] = gateway
+            elif 'Ksotp' in gway_class:
+                self.type2gateway['KSOTP'] = gateway
+            elif 'Femas' in gway_class:
+                self.type2gateway['FEMAS'] = gateway
 
     def restart(self):
-		pass
-		
+        self.eventEngine.start()
+        for gway in self.gateways:
+            gateway = self.gateways[gway]
+            gateway.connect()
+
     def register_event_handler(self):
-		for key in self.gateways:
+        for key in self.gateways:
             gateway = self.gateways[key]
-			gateway.register_event_handler()	
+            gateway.register_event_handler()
         self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
         self.eventEngine.register(EVENT_LOG, self.log_handler)
         self.eventEngine.register(EVENT_TICK, self.run_tick)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
         self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
-		if 'CTP' in self.type2gateway:
-			self.eventEngine.register(EVENT_TDLOGIN + self.type2gateway['CTP'].gatewayName, self.ctp_qry_instruments)
-			self.eventEngine.register(EVENT_QRYINSTRUMENT+self.gatewayName, self.add_ctp_instruments)
+        if 'CTP' in self.type2gateway:
+            self.eventEngine.register(EVENT_TDLOGIN + self.type2gateway['CTP'].gatewayName, self.ctp_qry_instruments)
+            self.eventEngine.register(EVENT_QRYINSTRUMENT + self.type2gateway['CTP'].gatewayName, self.add_ctp_instruments)
 
-	def ctp_qry_instruments(self, event):
-		dtime = datetime.datetime.now()
-		min_id = get_min_id(dtime)
-		if min_id < 250:
-			gateway = self.type2gateway['CTP']
-			gateway.qry_commands.append(gateway.tdApi.qryInstrument)
-	
-	def add_ctp_instruments(self, event):
-		data = event.dict['data']
-		last = event.dict['last']
-		if last:
-			gateway = self.type2gateway['CTP']
-			for symbol in gateway.qry_instruments:
-				if symbol not in self.instruments:
-					self.add_instrument(symbol)
-					
+    def ctp_qry_instruments(self, event):
+        dtime = datetime.datetime.now()
+        min_id = get_min_id(dtime)
+        if min_id < 250:
+            gateway = self.type2gateway['CTP']
+            gateway.qry_commands.append(gateway.tdApi.qryInstrument)
+
+    def add_ctp_instruments(self, event):
+        data = event.dict['data']
+        last = event.dict['last']
+        if last:
+            gateway = self.type2gateway['CTP']
+            for symbol in gateway.qry_instruments:
+                if symbol not in self.instruments:
+                    self.add_instrument(symbol)
+
     def exit(self):
         self.eventEngine.stop()
         for name in self.gateways:

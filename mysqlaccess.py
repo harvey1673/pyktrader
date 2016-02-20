@@ -6,6 +6,7 @@ Created on Jun 07, 2014
 import datetime
 import numpy
 import mysql.connector
+import copy
 import csv
 import os.path
 import misc
@@ -21,6 +22,15 @@ ss_tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInt
 min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
 daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
+def tick2dict(tick, tick_columns):
+    tick_dict = dict([tuple([col, getattr(tick,col)]) for col in tick_columns if col not in ['date', 'hour', 'min', 'sec', 'msec']])
+    tick_dict['hour'] = tick.timestamp.hour
+    tick_dict['min'] = tick.timestamp.minute
+    tick_dict['sec'] = tick.timestamp.second
+    tick_dict['msec'] = tick.timestamp.microsecond/1000
+    tick_dict['date'] = tick.date.strftime('%Y%m%d')
+    return tick_dict
+
 def insert_tick_data(inst, tick, dbtable = 'fut_tick'):
     tick_columns = fut_tick_columns
     if inst.isdigit():
@@ -28,11 +38,11 @@ def insert_tick_data(inst, tick, dbtable = 'fut_tick'):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(tick_columns))
-    args = tuple([getattr(tick,col) for col in tick_columns])
+    tick_dict = tick2dict(tick, tick_columns)
+    args = tuple([tick_dict[col] for col in tick_columns])
     cursor.execute(stmt, args)
     cnx.commit()
     cnx.close()
-    pass
     
 def bulkinsert_tick_data(inst, ticks, dbtable = 'fut_tick'):
     tick_columns = fut_tick_columns
@@ -41,7 +51,11 @@ def bulkinsert_tick_data(inst, ticks, dbtable = 'fut_tick'):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
     stmt = "INSERT IGNORE INTO {table} ({variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(tick_columns))
-    args = [tuple([getattr(tick,col) for col in tick_columns]) for tick in ticks]    
+    args = []
+    for tick in ticks:
+        tick_dict = tick2dict(tick, tick_columns)
+        args.append(tuple([tick_dict[col] for col in tick_columns]))
+    #args = [tuple([getattr(tick,col) for col in tick_columns]) for tick in ticks]
     cursor.executemany(stmt, args)
     cnx.commit()
     cnx.close()
@@ -50,9 +64,10 @@ def bulkinsert_tick_data(inst, ticks, dbtable = 'fut_tick'):
 def insert_min_data(inst, min_data, dbtable = 'fut_min'):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
-    col_list = min_data.keys()
-    exch = misc.inst2exch(inst)    
-    stmt = "INSERT IGNORE INTO {table} (instID,exch,{variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
+    col_list = min_data.keys() + ['date']
+    exch = misc.inst2exch(inst)
+    min_data['date'] = min_data['datetime'].date()
+    stmt = "INSERT IGNORE INTO {table} (instID,exch,{variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
     args = tuple([inst, exch]+[min_data[col] for col in col_list])
     cursor.execute(stmt, args)
     cnx.commit()
@@ -197,15 +212,17 @@ def load_inst_marginrate(instID):
     cnx.close()
     return out
         
-def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_end = 2114):
-    cnx = mysql.connector.connect(**dbconfig)
+def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_end = 2114, database = 'blueshale'):
+    db_conf = copy.deepcopy(dbconfig)
+    db_conf['database'] = database
+    cnx = mysql.connector.connect(**db_conf)
     end_adj = d_end + datetime.timedelta(days=1)
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)
     stmt = stmt + "and min_id >= %s " % minid_start
     stmt = stmt + "and min_id <= %s " % minid_end
-    stmt = stmt + "and datetime >= '%s' " % d_start.strftime('%Y-%m-%d')
-    stmt = stmt + "and datetime < '%s' " % end_adj.strftime('%Y-%m-%d')
-    stmt = stmt + "order by date(datetime), min_id" 
+    stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
+    stmt = stmt + "and date < '%s' " % end_adj.strftime('%Y-%m-%d')
+    stmt = stmt + "order by date, min_id"
     df = pd.io.sql.read_sql(stmt, cnx, index_col = 'datetime')
     cnx.close()
     return df    
