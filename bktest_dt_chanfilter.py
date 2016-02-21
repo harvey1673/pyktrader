@@ -1,8 +1,8 @@
 import sys
 import misc
-import agent
 import data_handler as dh
 import pandas as pd
+import tradeagent as agent
 import numpy as np
 import strategy as strat
 import datetime
@@ -41,8 +41,8 @@ def dual_thrust_sim( mdf, config):
                        pd.rolling_max(ddf.close, win) - pd.rolling_min(ddf.low, win)], 
                        join='outer', axis=1).max(axis=1).shift(1)
     ddf['TR'] = tr
-    ddf['H1'] = eval(chan_func['high']['func'])(ddf['high'], chan, **chan_func['high']['args']).shift(1)
-    ddf['L1'] = eval(chan_func['low']['func'])(ddf['low'], chan, **chan_func['low']['args']).shift(1)
+    ddf['H1'] = eval(chan_func['high']['func'])(ddf, chan, **chan_func['high']['args']).shift(1)
+    ddf['L1'] = eval(chan_func['low']['func'])(ddf, chan, **chan_func['low']['args']).shift(1)
     ll = mdf.shape[0]
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -54,7 +54,7 @@ def dual_thrust_sim( mdf, config):
     tradeid = 0
     for dd in mdf.index:
         mslice = mdf.ix[dd]
-        min_id = agent.get_min_id(dd)
+        min_id = mslice.min_id
         d = mslice.date
         dslice = ddf.ix[d]
         if np.isnan(dslice.TR) or (mslice.close == 0):
@@ -148,34 +148,34 @@ def gen_config_file(filename):
     sim_config = {}
     sim_config['sim_func']  = 'bktest_dt_chanfilter.dual_thrust_sim'
     sim_config['scen_keys'] = ['chan', 'param']
-    sim_config['sim_name']   = 'DT_'
-    sim_config['products']   = ['m', 'RM', 'y', 'p', 'l', 'pp', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jd', 'jm', 'ag', 'cu','TF', 'IF', 'ME']
+    sim_config['sim_name']   = 'DTdchan_'
+    sim_config['products']   = ['y', 'p', 'l', 'pp', 'cs', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'j', 'jd', 'jm', 'ag', 'cu', 'm', 'RM', 'ru']
     sim_config['start_date'] = '20141101'
-    sim_config['end_date']   = '20151118'
+    sim_config['end_date']   = '20160219'
     sim_config['need_daily'] = True
     sim_config['param']  =  [
             (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), \
             (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), \
             (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), \
             (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), \
-            (0.2, 2, 0.5, 0.0), (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.35, 2, 0.5, 0.0),\
-            (0.4, 2, 0.5, 0.0), (0.45, 2, 0.5, 0.0),(0.5, 2, 0.5, 0.0), \
-            #(0.2, 4, 0.5, 0.0), (0.25, 4, 0.5, 0.0),(0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),\
+            (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.35, 2, 0.5, 0.0), (0.4, 2, 0.5, 0.0), \
+            (0.45, 2, 0.5, 0.0),(0.5, 2, 0.5, 0.0), \
+            (0.2, 4, 0.5, 0.0), (0.25, 4, 0.5, 0.0),(0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),\
             #(0.4, 4, 0.5, 0.0), (0.45, 4, 0.5, 0.0),(0.5, 4, 0.5, 0.0),\
             ]
     sim_config['chan'] = [10, 20]
     sim_config['pos_class'] = 'strat.TradePos'
     sim_config['proc_func'] = 'dh.day_split'
     sim_config['offset']    = 1
-    chan_func = { 'high': {'func': 'dh.PCT_CHANNEL', 'args':{'pct': 80, 'field': 'high'}},
-                  'low':  {'func': 'dh.PCT_CHANNEL', 'args':{'pct': 20, 'field': 'low'}}}
+    chan_func = { 'high': {'func': 'dh.PCT_CHANNEL', 'args':{'pct': 90, 'field': 'high'}},
+                  'low':  {'func': 'dh.PCT_CHANNEL', 'args':{'pct': 10, 'field': 'low'}}}
     config = {'capital': 10000,
               'use_chan': True,
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,
               'stoploss': 0.0,
-              'min_range': 0.003,
+              'min_range': 0.0035,
               'proc_args': {'minlist':[1500]},
               'pos_args': {},
               'pos_update': False,

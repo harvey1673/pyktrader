@@ -48,8 +48,8 @@ def dual_thrust_sim( mdf, config):
                        pd.rolling_max(xdf.close, win) - pd.rolling_min(xdf.low, win)], 
                        join='outer', axis=1).max(axis=1)
     xdf['TR'] = tr
-    xdf['chan_h'] = chan_high(xdf['high'], chan, **chan_func['high']['args'])
-    xdf['chan_l'] = chan_low(xdf['low'], chan, **chan_func['low']['args'])
+    xdf['chan_h'] = chan_high(xdf, chan, **chan_func['high']['args'])
+    xdf['chan_l'] = chan_low(xdf, chan, **chan_func['low']['args'])
     xdf['MA'] = pd.rolling_mean(xdf.close, chan)
     xdata = pd.concat([xdf['TR'].shift(1), xdf['MA'].shift(1),
                        xdf['chan_h'].shift(1), xdf['chan_l'].shift(1),
@@ -148,29 +148,27 @@ def dual_thrust_sim( mdf, config):
 def gen_config_file(filename):
     sim_config = {}
     sim_config['sim_func']  = 'bktest_split_dt.dual_thrust_sim'
-    sim_config['scen_keys'] = ['param']
+    sim_config['scen_keys'] = ['chan', 'param']
     sim_config['sim_name']   = 'DTsplit'
-    sim_config['products']   = ['m', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au' ]
+    sim_config['products']   = ['y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ni', 'j', 'jm', 'ag', 'cu', 'au', 'm', 'RM', 'ru']
     sim_config['start_date'] = '20141101'
-    sim_config['end_date']   = '20151118'
+    sim_config['end_date']   = '20160219'
+    sim_config['chan'] = [10, 20, 30, 40]
     sim_config['param']  =  [
-            (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), \
-            (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), \
             (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), \
             (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), \
             (0.2, 2, 0.5, 0.0), (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.35, 2, 0.5, 0.0),\
             (0.4, 2, 0.5, 0.0), (0.45, 2, 0.5, 0.0),(0.5, 2, 0.5, 0.0), \
-            #(0.2, 4, 0.5, 0.0), (0.25, 4, 0.5, 0.0),(0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),\
-            #(0.4, 4, 0.5, 0.0), (0.45, 4, 0.5, 0.0),(0.5, 4, 0.5, 0.0),\
+            (0.2, 4, 0.5, 0.0), (0.25, 4, 0.5, 0.0),(0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),\
+            (0.4, 4, 0.5, 0.0), (0.45, 4, 0.5, 0.0),(0.5, 4, 0.5, 0.0),\
             ]
     sim_config['pos_class'] = 'strat.TradePos'
     sim_config['proc_func'] = 'dh.day_split'
     sim_config['offset']    = 1
-    chan_func = {'high': {'func': 'pd.rolling_max', 'args':{}},
-                 'low':  {'func': 'pd.rolling_min', 'args':{}},
+    chan_func = {'high': {'func': 'dh.DONCH_H', 'args':{}},
+                 'low':  {'func': 'dh.DONCH_L', 'args':{}},
                  }
     config = {'capital': 10000,
-              'chan': 10,
               'use_chan': True,
               'trans_cost': 0.0,
               'close_daily': False,
