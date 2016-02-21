@@ -216,19 +216,21 @@ def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_e
     db_conf = copy.deepcopy(dbconfig)
     db_conf['database'] = database
     cnx = mysql.connector.connect(**db_conf)
-    end_adj = d_end + datetime.timedelta(days=1)
-    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)
+    ext_min_columns = min_columns + ['date']
+    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(ext_min_columns), table= dbtable, instID = inst)
     stmt = stmt + "and min_id >= %s " % minid_start
     stmt = stmt + "and min_id <= %s " % minid_end
     stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
-    stmt = stmt + "and date < '%s' " % end_adj.strftime('%Y-%m-%d')
+    stmt = stmt + "and date <= '%s' " % d_end.strftime('%Y-%m-%d')
     stmt = stmt + "order by date, min_id"
     df = pd.io.sql.read_sql(stmt, cnx, index_col = 'datetime')
     cnx.close()
     return df    
 
-def load_daily_data_to_df(dbtable, inst, d_start, d_end):
-    cnx = mysql.connector.connect(**dbconfig)
+def load_daily_data_to_df(dbtable, inst, d_start, d_end, database = 'blueshale'):
+    db_conf = copy.deepcopy(dbconfig)
+    db_conf['database'] = database
+    cnx = mysql.connector.connect(**db_conf)
     stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(daily_columns), table= dbtable, instID = inst)
     stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
     stmt = stmt + "and date <= '%s' " % d_end.strftime('%Y-%m-%d')

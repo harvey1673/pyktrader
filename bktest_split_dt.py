@@ -53,7 +53,8 @@ def dual_thrust_sim( mdf, config):
     xdf['MA'] = pd.rolling_mean(xdf.close, chan)
     xdata = pd.concat([xdf['TR'].shift(1), xdf['MA'].shift(1),
                        xdf['chan_h'].shift(1), xdf['chan_l'].shift(1),
-                       xdf['open'], xdf['date_idx']], axis=1, keys=['TR','MA', 'chanH', 'chanL', 'dopen', 'date']).fillna(0)
+                       xdf['open']], axis=1, keys=['TR','MA', 'chanH', 'chanL', 'dopen']).fillna(0)
+
     mdf = mdf.join(xdata, how = 'left').fillna(method='ffill')
     mdf['pos'] = pd.Series([0]*ll, index = mdf.index)
     mdf['cost'] = pd.Series([0]*ll, index = mdf.index)
@@ -150,18 +151,18 @@ def gen_config_file(filename):
     sim_config['sim_func']  = 'bktest_split_dt.dual_thrust_sim'
     sim_config['scen_keys'] = ['param']
     sim_config['sim_name']   = 'DTsplit'
-    sim_config['products']   = ['m', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ru', 'j', 'jm', 'ag', 'cu', 'au' ]
-    sim_config['start_date'] = '20141101'
-    sim_config['end_date']   = '20151118'
+    sim_config['products']   = ['m', 'RM', 'y', 'p', 'a', 'rb', 'SR', 'TA', 'MA', 'i', 'ag', 'cu', 'ni', 'j' ]
+    sim_config['start_date'] = '20141229'
+    sim_config['end_date']   = '20160219'
     sim_config['param']  =  [
-            (0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), \
-            (0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), \
-            (0.5, 1, 0.5, 0.0), (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), \
-            (0.9, 1, 0.5, 0.0), (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), \
-            (0.2, 2, 0.5, 0.0), (0.25,2, 0.5, 0.0), (0.3, 2, 0.5, 0.0), (0.35, 2, 0.5, 0.0),\
-            (0.4, 2, 0.5, 0.0), (0.45, 2, 0.5, 0.0),(0.5, 2, 0.5, 0.0), \
-            #(0.2, 4, 0.5, 0.0), (0.25, 4, 0.5, 0.0),(0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),\
-            #(0.4, 4, 0.5, 0.0), (0.45, 4, 0.5, 0.0),(0.5, 4, 0.5, 0.0),\
+            #(0.5, 0, 0.5, 0.0), (0.6, 0, 0.5, 0.0), (0.7, 0, 0.5, 0.0), (0.8, 0, 0.5, 0.0), \
+            #(0.9, 0, 0.5, 0.0), (1.0, 0, 0.5, 0.0), (1.1, 0, 0.5, 0.0), \
+            (0.6, 1, 0.5, 0.0), (0.7, 1, 0.5, 0.0), (0.8, 1, 0.5, 0.0), (0.9, 1, 0.5, 0), \
+            (1.0, 1, 0.5, 0.0), (1.1, 1, 0.5, 0.0), (1.2, 1, 0.5, 0.0), \
+            (0.4, 2, 0.5, 0.0), (0.5, 2, 0.5, 0.0), (0.6, 2, 0.5, 0.0), (0.7, 2, 0.5, 0.0),\
+            (0.8, 2, 0.5, 0.0), (0.9, 2, 0.5, 0.0), (1.0, 2, 0.5, 0.0), \
+            (0.3, 4, 0.5, 0.0), (0.35, 4, 0.5, 0.0),(0.4, 4, 0.5, 0.0), (0.45, 4, 0.5, 0.0),\
+            (0.5, 4, 0.5, 0.0), (0.55, 4, 0.5, 0.0),(0.6, 4, 0.5, 0.0),\
             ]
     sim_config['pos_class'] = 'strat.TradePos'
     sim_config['proc_func'] = 'dh.day_split'
@@ -171,7 +172,7 @@ def gen_config_file(filename):
                  }
     config = {'capital': 10000,
               'chan': 10,
-              'use_chan': True,
+              'use_chan': False,
               'trans_cost': 0.0,
               'close_daily': False,
               'unit': 1,

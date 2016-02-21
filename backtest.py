@@ -15,7 +15,7 @@ sim_margin_dict = { 'au': 0.06, 'ag': 0.08, 'cu': 0.07, 'al':0.05,
                 'c':  0.05, 'CF': 0.05, 'i' : 0.05, 'j': 0.05,
                 'jm': 0.05, 'pp': 0.05, 'l' : 0.05, 'SR': 0.06,
                 'TA': 0.06, 'TC': 0.05, 'ME': 0.06, 'IF': 0.1,
-                'jd': 0.06, 'ni': 0.07, 'IC': 0.1,
+                'jd': 0.06, 'ni': 0.07, 'IC': 0.1,  'ZC': 0.05,
                 'IH': 0.01, 'FG': 0.05, 'TF':0.015, 'OI': 0.05,
                 'T': 0.015, 'MA': 0.06, 'cs': 0.05, 'bu': 0.07, 
                 'sn': 0.05, 'v': 0.05 }
@@ -32,6 +32,7 @@ sim_start_dict = { 'c': datetime.date(2008,10,1), 'm': datetime.date(2010,10,1),
     'IF':datetime.date(2010,7,1),  'MA':datetime.date(2015,7,1),  'TF':datetime.date(2014,4,1),
     'IH':datetime.date(2015,5,1),  'IC':datetime.date(2015,5,1),  'cs':datetime.date(2015,2,2),
     'jd':datetime.date(2014,6,1),  'ni':datetime.date(2015,6,1),  'sn':datetime.date(2015,6,1),
+    'ZC':datetime.date(2015,12,1),
     }
 
 trade_offset_dict = {
@@ -81,6 +82,8 @@ def cleanup_mindata(df, asset):
             cond = (df.min_id>= tradehrs[idx][0]) & (df.min_id < tradehrs[idx][1])
         else:
             cond = cond | (df.min_id>= tradehrs[idx][0]) & (df.min_id < tradehrs[idx][1])
+    if asset in ['a', 'b', 'p', 'y', 'm', 'i', 'j', 'm']:
+        cond = cond | ((df.index < datetime.datetime(2015, 5, 12, 15, 0, 0)) & (df.min_id>=300) & (df.min_id<830))
     df = df.ix[cond]
     df = df[(df.close > 0) & (df.high > 0) & (df.open > 0) & (df.low > 0)]
     return df
@@ -256,10 +259,10 @@ def simlauncher_min(config_file):
             nearby   = config['nearby']
             rollrule = config['rollrule']
             if nearby > 0:
-                mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True)
+                mdf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'm', need_shift=True, database = 'hist_data')
             mdf = cleanup_mindata(mdf, asset)
             if 'need_daily' in sim_config:
-                ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True)
+                ddf = misc.nearby(asset, nearby, start_date, end_date, rollrule, 'd', need_shift=True, database = 'hist_data')
                 config['ddf'] = ddf
             for ix, s in enumerate(scenarios):
                 fname1 = file_prefix + str(ix) + '_trades.csv'
