@@ -9,6 +9,7 @@ import base
 
 def filter_main_cont(sdate, filter = False):
     insts, prods  = mysqlaccess.load_alive_cont(sdate)
+    print insts, prods
     if not filter:
         return insts
     main_cont = {}
@@ -28,8 +29,10 @@ def save_ctp(tday, config_file, filter = False):
                    to_console = True,
                    console_level = logging.INFO)
     app_name = 'SaveAgent'
-    save_agent = agent.SaveAgent(name = app_name, tday = tday, config_file = config_file)
-    curr_insts = filter_main_cont(tday)
+    scur_day = datetime.datetime.strptime(tday, '%Y%m%d').date()
+    save_agent = agent.SaveAgent(name = app_name, tday = scur_day, config_file = config_file)
+    curr_insts = filter_main_cont(tday, False)
+    print len(curr_insts)
     for inst in curr_insts:
         save_agent.add_instrument(inst)
     try:
@@ -54,8 +57,8 @@ if __name__ == '__main__':
     else:
         app_name = args[1]
     if len(args) < 1:
-        tday = datetime.date.today()
+        tday = datetime.date.today().strftime('%Y%m%d')
     else:
-        tday = datetime.datetime.strptime(args[0], '%Y%m%d').date()
+        tday = args[0]
     params = (tday, config_file, filter)
     getattr(sys.modules[__name__], app_name)(*params)

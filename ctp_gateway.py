@@ -79,11 +79,11 @@ class CtpGateway(Gateway):
         self.mdConnected = False        # 行情API连接状态，登录完成后为True
         self.tdConnected = False        # 交易API连接状态
         self.auto_db_update = False
-		self.qryEnabled = False         # 是否要启动循环查询
+        self.qryEnabled = True         # 是否要启动循环查询
         self.qry_count = 0           # 查询触发倒计时
         self.qry_trigger = 2         # 查询触发点
         self.qry_commands = []
-		self.qry_instruments = {}
+        self.qry_instruments = {}
         
     #----------------------------------------------------------------------
     def connect(self):
@@ -111,15 +111,15 @@ class CtpGateway(Gateway):
             return            
         
         # 创建行情和交易接口对象
-		if len(tdAddress) > 0:
-			self.mdApi.connect(userID, password, brokerID, mdAddress)
-			self.mdConnected = False
+        if len(tdAddress) > 0:
+            self.mdApi.connect(userID, password, brokerID, mdAddress)
+            self.mdConnected = False
         else:
-			self.mdApi = None
-			
-		if len(tdAddress) > 0:
+            self.mdApi = None
+
+        if len(tdAddress) > 0:
             self.tdApi.connect(userID, password, brokerID, tdAddress)
-			self.tdConnected = False
+            self.tdConnected = False
         else:
             self.tdApi = None
             self.qryEnabled = False
@@ -209,7 +209,11 @@ class CtpGateway(Gateway):
     def setQryEnabled(self, qryEnabled):
         """设置是否要启动循环查询"""
         self.qryEnabled = qryEnabled
-    
+
+    def setAutoDbUpdated(self, db_update):
+        self.auto_db_update = db_update
+
+
     def register_event_handler(self):	
         self.eventEngine.register(EVENT_MARKETDATA+self.gatewayName, self.rsp_market_data)
         self.eventEngine.register(EVENT_QRYACCOUNT+self.gatewayName, self.rsp_qry_account)
@@ -345,13 +349,14 @@ class CtpGateway(Gateway):
 
     def rsp_market_data(self, event):
         data = event.dict['data']
-        if self.trading_day == 0:
-            self.trading_day = int(data['TradingDay'])
-        timestr = str(self.trading_day) + ' '+ str(data['UpdateTime']) + ' ' + str(data['UpdateMillisec']) + '000'
+        if self.mdApi.trading_day == 0:
+            self.mdApi.trading_day = int(data['TradingDay'])
+        timestr = str(self.mdApi.trading_day) + ' '+ str(data['UpdateTime']) + ' ' + str(data['UpdateMillisec']) + '000'
         try:
             timestamp = datetime.datetime.strptime(timestr, '%Y%m%d %H:%M:%S %f')
         except:
-            print "Error to convert timestr = %s" % timestr
+            logContent =  "Error to convert timestr = %s" % timestr
+            self.onLog(logContent, level = logging.INFO)
             return
         tick_id = get_tick_id(timestamp)
         if data['ExchangeID'] == 'CZCE':
@@ -369,6 +374,7 @@ class CtpGateway(Gateway):
         hrs = trading_hours(product, tick.exchange)
         buffer = 5
         tick_status = True
+        bad_tick = True
         for ptime in hrs:
             if (tick_id>=ptime[0]*1000-buffer) and (tick_id< ptime[1]*1000+buffer):
                 bad_tick = False
@@ -376,7 +382,7 @@ class CtpGateway(Gateway):
         if bad_tick:
             return
         tick.timestamp = timestamp
-        tick.date = timestamp.date
+        tick.date = timestamp.date()
         tick.tick_id = tick_id
         tick.price = data['LastPrice']
         tick.volume = data['Volume']
@@ -412,28 +418,29 @@ class CtpGateway(Gateway):
         self.qry_account['positionProfit'] = data['PositionProfit']
         
         # 这里的balance和快期中的账户不确定是否一样，需要测试
-        self.qrt_account['balance'] = (data['PreBalance'] - data['PreCredit'] - data['PreMortgage'] +
+        self.qry_account['balance'] = (data['PreBalance'] - data['PreCredit'] - data['PreMortgage'] +
                            data['Mortgage'] - data['Withdraw'] + data['Deposit'] +
                            data['CloseProfit'] + data['PositionProfit'] + data['CashIn'] -
                            data['Commission'])
 
     def rsp_qry_instrument(self, event):
-		data = event.dict['data']
-		last = event.dict['last']
-		if data['ProductClass'] == '1' and data['ExchangeID'] in ['CZCE', 'DCE', 'SHFE', 'CFFEX']:
-			cont = {}
+        data = event.dict['data']
+        last = event.dict['last']
+        if data['ProductClass'] == '1' and data['ExchangeID'] in ['CZCE', 'DCE', 'SHFE', 'CFFEX']:
+            cont = {}
             cont['instID'] = data['InstrumentID']			
             cont['margin_l'] = data['LongMarginRatio']
             cont['margin_s'] = data['ShortMarginRatio']
             cont['start_date'] = datetime.datetime.strptime(data['OpenDate'],'%Y%M%d').date()
             cont['expiry'] = datetime.datetime.strptime(data['ExpireDate'],'%Y%M%d').date()
             cont['product_code'] = data['ProductID']
-			cont['exchange'] = data['ExchangeID']
-			instID = cont['instID']
-			self.qry_instruments[instID] = cont
+            #cont['exchange'] = data['ExchangeID']
+            instID = cont['instID']
+            self.qry_instruments[instID] = cont
         if last and self.auto_db_update:
-			for instID in self.qry_instruments:
-				mysqlaccess.insert_cont_data(self.qry_instruments[instID])
+            print "update contract table, new inst # = %s" % len(self.qry_instruments)
+            for instID in self.qry_instruments:
+                mysqlaccess.insert_cont_data(self.qry_instruments[instID])
 
     def rsp_qry_investor(self, event):
         pass
@@ -442,6 +449,8 @@ class CtpGateway(Gateway):
         pposition = event.dict['data']
         isLast = event.dict['last']
         instID = pposition['InstrumentID']
+        if len(instID) ==0:
+            return
         if (instID not in self.qry_pos):
             self.qry_pos[instID]   = {'tday': [0, 0], 'yday': [0, 0]}
         key = 'yday'
@@ -453,18 +462,17 @@ class CtpGateway(Gateway):
             else:
                 idx = 0
         else:
-            if pposition.PositionDate == '1':
+            if pposition['PositionDate'] == '1':
                 key = 'tday'
         self.qry_pos[instID][key][idx] = pposition['Position']
         self.qry_pos[instID]['yday'][idx] = pposition['YdPosition']
         if isLast:
             print self.qry_pos
-            pass
 
     def rsp_qry_order(self, event):
         sorder = event.dict['data']
         isLast = event.dict['last']
-        if (len(sorder.OrderRef) == 0):
+        if (len(sorder['OrderRef']) == 0):
             return
         if not sorder['OrderRef'].isdigit():
             return
@@ -622,19 +630,18 @@ class CtpMdApi(MdApi):
             self.gateway.mdConnected = True
             logContent = u'行情服务器登录完成'
             self.gateway.onLog(logContent, level = logging.INFO)
-            
             # 重新订阅之前订阅的合约
             for instID in self.instruments:
                 self.subscribe(instID)
             trade_day_str = self.getTradingDay()
-            scur_day = int(self.gateway.agent.scur_day.strftime('%Y%m%d'))
             if len(trade_day_str) > 0:
                 try:
                     self.trading_day = int(trade_day_str)
-                    if self.trading_day > scur_day:
+                    tradingday = datetime.datetime.strptime(trade_day_str, '%Y%m%d').date()
+                    if tradingday > self.gateway.agent.scur_day:
                         event = Event(type=EVENT_DAYSWITCH)
-                        event.dict['log'] = u'换日: %s -> %s' % (self.agent.scur_day, self.trading_day)
-                        event.dict['date'] = self.trading_day
+                        event.dict['log'] = u'换日: %s -> %s' % (self.gateway.agent.scur_day, self.trading_day)
+                        event.dict['date'] = tradingday
                         self.gateway.eventEngine.put(event)
                 except ValueError:
                     pass
@@ -738,10 +745,10 @@ class CtpMdApi(MdApi):
         """订阅合约"""
         # 这里的设计是，如果尚未登录就调用了订阅方法
         # 则先保存订阅请求，登录完成后会自动订阅
+        if self.loginStatus:
+            self.subscribeMarketData(str(symbol))
         if symbol not in self.instruments:
             self.instruments.append(symbol)
-            if self.loginStatus:
-                self.subscribeMarketData(str(symbol))
         
     #----------------------------------------------------------------------
     def login(self):
@@ -958,6 +965,7 @@ class CtpTdApi(TdApi):
     def onRspSettlementInfoConfirm(self, data, error, n, last):
         """确认结算信息回报"""
         self.gateway.tdConnected = True
+        print 'td login event for %s ...' % self.gatewayName
         event = Event(type=EVENT_TDLOGIN+self.gatewayName)
         self.gateway.eventEngine.put(event)
 
@@ -1490,12 +1498,12 @@ class CtpTdApi(TdApi):
         req['InvestorID'] = self.userID
         self.reqQryInvestorPosition(req, self.reqID)
     
-	#----------------------------------------------------------------------    
-	def qryInstrument(self):
-		self.reqID += 1
-		req = {}
-		self.reqQryInstrument(req, self.reqID)
-		
+    #----------------------------------------------------------------------
+    def qryInstrument(self):
+        self.reqID += 1
+        req = {}
+        self.reqQryInstrument(req, self.reqID)
+
     #----------------------------------------------------------------------
     def sendOrder(self, iorder):
         """发单"""

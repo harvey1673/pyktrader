@@ -187,6 +187,7 @@ def get_stockopt_map(underlying, cont_mths, strikes):
     
 def load_alive_cont(sdate):
     cnx = mysql.connector.connect(**dbconfig)
+    print dbconfig
     cursor = cnx.cursor()
     stmt = "select instID, product_code from contract_list where expiry>=%s"
     args = tuple([sdate])    

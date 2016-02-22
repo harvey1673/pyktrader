@@ -61,6 +61,7 @@ class MktDataMixin(object):
         self.min_data_func[name] = {}
         self.cur_min[name]['datetime'] = datetime.datetime.fromordinal(self.scur_day.toordinal())
         self.cur_day[name]['date'] = self.scur_day
+        self.prepare_data_env(name, mid_day = True)
 
     def register_data_func(self, inst, freq, fobj):
         if inst not in self.day_data_func:
@@ -83,65 +84,61 @@ class MktDataMixin(object):
                 self.min_data_func[inst][mins].append(fobj)
             return True
         
-    def prepare_data_env(self, mid_day = True): 
+    def prepare_data_env(self, inst, mid_day = True):
+        if  self.instruments[inst].ptype == instrument.ProductType.Option:
+            return
         if self.daily_data_days > 0 or mid_day:
             self.logger.debug('Updating historical daily data for %s' % self.scur_day.strftime('%Y-%m-%d'))
             daily_start = workdays.workday(self.scur_day, -self.daily_data_days, CHN_Holidays)
             daily_end = self.scur_day
-            for inst in self.instruments:  
-                if (self.instruments[inst].ptype == instrument.ProductType.Option):
-                    continue
-                self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
-                df = self.day_data[inst]
-                if len(df) > 0:
-                    self.instruments[inst].price = df['close'][-1]
-                    self.instruments[inst].last_update = 0
-                    self.instruments[inst].prev_close = df['close'][-1]
-                    for fobj in self.day_data_func[inst]:
-                        ts = fobj.sfunc(df)
-                        df[ts.name]= pd.Series(ts, index=df.index)
-
+            self.day_data[inst] = mysqlaccess.load_daily_data_to_df('fut_daily', inst, daily_start, daily_end)
+            df = self.day_data[inst]
+            if len(df) > 0:
+                self.instruments[inst].price = df['close'][-1]
+                self.instruments[inst].last_update = 0
+                self.instruments[inst].prev_close = df['close'][-1]
+                for fobj in self.day_data_func[inst]:
+                    ts = fobj.sfunc(df)
+                    df[ts.name]= pd.Series(ts, index=df.index)
         if self.min_data_days > 0 or mid_day:
             self.logger.debug('Updating historical min data for %s' % self.scur_day.strftime('%Y-%m-%d'))
-            d_start = workdays.workday(self.scur_day, -self.min_data_days, CHN_Holidays)
+            d_start = workdays.workday(self.scur_day, -max(self.min_data_days,1), CHN_Holidays)
             d_end = self.scur_day
-            for inst in self.instruments: 
-                if (self.instruments[inst].ptype == instrument.ProductType.Option):
-                    continue
-                min_start = int(self.instruments[inst].start_tick_id/1000)
-                min_end = int(self.instruments[inst].last_tick_id/1000)+1
-                #print "loading inst = %s" % inst
-                mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)        
-                mindata = backtest.cleanup_mindata(mindata, self.instruments[inst].product)
-                self.min_data[inst][1] = mindata
-                if len(mindata)>0:
-                    min_date = mindata.index[-1].date()
-                    if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
-                        ddf = data_handler.conv_ohlc_freq(mindata, 'd')
-                        self.cur_day[inst]['open'] = float(ddf.open[-1])
-                        self.cur_day[inst]['close'] = float(ddf.close[-1])
-                        self.cur_day[inst]['high'] = float(ddf.high[-1])
-                        self.cur_day[inst]['low'] = float(ddf.low[-1])
-                        self.cur_day[inst]['volume'] = int(ddf.volume[-1])
-                        self.cur_day[inst]['openInterest'] = int(ddf.openInterest[-1])
-                        self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
-                        self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
-                        self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
-                        self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
-                        self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
-                        self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
-                        self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
-                        self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
-                        self.instruments[inst].price = float(mindata.ix[-1,'close'])
-                        self.instruments[inst].last_update = 0
-                        self.logger.debug('inst=%s tick data loaded for date=%s' % (inst, min_date))
-                    for m in self.min_data_func[inst]:
-                        if m != 1:
-                            self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
-                        df = self.min_data[inst][m]
-                        for fobj in self.min_data_func[inst][m]:
-                            ts = fobj.sfunc(df)
-                            df[ts.name]= pd.Series(ts, index=df.index)
+            min_start = int(self.instruments[inst].start_tick_id/1000)
+            min_end = int(self.instruments[inst].last_tick_id/1000)+1
+            mindata = mysqlaccess.load_min_data_to_df('fut_min', inst, d_start, d_end, minid_start=min_start, minid_end=min_end)
+            mindata = backtest.cleanup_mindata(mindata, self.instruments[inst].product)
+            self.min_data[inst][1] = mindata
+            if len(mindata)>0:
+                min_date = mindata.index[-1].date()
+                if (len(self.day_data[inst].index)==0) or (min_date > self.day_data[inst].index[-1]):
+                    ddf = data_handler.conv_ohlc_freq(mindata, 'd')
+                    self.cur_day[inst]['open'] = float(ddf.open[-1])
+                    self.cur_day[inst]['close'] = float(ddf.close[-1])
+                    self.cur_day[inst]['high'] = float(ddf.high[-1])
+                    self.cur_day[inst]['low'] = float(ddf.low[-1])
+                    self.cur_day[inst]['volume'] = int(ddf.volume[-1])
+                    self.cur_day[inst]['openInterest'] = int(ddf.openInterest[-1])
+                    self.cur_min[inst]['datetime'] = pd.datetime(*mindata.index[-1].timetuple()[0:-3])
+                    self.cur_min[inst]['open'] = float(mindata.ix[-1,'open'])
+                    self.cur_min[inst]['close'] = float(mindata.ix[-1,'close'])
+                    self.cur_min[inst]['high'] = float(mindata.ix[-1,'high'])
+                    self.cur_min[inst]['low'] = float(mindata.ix[-1,'low'])
+                    self.cur_min[inst]['volume'] = self.cur_day[inst]['volume']
+                    self.cur_min[inst]['openInterest'] = self.cur_day[inst]['openInterest']
+                    self.cur_min[inst]['min_id'] = int(mindata.ix[-1,'min_id'])
+                    self.instruments[inst].price = float(mindata.ix[-1,'close'])
+                    self.instruments[inst].last_update = 0
+                    #print inst, min_date, ddf.index[-1], len(self.day_data[inst].index), self.cur_day[inst]
+                    #print self.cur_day[inst]
+                    self.logger.debug('inst=%s tick data loaded for date=%s' % (inst, min_date))
+                for m in self.min_data_func[inst]:
+                    if m != 1:
+                        self.min_data[inst][m] = data_handler.conv_ohlc_freq(self.min_data[inst][1], str(m)+'min')
+                    df = self.min_data[inst][m]
+                    for fobj in self.min_data_func[inst][m]:
+                        ts = fobj.sfunc(df)
+                        df[ts.name]= pd.Series(ts, index=df.index)
 
     def get_min_id(self, tick_id):
         return int(tick_id/1000)
@@ -483,8 +480,8 @@ class Agent(MktDataMixin):
         for strat_name in self.strat_list:
             strat = self.strategies[strat_name]
             self.add_strategy(strat)
-        self.logger.debug('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
-        self.prepare_data_env(mid_day = True)
+        #self.logger.debug('Prepare market data for %s' % self.scur_day.strftime('%y%m%d'))
+        #self.prepare_data_env(mid_day = True)
         self.logger.debug('Prepare trade environment for %s' % self.scur_day.strftime('%y%m%d'))
         self.get_eod_positions()
         self.get_all_orders()
@@ -529,7 +526,7 @@ class Agent(MktDataMixin):
         if not self.eod_flag:
             self.logger.debug(u'保存执行状态.....................')
             for gway in self.gateways:
-                self.gateways[gway].save_order_list()
+                self.gateways[gway].save_order_list(self.scur_day)
             order.save_trade_list(self.scur_day, self.ref2trade, self.folder)
     
     def run_eod(self):
@@ -537,6 +534,9 @@ class Agent(MktDataMixin):
             return
         print 'run EOD process'
         self.mkt_data_eod()
+        if len(self.strat_list) == 0:
+            self.eod_flag = True
+            return
         pfilled_dict = {}
         for trade_id in self.ref2trade:
             etrade = self.ref2trade[trade_id]
@@ -811,8 +811,7 @@ class SaveAgent(Agent):
     def init_init(self):
         self.save_flag = True
         self.live_trading = False
-        self.prepare_data_env(mid_day = True)
-        self.register_event_handler()
+        #self.prepare_data_env(mid_day = True)
         for key in self.gateways:
             gateway = self.gateways[key]
             gway_class = type(gateway).__name__
@@ -828,6 +827,7 @@ class SaveAgent(Agent):
                 self.type2gateway['KSOTP'] = gateway
             elif 'Femas' in gway_class:
                 self.type2gateway['FEMAS'] = gateway
+        self.register_event_handler()
 
     def restart(self):
         self.eventEngine.start()
@@ -847,6 +847,7 @@ class SaveAgent(Agent):
         if 'CTP' in self.type2gateway:
             self.eventEngine.register(EVENT_TDLOGIN + self.type2gateway['CTP'].gatewayName, self.ctp_qry_instruments)
             self.eventEngine.register(EVENT_QRYINSTRUMENT + self.type2gateway['CTP'].gatewayName, self.add_ctp_instruments)
+            self.type2gateway['CTP'].setAutoDbUpdated(True)
 
     def ctp_qry_instruments(self, event):
         dtime = datetime.datetime.now()
