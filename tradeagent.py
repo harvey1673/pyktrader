@@ -296,6 +296,7 @@ class Agent(MktDataMixin):
         self.timer_count = 0
         self.name = name
         config = {}
+        self.sched_commands = []
         with open(config_file, 'r') as infile:
             config = json.load(infile)
         self.folder = str(config.get('folder', self.name + os.path.sep))
@@ -348,7 +349,25 @@ class Agent(MktDataMixin):
         self.eventEngine.register(EVENT_MIN_BAR, self.run_min)
         self.eventEngine.register(EVENT_ETRADEUPDATE, self.trade_update)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
-        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)		
+        self.eventEngine.register(EVENT_TIMER, self.check_commands)
+
+    def put_command(self, timestamp, command, arg = {} ): #按顺序插入
+        #print func_name(command)
+        stamps = [tstamp for tstamp,cmd in self.sched_commands]
+        ii = bisect.bisect(stamps, timestamp)
+        self.sched_commands.insert(ii,(timestamp, command, arg))
+
+    def check_commands(self):
+        l = len(self.sched_commands)
+        curr_time = datetime.datetime.now()
+        i = 0
+        while(i<l and curr_time >= self.sched_commands[i][0]):
+            logging.info(u'exec command:,i=%s,time=%s,command[i][0]=%s' % (i, curr_time, self.sched_commands[i][0]))
+            arg = self.commands[i][1]
+            self.commands[i][1](**arg)
+            i += 1
+        if i>0:
+            del self.sched_commands[0:i]
 
     def gateway_map(self, instID):
         exch = self.instruments[instID].exchange
@@ -446,13 +465,6 @@ class Agent(MktDataMixin):
     def log_handler(self, event):
         lvl = event.dict['level']
         self.logger.log(lvl, event.dict['data'])
-
-    def time_scheduler(self, event):
-        if self.timer_count % int(1800 / self.event_period):
-            if self.tick_id >= 2100000-10:
-                min_id = get_min_id(datetime.datetime.now())
-                if (min_id >= 2103) and (self.eod_flag == False):
-                    self.qry_commands.append(self.run_eod)
 
     def get_eod_positions(self):
         for name in self.gateways:
@@ -577,6 +589,8 @@ class Agent(MktDataMixin):
         self.timer_count = 0
         super(Agent, self).mkt_data_sod(newday)
         self.eod_flag = False
+        eod_time = datetime.datetime.combine(newday, datetime.time(15, 20, 0))
+        self.put_command(eod_time, self.run_eod)
                 
     def init_init(self):    #init中的init,用于子类的处理
         self.register_event_handler()
@@ -843,7 +857,7 @@ class SaveAgent(Agent):
         self.eventEngine.register(EVENT_LOG, self.log_handler)
         self.eventEngine.register(EVENT_TICK, self.run_tick)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
-        self.eventEngine.register(EVENT_TIMER, self.time_scheduler)
+        self.eventEngine.register(EVENT_TIMER, self.check_commands)
         if 'CTP' in self.type2gateway:
             self.eventEngine.register(EVENT_TDLOGIN + self.type2gateway['CTP'].gatewayName, self.ctp_qry_instruments)
             self.eventEngine.register(EVENT_QRYINSTRUMENT + self.type2gateway['CTP'].gatewayName, self.add_ctp_instruments)

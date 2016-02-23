@@ -965,7 +965,6 @@ class CtpTdApi(TdApi):
     def onRspSettlementInfoConfirm(self, data, error, n, last):
         """确认结算信息回报"""
         self.gateway.tdConnected = True
-        print 'td login event for %s ...' % self.gatewayName
         event = Event(type=EVENT_TDLOGIN+self.gatewayName)
         self.gateway.eventEngine.put(event)
 
