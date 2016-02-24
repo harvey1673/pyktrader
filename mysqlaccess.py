@@ -19,7 +19,7 @@ dbconfig = {'user': 'harvey',
           }
 fut_tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
 ss_tick_columns = ['instID', 'date','tick_id','hour','min','sec','msec','openInterest','volume','price','high','low','bidPrice1', 'bidVol1','askPrice1','askVol1']
-min_columns = ['datetime', 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
+min_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'openInterest', 'min_id']
 daily_columns = [ 'date', 'open', 'high', 'low', 'close', 'volume', 'openInterest']
 
 def tick2dict(tick, tick_columns):
@@ -64,9 +64,9 @@ def bulkinsert_tick_data(inst, ticks, dbtable = 'fut_tick'):
 def insert_min_data(inst, min_data, dbtable = 'fut_min'):
     cnx = mysql.connector.connect(**dbconfig)
     cursor = cnx.cursor()
-    col_list = min_columns
+    col_list = min_data.keys() + ['date']
     exch = misc.inst2exch(inst)
-    min_data['date'] = min_data.get('date', min_data['datetime'].date())
+    min_data['date'] = min_data['datetime'].date()
     stmt = "INSERT IGNORE INTO {table} (instID,exch,{variables}) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)".format(table=dbtable,variables=','.join(col_list))
     args = tuple([inst, exch]+[min_data[col] for col in col_list])
     cursor.execute(stmt, args)
@@ -187,7 +187,6 @@ def get_stockopt_map(underlying, cont_mths, strikes):
     
 def load_alive_cont(sdate):
     cnx = mysql.connector.connect(**dbconfig)
-    print dbconfig
     cursor = cnx.cursor()
     stmt = "select instID, product_code from contract_list where expiry>=%s"
     args = tuple([sdate])    
@@ -217,7 +216,8 @@ def load_min_data_to_df(dbtable, inst, d_start, d_end, minid_start=1500, minid_e
     db_conf = copy.deepcopy(dbconfig)
     db_conf['database'] = database
     cnx = mysql.connector.connect(**db_conf)
-    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(min_columns), table= dbtable, instID = inst)
+    ext_min_columns = min_columns + ['date']
+    stmt = "select {variables} from {table} where instID='{instID}' ".format(variables=','.join(ext_min_columns), table= dbtable, instID = inst)
     stmt = stmt + "and min_id >= %s " % minid_start
     stmt = stmt + "and min_id <= %s " % minid_end
     stmt = stmt + "and date >= '%s' " % d_start.strftime('%Y-%m-%d')
@@ -275,7 +275,6 @@ def load_tick_data(dbtable, insts, d_start, d_end):
     
 def insert_min_data_to_df(df, min_data):
     new_data = { key: min_data[key] for key in min_columns[1:] }
-	new_data['date'] = new_data.get('date', new_data['datetime'].date())
     df.loc[min_data['datetime']] = pd.Series(new_data)
 
 def insert_daily_data_to_df(df, daily_data):

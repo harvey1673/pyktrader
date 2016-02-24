@@ -431,8 +431,8 @@ class CtpGateway(Gateway):
             cont['instID'] = data['InstrumentID']			
             cont['margin_l'] = data['LongMarginRatio']
             cont['margin_s'] = data['ShortMarginRatio']
-            cont['start_date'] = datetime.datetime.strptime(data['OpenDate'],'%Y%M%d').date()
-            cont['expiry'] = datetime.datetime.strptime(data['ExpireDate'],'%Y%M%d').date()
+            cont['start_date'] =data['OpenDate']
+            cont['expiry'] = data['ExpireDate']
             cont['product_code'] = data['ProductID']
             #cont['exchange'] = data['ExchangeID']
             instID = cont['instID']

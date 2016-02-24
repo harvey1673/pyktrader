@@ -357,15 +357,16 @@ class Agent(MktDataMixin):
         ii = bisect.bisect(stamps, timestamp)
         self.sched_commands.insert(ii,(timestamp, command, arg))
 
-    def check_commands(self):
+    def check_commands(self, event):
         l = len(self.sched_commands)
         curr_time = datetime.datetime.now()
         i = 0
         while(i<l and curr_time >= self.sched_commands[i][0]):
             logging.info(u'exec command:,i=%s,time=%s,command[i][0]=%s' % (i, curr_time, self.sched_commands[i][0]))
-            arg = self.commands[i][1]
-            self.commands[i][1](**arg)
+            arg = self.sched_commands[i][1]
+            self.sched_commands[i][1](**arg)
             i += 1
+            print i
         if i>0:
             del self.sched_commands[0:i]
 
