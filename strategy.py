@@ -139,39 +139,37 @@ def tradepos2dict(tradepos):
     return trade
 
 class Strategy(object):
-    def __init__(self, name, underliers, volumes, trade_unit = [], agent = None, email_notify = None):
-        self.name = name
-        self.underliers = underliers
-        num_assets = len(underliers)
-        self.volumes = volumes
-        self.instIDs = list(set().union(*underliers))
-        if len(trade_unit) > 0:
-            self.trade_unit = trade_unit
-        else:
-            self.trade_unit = [1] * num_assets
+    common_params = {'name': 'test_strat', 'email_notify':'', 'folder':'', \
+                     'trade_valid_time': 600, 'num_tick': 0, 'daily_close_buffer':5, \
+                     'order_type': OPT_LIMIT_ORDER, 'pos_class': 'TradePos', 'pos_args': {} }
+    asset_params = {'underliers': [], 'volumes': [], 'trade_unit': 1,  \
+                    'close_tday': False, 'last_min_id': 2055, 'trail_loss': 0}
+    def __init__(self, config, agent = None):
+        d = self.__dict__
+        for key in self.default_params:
+            d[key] = config.get(key, self.default_params[key])
+        for key in self.asset_params:
+            d[key] = []
+        assets = config['assets']
+        for asset in assets:
+            for key in self.asset_params:
+                d[key].append(asset[key])
+        num_assets = len(assets)
+        self.instIDs = self.dep_instIDs()
         self.positions  = [[] for _ in self.underliers]
         self.submitted_trades = [[] for _ in self.underliers]
         self.data_func = []
         self.agent = agent
-        self.folder = ''
         self.logger = None
         self.inst2idx = {}
         self.under2idx = {}
-        #self.reset()
-        self.email_notify = email_notify
-        self.trade_valid_time = 600
-        self.num_tick = 0
         self.num_entries = [0] * num_assets
         self.num_exits   = [0] * num_assets
-        self.daily_close_buffer = 5
-        self.close_tday = [False] * num_assets
-        self.last_min_id = [2055] * num_assets
-        self.trail_loss = [0] * num_assets
         self.curr_prices = [0.0] * num_assets
-        self.order_type = OPT_LIMIT_ORDER
         self.run_flag = [1] * num_assets
-        self.pos_class = TradePos
-        self.pos_args = {}
+
+    def dep_instIDs(self):
+        return list(set().union(*self.underliers))
 
     def reset(self):
         self.inst2idx = {}
