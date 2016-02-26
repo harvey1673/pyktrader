@@ -5,59 +5,30 @@ import data_handler as dh
 import copy
 from strategy import *
  
-class DTSplitChanFilter(Strategy):
-    def __init__(self, name, underliers, volumes,
-                 agent = None,
-                 trade_unit = [],
-                 ratios = [],
-                 lookbacks=[],
-                 channels = [],
-                 daily_close = False,
-                 email_notify = None,
-                 open_period = [300, 1500, 2115],
-                 chan_func = {'high_func': max,
-                              'high_args': {},
-                              'low_func': min,
-                              'low_args': {}},
-                 min_rng = [0.00]):
-        Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
-        self.chan_func = chan_func
-        self.lookbacks = lookbacks
-        numAssets = len(underliers)
-        self.ratios = [[0.5, 0.5]] * numAssets
-        if len(ratios) > 1:
-            self.ratios = ratios
-        elif len(ratios) == 1: 
-            self.ratios = ratios * numAssets
-        if len(channels) > 1:
-            self.channels = channels
-        elif len(channels) == 1:
-            self.channels = channels * numAssets
-        if len(lookbacks) > 0:
-            self.lookbacks = lookbacks
-        else: 
-            self.lookbacks = [0] * numAssets
+class DTSplitDChanFilter(Strategy):
+	common_params =  dict({'open_period': [300, 1500, 2100]}, **Strategy.commen_params)
+	asset_params = dict({'lookbacks': 1, 'ratios': (1.0, 1.0), 'channels': 20, 'min_rng': 0.003, 'daily_close':False}, **Strategy.asset_params)
+    def __init__(self, config, agent = None):
+        Strategy.__init__(self, config, agent)
+        numAssets = len(self.underliers)
         self.cur_rng = [0.0] * numAssets
         self.chan_high = [0.0] * numAssets
         self.chan_low  = [0.0] * numAssets
         self.tday_open = [0.0] * numAssets
-        self.open_period = open_period
         self.open_idx = [0] * numAssets
         self.tick_base = [0.0] * numAssets
-        self.order_type = OPT_LIMIT_ORDER
         self.daily_close_buffer = 3
-        self.close_tday = [False] * numAssets
-        if len(daily_close) > 1:
-            self.close_tday = daily_close
-        elif len(daily_close) == 1: 
-            self.close_tday = daily_close * numAssets
         self.num_tick = 1
-        self.min_rng = [0.0] * numAssets
-        if len(min_rng) > 1:
-            self.min_rng = min_rng
-        elif len(min_rng) == 1:
-            self.min_rng = min_rng * numAssets
 
+    def register_func_freq(self):
+		for under, chan in zip(self.underliers, self.channels):
+			for infunc in self.data_func:
+				name  = infunc[0]
+				sfunc = eval(infunc[1])
+				rfunc = eval(infunc[2])
+				fobj = BaseObject(name = name + str(chan[1]), sfunc = fcustom(sfunc, n = chan), rfunc = fcustom(rfunc, n = chan))
+				self.agent.register_data_func(under[0], 'd', fobj) 
+				
     def initialize(self):
         self.load_state()
         for idx, underlier in enumerate(self.underliers):
