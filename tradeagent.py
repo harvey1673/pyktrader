@@ -50,6 +50,7 @@ class MktDataMixin(object):
         self.tick_db_table = config.get('tick_db_table', 'fut_tick')
         self.min_db_table  = config.get('min_db_table', 'fut_min')
         self.daily_db_table = config.get('daily_db_table', 'fut_daily')
+		self.calc_func_dict = {}
 
     def add_instrument(self, name):
         self.tick_data[name] = []
@@ -67,12 +68,13 @@ class MktDataMixin(object):
         if inst not in self.day_data_func:
             self.day_data_func[inst] = []
             self.min_data_func[inst] = {}
+		if fobj.name not in self.calc_func_dict:
+			self.calc_func_dict[fobj.name] = fobj
         if 'd' in freq:
             for func in self.day_data_func[inst]:
                 if fobj.name == func.name:
                     return False
-            self.day_data_func[inst].append(fobj)
-            return True
+            self.day_data_func[inst].append(self.calc_func_dict[fobj.name])
         else:
             mins = int(freq[:-1])
             if mins not in self.min_data_func[inst]:
@@ -81,8 +83,8 @@ class MktDataMixin(object):
                 if fobj.name == func.name:
                     return False            
             if fobj != None:
-                self.min_data_func[inst][mins].append(fobj)
-            return True
+                self.min_data_func[inst][mins].append(self.calc_func_dict[fobj.name])
+        return self.calc_func_dict[fobj.name]
         
     def prepare_data_env(self, inst, mid_day = True):
         if  self.instruments[inst].ptype == instrument.ProductType.Option:
@@ -326,11 +328,12 @@ class Agent(MktDataMixin):
         for sfile in strat_files:
             strat_conf = json.load(sfile)
             strat_class = eval(strat_conf['class'])
-            strat_args  = strat_conf['args']
-            strat = strat_class(**strat_args)
+            strat_args  = strat_conf.get('config', {})
+			strat = strat_class(strat_args, self)
             self.strat_list.append(strat)
             strat_name = strat.name
             self.strategies[strat_name] = strat
+			strat.reset()
 
         ###交易
         self.ref2order = {}    #orderref==>order
@@ -890,3 +893,4 @@ class SaveAgent(Agent):
 
 if __name__=="__main__":
     pass
+	
