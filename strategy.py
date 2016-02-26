@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import pandas as pd
 from base import *
-from misc import *
+#from misc import *
 import data_handler
 import order as order
 import math
@@ -139,7 +139,7 @@ def tradepos2dict(tradepos):
     return trade
 
 class Strategy(object):
-    common_params = {'name': 'test_strat', 'email_notify':'', 'folder':'', \
+    common_params = {'name': 'test_strat', 'email_notify':'', 'folder':'', 'data_func': [], \
                      'trade_valid_time': 600, 'num_tick': 0, 'daily_close_buffer':5, \
                      'order_type': OPT_LIMIT_ORDER, 'pos_class': 'TradePos', 'pos_args': {} }
     asset_params = {'underliers': [], 'volumes': [], 'trade_unit': 1,  \
@@ -148,6 +148,7 @@ class Strategy(object):
         d = self.__dict__
         for key in self.default_params:
             d[key] = config.get(key, self.default_params[key])
+		all_params = self.asset_params
         for key in self.asset_params:
             d[key] = []
         assets = config['assets']
@@ -158,7 +159,6 @@ class Strategy(object):
         self.instIDs = self.dep_instIDs()
         self.positions  = [[] for _ in self.underliers]
         self.submitted_trades = [[] for _ in self.underliers]
-        self.data_func = []
         self.agent = agent
         self.logger = None
         self.inst2idx = {}
@@ -188,9 +188,7 @@ class Strategy(object):
         return
 
     def register_func_freq(self):
-        for (freq, fobj) in self.data_func:
-            for inst in self.instIDs:
-                self.agent.register_data_func(inst, freq, fobj)
+		pass
 
     def register_bar_freq(self):
         pass
@@ -462,4 +460,3 @@ class Strategy(object):
             tradedict = tradepos2dict(tradepos)
             file_writer.writerow([tradedict[itm] for itm in tradepos_header])
         return
-
