@@ -5,56 +5,47 @@ from strategy import *
 import data_handler
  
 class TurtleTrader(Strategy):
-    def __init__(self, name, underliers,  volumes, trade_unit = [], agent = None, email_notify = None, datafreq = 'd', freq = 1, windows = [4, 8], max_pos = [4], trail_loss = [2.0]):
-        Strategy.__init__(self, name, underliers, volumes, trade_unit, agent, email_notify)
-        self.data_func = [ 
-                (datafreq, BaseObject(name = 'ATR_' + str(windows[1]), sfunc=fcustom(data_handler.ATR, n=windows[1]), rfunc=fcustom(data_handler.atr, n=windows[1]))), \
-                (datafreq, BaseObject(name = 'DONCH_L' + str(windows[0]), sfunc=fcustom(data_handler.DONCH_L, n=windows[0]), rfunc=fcustom(data_handler.donch_l, n=windows[0]))),\
-                (datafreq, BaseObject(name = 'DONCH_H' + str(windows[0]), sfunc=fcustom(data_handler.DONCH_H, n=windows[0]), rfunc=fcustom(data_handler.donch_h, n=windows[0]))),\
-                (datafreq, BaseObject(name = 'DONCH_L' + str(windows[1]), sfunc=fcustom(data_handler.DONCH_L, n=windows[1]), rfunc=fcustom(data_handler.donch_l, n=windows[1]))),\
-                (datafreq, BaseObject(name = 'DONCH_H' + str(windows[1]), sfunc=fcustom(data_handler.DONCH_H, n=windows[1]), rfunc=fcustom(data_handler.donch_h, n=windows[1]))),\
-                #(freq, BaseObject(name = 'DONCH_L55', sfunc=fcustom(data_handler.DONCH_L, n=windows[2]), rfunc=fcustom(data_handler.donch_l, n=windows[2]))),\
-                #(freq, BaseObject(name = 'DONCH_H55', sfunc=fcustom(data_handler.DONCH_H, n=windows[2]), rfunc=fcustom(data_handler.donch_h, n=windows[2]))),\
-                ]    
-        self.curr_atr   = [0.0] * len(underliers)
-        self.entry_high = [0.0] * len(underliers)
-        self.entry_low  = [0.0] * len(underliers)
-        self.exit_high  = [0.0] * len(underliers)
-        self.exit_low   = [0.0] * len(underliers)
-        self.tick_base  = [0.0] * len(underliers)
-        if len(trail_loss) > 1:
-            self.trail_loss = trail_loss
-        elif len(trail_loss) == 1:
-            self.trail_loss = trail_loss * len(underliers)
-        self.channels = windows
-        self.freq = freq
-        if len(max_pos) > 1:
-            self.max_pos = max_pos
-        elif len(max_pos) == 1:
-            self.max_pos = max_pos * len(underliers)
+	common_params = Strategy.commen_params
+	asset_params = dict( {'channels': [10, 20], 'trail_loss': 2, 'max_pos': 4, 'trading_freq': '1m', 'data_freq':'d'}, **Strategy.asset_params )
+    def __init__(self, config, agent = None):
+        Strategy.__init__(self, config, agent)   
+        self.curr_atr   = [0.0] * len(self.underliers)
+        self.entry_high = [0.0] * len(self.underliers)
+        self.entry_low  = [0.0] * len(self.underliers)
+        self.exit_high  = [0.0] * len(self.underliers)
+        self.exit_low   = [0.0] * len(self.underliers)
+        self.tick_base  = [0.0] * len(self.underliers)
     
     def initialize(self):
-        self.load_state()
-        atr_str = 'ATR_' + str(self.channels[1])
-        bb_str = 'DONCH_H' + str(self.channels[1])
-        sb_str = 'DONCH_L' + str(self.channels[1])
-        bs_str = 'DONCH_H' + str(self.channels[0])
-        ss_str = 'DONCH_L' + str(self.channels[0])        
-        for idx, underlier in enumerate(self.underliers):
-            inst = underlier[0]
+        self.load_state()       
+        for idx, under in enumerate(self.underliers):
+            inst = under[0]
             self.tick_base[idx] = self.agent.instruments[inst].tick_base
-            df = self.agent.day_data[inst]
+            df = self.agent.day_data[inst]		
+			atr_str = self.data_func[0][0] + str(self.channels[idx][1])
+			bb_str = self.data_func[1][0] + str(self.channels[idx][1])
+			sb_str = self.data_func[2][0] + str(self.channels[idx][1])
+			bs_str = self.data_func[1][0] + str(self.channels[idx][0])
+			ss_str = self.data_func[2][0] + str(self.channels[idx][0]) 
             self.entry_high[idx] = df.ix[-1, bb_str]
             self.entry_low[idx]  = df.ix[-1, sb_str]
             self.exit_high[idx] = df.ix[-1, bs_str]
             self.exit_low[idx]  = df.ix[-1, ss_str]           
             if len(self.positions[idx]) == 0:
-                self.curr_atr[idx] = df.ix[-1, atr_str]
-        pass       
+                self.curr_atr[idx] = df.ix[-1, atr_str]   
 
+    def register_func_freq(self):
+		for under, chan, dfreq in zip(self.underliers, self.channels, self.data_freq):
+			for infunc in self.data_func:
+				name  = infunc[0]
+				sfunc = eval(infunc[1])
+				rfunc = eval(infunc[2])
+				fobj = BaseObject(name = name + str(chan[1]), sfunc = fcustom(sfunc, n = chan[1]), rfunc = fcustom(rfunc, n = chan[1]))
+				self.agent.register_data_func(under[0], dfreq, fobj) 
+	
     def register_bar_freq(self):
-        for instID in self.instIDs:
-            self.agent.inst2strat[instID][self.name].append(self.freq)
+        for under, freq in zip(self.underliers, self.trading_freq):
+            self.agent.inst2strat[instID][self.name].append(freq)
 
     def save_local_variables(self, file_writer):
         for idx, underlier in enumerate(self.underliers):
