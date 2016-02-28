@@ -28,16 +28,14 @@ class Gateway(object):
         self.id2order = {}
         self.positions = {}
         self.eod_flag = False
-        self.account_info = {	'available': 0,
+        self.account_info = {'available': 0,
                             'locked_margin': 0,
                             'used_margin': 0,
-                            'margin_cap': 1500000,
                             'curr_capital': 1000000,
                             'prev_capital': 1000000,
                             'pnl_total': 0,
                             'yday_pnl': 0,
                             'tday_pnl': 0,
-                            'available': 0,
                             }							
         self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
         self.order_constraints = {	'total_submit': 2000, 'total_cancel': 2000, 'total_failure':500, \

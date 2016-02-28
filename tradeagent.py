@@ -12,7 +12,7 @@ import math
 import os
 import csv
 import instrument
-import ctp_gateway
+import ctp
 from gateway import *
 import pandas as pd
 from base import *
@@ -50,7 +50,7 @@ class MktDataMixin(object):
         self.tick_db_table = config.get('tick_db_table', 'fut_tick')
         self.min_db_table  = config.get('min_db_table', 'fut_min')
         self.daily_db_table = config.get('daily_db_table', 'fut_daily')
-		self.calc_func_dict = {}
+        self.calc_func_dict = {}
 
     def add_instrument(self, name):
         self.tick_data[name] = []
@@ -68,8 +68,8 @@ class MktDataMixin(object):
         if inst not in self.day_data_func:
             self.day_data_func[inst] = []
             self.min_data_func[inst] = {}
-		if fobj.name not in self.calc_func_dict:
-			self.calc_func_dict[fobj.name] = fobj
+        if fobj.name not in self.calc_func_dict:
+            self.calc_func_dict[fobj.name] = fobj
         if 'd' in freq:
             for func in self.day_data_func[inst]:
                 if fobj.name == func.name:
@@ -314,7 +314,11 @@ class Agent(MktDataMixin):
         self.gateways = {}
         gateway_dict = config.get('gateway', {})
         for gateway_name in gateway_dict:
-            gateway_class = eval(gateway_dict[gateway_name]['class'])
+            gway_str = gateway_dict[gateway_name]['class']
+            str_list = gway_str.split('.')
+            gateway_class = __import__(str(str_list[0]), fromlist = [str(str_list[1])])
+            for mod_name in str_list[1:]:
+                gateway_class = getattr(gateway_class, mod_name)
             self.add_gateway(gateway_class, gateway_name)
         self.type2gateway = {}
         self.inst2strat = {}
@@ -326,14 +330,19 @@ class Agent(MktDataMixin):
 
         strat_files = config.get('strat_files', [])
         for sfile in strat_files:
-            strat_conf = json.load(sfile)
-            strat_class = eval(strat_conf['class'])
+            strat_conf = {}
+            with open(sfile, 'r') as fp:
+                strat_conf = json.load(fp)
+            #strat_conf = json.load(sfile)
+            class_str = strat_conf['class']
+            strat_mod = class_str.split('.')
+            if len(strat_mod) > 1:
+                strat_class = getattr(__import__(str(strat_mod[0])), str(strat_mod[1]))
+            else:
+                strat_class = eval(class_str)
             strat_args  = strat_conf.get('config', {})
-			strat = strat_class(strat_args, self)
-            self.strat_list.append(strat)
-            strat_name = strat.name
-            self.strategies[strat_name] = strat
-			strat.reset()
+            strat = strat_class(strat_args, self)
+            self.add_strategy(strat)
 
         ###交易
         self.ref2order = {}    #orderref==>order
@@ -418,14 +427,15 @@ class Agent(MktDataMixin):
             self.strat_list.append(strat.name)
             self.strategies[strat.name] = strat
             strat.agent = self
-        for instID in strat.instIDs:
+        for instID in strat.dep_instIDs():
             self.add_instrument(instID)
             self.inst2strat[instID][strat.name] = []
         strat.reset()
 
     def add_gateway(self, gateway, gateway_name=None):
         """创建接口"""
-        self.gateways[gateway_name] = gateway(self, gateway_name)
+        if gateway_name not in self.gateways:
+            self.gateways[gateway_name] = gateway(self, gateway_name)
 
     def connect(self, gateway_name):
         """连接特定名称的接口"""
@@ -461,10 +471,7 @@ class Agent(MktDataMixin):
             gateway = self.gateways[gateway_name]
             gateway.cancelOrder(iorder)
         else:
-            self.logger.warning(u'接口不存在：%s' % gateway_name)   
-
-    def set_capital_limit(self, margin_cap):
-        self.margin_cap = margin_cap
+            self.logger.warning(u'接口不存在：%s' % gateway_name)
 
     def log_handler(self, event):
         lvl = event.dict['level']
@@ -720,12 +727,6 @@ class Agent(MktDataMixin):
                     iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond, trade_ref, gateway = gway_name )
                     orders.append(iorder)
                 all_orders[inst] = orders
-            #if required_margin + self.locked_margin > self.margin_cap:
-            #    self.logger.warning("ETrade %s is cancelled due to margin cap: %s" % (exec_trade.id, inst))
-            #    exec_trade.status = order.ETradeStatus.Cancelled
-            #    strat = self.strategies[exec_trade.strategy]
-            #    strat.on_trade(exec_trade)
-            #    return False
             exec_trade.order_dict = all_orders
             for inst in exec_trade.instIDs:
                 pos = self.positions[inst]
@@ -893,4 +894,4 @@ class SaveAgent(Agent):
 
 if __name__=="__main__":
     pass
-	
+

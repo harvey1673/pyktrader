@@ -5,8 +5,8 @@ from strategy import *
 import data_handler
  
 class TurtleTrader(Strategy):
-	common_params = Strategy.commen_params
-	asset_params = dict( {'channels': [10, 20], 'trail_loss': 2, 'max_pos': 4, 'trading_freq': '1m', 'data_freq':'d'}, **Strategy.asset_params )
+    common_params = Strategy.commen_params
+    asset_params = dict( {'channels': [10, 20], 'trail_loss': 2, 'max_pos': 4, 'trading_freq': '1m', 'data_freq':'d'}, **Strategy.asset_params )
     def __init__(self, config, agent = None):
         Strategy.__init__(self, config, agent)   
         self.curr_atr   = [0.0] * len(self.underliers)
@@ -22,11 +22,11 @@ class TurtleTrader(Strategy):
             inst = under[0]
             self.tick_base[idx] = self.agent.instruments[inst].tick_base
             df = self.agent.day_data[inst]		
-			atr_str = self.data_func[0][0] + str(self.channels[idx][1])
-			bb_str = self.data_func[1][0] + str(self.channels[idx][1])
-			sb_str = self.data_func[2][0] + str(self.channels[idx][1])
-			bs_str = self.data_func[1][0] + str(self.channels[idx][0])
-			ss_str = self.data_func[2][0] + str(self.channels[idx][0]) 
+            atr_str = self.data_func[0][0] + str(self.channels[idx][1])
+            bb_str = self.data_func[1][0] + str(self.channels[idx][1])
+            sb_str = self.data_func[2][0] + str(self.channels[idx][1])
+            bs_str = self.data_func[1][0] + str(self.channels[idx][0])
+            ss_str = self.data_func[2][0] + str(self.channels[idx][0])
             self.entry_high[idx] = df.ix[-1, bb_str]
             self.entry_low[idx]  = df.ix[-1, sb_str]
             self.exit_high[idx] = df.ix[-1, bs_str]
@@ -35,14 +35,14 @@ class TurtleTrader(Strategy):
                 self.curr_atr[idx] = df.ix[-1, atr_str]   
 
     def register_func_freq(self):
-		for under, chan, dfreq in zip(self.underliers, self.channels, self.data_freq):
-			for infunc in self.data_func:
-				name  = infunc[0]
-				sfunc = eval(infunc[1])
-				rfunc = eval(infunc[2])
-				fobj = BaseObject(name = name + str(chan[1]), sfunc = fcustom(sfunc, n = chan[1]), rfunc = fcustom(rfunc, n = chan[1]))
-				self.agent.register_data_func(under[0], dfreq, fobj) 
-	
+        for under, chan, dfreq in zip(self.underliers, self.channels, self.data_freq):
+            for infunc in self.data_func:
+                name  = infunc[0]
+                sfunc = eval(infunc[1])
+                rfunc = eval(infunc[2])
+                fobj = BaseObject(name = name + str(chan[1]), sfunc = fcustom(sfunc, n = chan[1]), rfunc = fcustom(rfunc, n = chan[1]))
+                self.agent.register_data_func(under[0], dfreq, fobj)
+
     def register_bar_freq(self):
         for under, freq in zip(self.underliers, self.trading_freq):
             self.agent.inst2strat[instID][self.name].append(freq)

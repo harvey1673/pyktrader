@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import pandas as pd
 from base import *
-#from misc import *
+from misc import *
 import data_handler
 import order as order
 import math
@@ -139,27 +139,28 @@ def tradepos2dict(tradepos):
     return trade
 
 class Strategy(object):
-    common_params = {'name': 'test_strat', 'email_notify':'', 'folder':'', 'data_func': [], \
+    common_params = {'name': 'test_strat', 'email_notify':'', 'data_func': [], \
                      'trade_valid_time': 600, 'num_tick': 0, 'daily_close_buffer':5, \
                      'order_type': OPT_LIMIT_ORDER, 'pos_class': 'TradePos', 'pos_args': {} }
     asset_params = {'underliers': [], 'volumes': [], 'trade_unit': 1,  \
                     'close_tday': False, 'last_min_id': 2055, 'trail_loss': 0}
     def __init__(self, config, agent = None):
         d = self.__dict__
-        for key in self.default_params:
-            d[key] = config.get(key, self.default_params[key])
-		all_params = self.asset_params
+        for key in self.common_params:
+            d[key] = config.get(key, self.common_params[key])
+        all_params = self.asset_params
         for key in self.asset_params:
             d[key] = []
         assets = config['assets']
         for asset in assets:
             for key in self.asset_params:
-                d[key].append(asset[key])
+                d[key].append(asset.get(key, self.asset_params[key]))
         num_assets = len(assets)
         self.instIDs = self.dep_instIDs()
         self.positions  = [[] for _ in self.underliers]
         self.submitted_trades = [[] for _ in self.underliers]
         self.agent = agent
+        self.folder = ''
         self.logger = None
         self.inst2idx = {}
         self.under2idx = {}
@@ -188,7 +189,7 @@ class Strategy(object):
         return
 
     def register_func_freq(self):
-		pass
+        pass
 
     def register_bar_freq(self):
         pass

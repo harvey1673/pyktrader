@@ -6,8 +6,8 @@ import copy
 from strategy import *
  
 class DTSplitDChanFilter(Strategy):
-	common_params =  dict({'open_period': [300, 1500, 2100]}, **Strategy.commen_params)
-	asset_params = dict({'lookbacks': 1, 'ratios': (1.0, 1.0), 'channels': 20, 'min_rng': 0.003, 'daily_close':False}, **Strategy.asset_params)
+    common_params =  dict({'open_period': [300, 1500, 2100], 'channel_keys': ['DONCH_H', 'DONCH_L'], 'use_chan': True}, **Strategy.common_params)
+    asset_params = dict({'lookbacks': 1, 'ratios': 1.0, 'channels': 20, 'min_rng': 0.003, 'daily_close': False, }, **Strategy.asset_params)
     def __init__(self, config, agent = None):
         Strategy.__init__(self, config, agent)
         numAssets = len(self.underliers)
@@ -21,14 +21,18 @@ class DTSplitDChanFilter(Strategy):
         self.num_tick = 1
 
     def register_func_freq(self):
-		for under, chan in zip(self.underliers, self.channels):
-			for infunc in self.data_func:
-				name  = infunc[0]
-				sfunc = eval(infunc[1])
-				rfunc = eval(infunc[2])
-				fobj = BaseObject(name = name + str(chan[1]), sfunc = fcustom(sfunc, n = chan), rfunc = fcustom(rfunc, n = chan))
-				self.agent.register_data_func(under[0], 'd', fobj) 
-				
+        for under, chan in zip(self.underliers, self.channels):
+            for infunc in self.data_func:
+                name  = infunc[0]
+                sfunc = eval(infunc[1])
+                rfunc = eval(infunc[2])
+                if len(infunc) > 3:
+                    fargs = infunc[3]
+                else:
+                    fargs = {}
+                fobj = BaseObject(name = name + str(chan[1]), sfunc = fcustom(sfunc, n = chan, **fargs), rfunc = fcustom(rfunc, n = chan, **fargs))
+                self.agent.register_data_func(under[0], 'd', fobj)
+
     def initialize(self):
         self.load_state()
         for idx, underlier in enumerate(self.underliers):
@@ -40,10 +44,10 @@ class DTSplitDChanFilter(Strategy):
             ddf = self.agent.day_data[inst]
             mdf = self.agent.min_data[inst][1]
             last_date = ddf.index[-1]
-            args = self.chan_func['high_args']
-            self.chan_high[idx] = self.chan_func['high_func'](ddf.high[-self.channels[idx]:], **args)
-            args = self.chan_func['low_args']
-            self.chan_low[idx]  = self.chan_func['low_func'](ddf.low[-self.channels[idx]:], **args)
+            key = self.channel_keys[0] + str(self.channels[idx])
+            self.chan_high[idx] = ddf.ix[-1, key]
+            key = self.channel_keys[1] + str(self.channels[idx])
+            self.chan_low[idx]  = ddf.ix[-1, key]
             self.open_idx[idx] = 0
             if last_date < mdf.index[-1].date():
                 last_min = mdf['min_id'][-1]
@@ -132,9 +136,12 @@ class DTSplitDChanFilter(Strategy):
             buysell = self.positions[idx][0].direction
         tick_base = self.tick_base[idx]
         t_open = self.tday_open[idx]
-        rng = max(self.cur_rng[idx] * self.ratios[idx][0], t_open * self.min_rng[idx])
+        rng = max(self.cur_rng[idx] * self.ratios[idx], t_open * self.min_rng[idx])
         buy_trig  = t_open + rng
         sell_trig = t_open - rng
+        if self.use_chan == False:
+            self.chan_high[idx] = buy_trig
+            self.chan_low[idx]  = sell_trig
         if (min_id >= self.last_min_id[idx]):
             if (buysell!=0) and (self.close_tday[idx]):
                 msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \

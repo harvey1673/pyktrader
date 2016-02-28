@@ -1,5 +1,4 @@
 #-*- coding:utf-8 -*-
-import ctp_api
 import Tkinter as tk
 import ttk
 import datetime
@@ -7,6 +6,8 @@ import re
 import pyktlib
 import instrument
 import math
+import copy
+import tradeagent as agent
 
 vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
 
@@ -255,27 +256,6 @@ class DTChanStratGui(StratGui):
                             'ChanLow': 'float',
                             'NumTick': 'int',
                             'Channel': 'int',
-                            'OrderType': 'str',
-                            'MinRng': 'float'}
-
-class DTSplitChanFilterGui(StratGui):
-    def __init__(self, strat, app, master):
-        StratGui.__init__(self, strat, app, master)
-        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'Channels', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
-        self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'ChanHigh', 'ChanLow']
-        self.shared_fields = ['NumTick', 'OrderType']
-        self.field_types = {'RunFlag':'int',
-                            'TradeUnit':'int',
-                            'Lookbacks':'int',
-                            'Ratios': 'floatlist',
-                            'CloseTday': 'bool',
-                            'TdayOpen': 'float',
-                            'CurrPrices': 'float',
-                            'CurRng':'float',
-                            'ChanHigh': 'float',
-                            'ChanLow': 'float',
-                            'NumTick': 'int',
-                            'Channels': 'int',
                             'OrderType': 'str',
                             'MinRng': 'float'}
 
@@ -587,18 +567,15 @@ class Gui(tk.Tk):
         self.strat_gui = {}
         self.volgrid_gui = {}
         self.volgrid_frame = {}
-        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap', \
-                             'TotalSubmittedLimit', 'SubmittedLimitPerInst', 'FailedOrderLimit']
+        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod']
         self.status_fields = ['Positions', 'Orders', 'Trades', 'Insts', 'ScurDay', 'TickId', 'EodFlag', \
-                              'Initialized', 'ProcLock', 'TotalSubmitted', 'TotalCancelled', \
+                              'Initialized', 'TotalSubmitted', 'TotalCancelled', \
                               'CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
-        self.field_types = {'ProcLock': 'bool',
-                            'ScurDay' : 'date',
+        self.field_types = {'ScurDay' : 'date',
                             'TickId'  : 'int',
                             'EodFlag' : 'bool',
                             'MarketOrderTickMultiple': 'int', 
-                            'CancelProtectPeriod': 'int', 
-                            'MarginCap': 'float',
+                            'CancelProtectPeriod': 'int',
                             'CurrCapital':'float', 
                             'PrevCapital':'float', 
                             'LockedMargin':'float', 
@@ -619,10 +596,8 @@ class Gui(tk.Tk):
             if strat.__class__.__name__ in ['DTTrader', 'DTSplitTrader', \
                                             'DTBarTrader']:
                 self.strat_gui[strat_name] = DTStratGui(strat, app, self)
-            elif strat.__class__.__name__ in ['DTChanSplitTrader','DTChanMinTrader']:
+            if strat.__class__.__name__ in ['DTChanSplitTrader','DTChanMinTrader']:
                 self.strat_gui[strat_name] = DTChanStratGui(strat, app, self)
-            elif strat.__class__.__name__ in ['DTSplitChanFilter']:
-                self.strat_gui[strat_name] = DTSplitChanFilterGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
                 self.strat_gui[strat_name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
@@ -716,45 +691,49 @@ class Gui(tk.Tk):
         return
             
     def config_settings(self):
-        entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap', \
-                        'TotalSubmittedLimit', 'SubmittedLimitPerInst', 'FailedOrderLimit']
-        label_fields = ['ScurDay', 'TickId', 'EodFlag', 'Initialized', 'TotalSubmitted', 'TotalCancelled' ]
+        entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod']
+        label_fields = ['ScurDay', 'TickId', 'EodFlag'] #, 'Initialized', 'TotalSubmitted', 'TotalCancelled' ]
         lbl_frame = ttk.Labelframe(self.settings_win)
         row_idx = 0
-        for field1, field2 in zip(entry_fields, label_fields):
-            #row = tk.Frame(root)
-            lab = ttk.Label(lbl_frame, text=field1+": ", anchor='w')
-            lab.grid(column=0, row=row_idx, sticky="ew")
-            ent = ttk.Entry(lbl_frame, width=4)
-            self.entries[field1] = ent
-            ent.insert(0,"0")
-            ent.grid(column=1, row=row_idx, sticky="ew")
+        for col_idx, field in enumerate(label_fields + entry_fields):
+            lab = ttk.Label(lbl_frame, text=field+": ", anchor='w')
+            lab.grid(column=col_idx, row=row_idx, sticky="ew")
+        col_idx = 0
+        row_idx += 1
+        for field in label_fields:
             v = tk.IntVar()
-            lab1 = ttk.Label(lbl_frame, text=field2+": ", anchor='w')
-            self.stringvars[field2] = v
-            lab1.grid(column=2, row=row_idx, sticky="ew")
-            lab2 = ttk.Label(lbl_frame, textvariable = v, anchor='w')
-            lab2.grid(column=3, row=row_idx, sticky="ew")
-            row_idx += 1
-        pnl_fields = ['CurrCapital', 'PrevCapital', 'PnlTotal']
-        margin_fields = ['LockedMargin', 'UsedMargin', 'Available']
-        for field1, field2 in zip(pnl_fields, margin_fields):
+            self.stringvars[field] = v
+            lab = ttk.Label(lbl_frame, textvariable = v, anchor='w')
+            lab.grid(column=col_idx, row=row_idx, sticky="ew")
+            col_idx += 1
+        for field in entry_fields:
+            ent = ttk.Entry(lbl_frame, width=4)
+            self.entries[field] = ent
+            ent.insert(0,"0")
+            ent.grid(column=col_idx, row=row_idx, sticky="ew")
+            col_idx += 1
+            self.stringvars[field] = v
+        row_idx += 1
+        account_fields = ['CurrCapital', 'PrevCapital', 'PnlTotal', 'LockedMargin', 'UsedMargin', 'Available']
+        gway_names = self.app.agent.gateways.keys()
+        gway_keys = [ 'Account.' + gway for gway in gway_names]
+        for col_idx, field in enumerate(['gateway'] + account_fields):
             #row = tk.Frame(root)
-            lab1 = ttk.Label(lbl_frame, text=field1+": ", anchor='w')
-            lab1.grid(column=0, row=row_idx, sticky="ew")
+            lab1 = ttk.Label(lbl_frame, text=field, anchor='w')
+            lab1.grid(column=col_idx, row=row_idx, sticky="ew")
             v1 = tk.DoubleVar()
             lab2 = ttk.Label(lbl_frame, textvariable = v1, anchor='w')
-            self.stringvars[field1] = v1
+            self.stringvars[field] = v1
             lab2.grid(column=1, row=row_idx, sticky="ew")
 
-            lab3 = ttk.Label(lbl_frame, text=field2+": ", anchor='w')
+            lab3 = ttk.Label(lbl_frame, text=field+": ", anchor='w')
             lab3.grid(column=2, row=row_idx, sticky="ew")
             v2 = tk.DoubleVar()
             lab4 = ttk.Label(lbl_frame, textvariable = v2, anchor='w')
-            self.stringvars[field2] = v2
+            self.stringvars[field] = v2
             lab4.grid(column=3, row=row_idx, sticky="ew")
             row_idx += 1      
-        all_fields = entry_fields+label_fields+pnl_fields+margin_fields
+        all_fields = entry_fields+label_fields+account_fields
         setup_setbtn = ttk.Button(lbl_frame, text='SetParam', command= lambda: self.set_agent_params(entry_fields))
         setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
         setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(all_fields))
@@ -819,7 +798,7 @@ class Gui(tk.Tk):
         self.status_ents = self.make_status_form(self.status_win)        
         
     def onReset(self):
-        self.app.reset_agent(self.app.save_test)
+        self.app.restart()
 
     def onExit(self):
         self.app.exit_agent()
@@ -828,56 +807,52 @@ class Gui(tk.Tk):
         return
         
 class MainApp(object):
-    def __init__(self, name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = True):
-        self.trader_cfg = trader_cfg
-        self.user_cfg = user_cfg
-        self.strat_cfg = strat_cfg
+    def __init__(self, name, tday, config_file, agent_class = 'agent.Agent', master = None):
         self.scur_day = tday
         self.name = name
-        self.agent = None
+        cls_str = agent_class.split('.')
+        agent_cls = getattr(__import__(str(cls_str[0])), str(cls_str[1]))
+        self.agent = agent_cls(name = name, tday = tday, config_file = config_file)
         self.master = master
-        self.save_test = save_test
-        self.reset_agent(save_test)
+        self.restart()
                         
-    def reset_agent(self, save_test):       
+    def restart(self):
         if self.agent != None:
             self.scur_day = self.agent.scur_day
-        all_insts= []
-        for strat in self.strat_cfg['strategies']:
-            all_insts = list(set(all_insts).union(set(strat.instIDs)))
-        self.agent = ctp_api.create_agent(self.name, self.user_cfg, self.trader_cfg, all_insts, self.strat_cfg, self.scur_day)
-        #self.agent.logger.addHandler(self.text_handler)
-        #ctp_api.make_user(self.agent, self.user_cfg)
-        if save_test:
-            self.agent.tick_db_table = 'test_fut_tick'
-            self.agent.min_db_table  = 'test_fut_min'
-            self.agent.daily_db_table= 'test_fut_daily'
-            self.agent.save_flag = True
-        self.agent.resume()
-        return
+        self.agent.restart()
     
     def get_agent_params(self, fields):
         res = {}
         for f in fields:
             field_list = f.split('.')
             field = field_list[0]
+            if field not in res:
+                res[field] = {}
             if field == 'Positions':
                 positions = {}
-                for inst in self.agent.positions:
-                    pos = self.agent.positions[inst]
+                gateway = self.agent.gateways[field_list[1]]
+                for inst in gateway.positions:
+                    pos = gateway.positions[inst]
                     positions[inst] = {'currlong' : pos.curr_pos.long, 
                                        'currshort': pos.curr_pos.short, 
                                        'locklong' : pos.locked_pos.long, 
                                        'lockshort': pos.locked_pos.short, 
                                        'ydaylong':  pos.pos_yday.long, 
                                        'ydayshort': pos.pos_yday.short}
-                res[field] = positions
+                res[field][gateway.gatewayName] = positions
+            elif field == 'Account':
+                gateway = self.agent.gateways[field_list[1]]
+                res[field][gateway.gatewayName] = copy.deepcopy(gateway.account_info)
+            elif field ==' Orderstats':
+                gateway = self.agent.gateways[field_list[1]]
+                res[field][gateway.gatewayName] = copy.deepcopy(gateway.order_stats)
             elif field == 'Orders':
                 order_list = []
-                for o in self.agent.ref2order.values():
+                gateway = self.agent.gateways[field_list[1]]
+                for o in gateway.id2order.values():
                     inst = o.position.instrument.name
                     order_list.append([o.order_ref, o.sys_id, inst, o.diretion, o.volume, o.filled_volume,  o.limit_price, o.status])
-                res[field] = order_list
+                res[field][gateway.gatewayName] = order_list
             elif field == 'Trades':
                 trade_list = []
                 for etrade in self.agent.etrades:
@@ -943,7 +918,15 @@ class MainApp(object):
             value = params[field]
             setattr(self.agent, var, value)
         return
-    
+
+    def set_gateway_params(self, gway, params):
+        gateway = self.agent.gateways[gway]
+        for field in params:
+            var = field2variable(field)
+            value = params[field]
+            setattr(gateway, var, value)
+        return
+
     def get_strat_params(self, strat_name, fields):
         params = {}
         strat = self.agent.strategies[strat_name]
@@ -966,7 +949,12 @@ class MainApp(object):
     def run_agent_func(self, func_name, params):
         getattr(self.agent, func_name)(*params)
         return 
-        
+
+    def run_gateway_func(self, gway, func_name, params):
+        gateway = self.agent.gateways[gway]
+        getattr(gateway, func_name)(*params)
+        return
+
     def exit_agent(self):
         if self.agent != None:
             self.agent.exit()
