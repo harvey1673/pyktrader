@@ -30,8 +30,14 @@ class DTSplitDChanFilter(Strategy):
                     fargs = infunc[3]
                 else:
                     fargs = {}
-                fobj = BaseObject(name = name + str(chan[1]), sfunc = fcustom(sfunc, n = chan, **fargs), rfunc = fcustom(rfunc, n = chan, **fargs))
+                fobj = BaseObject(name = name + str(chan), sfunc = fcustom(sfunc, n = chan, **fargs), rfunc = fcustom(rfunc, n = chan, **fargs))
                 self.agent.register_data_func(under[0], 'd', fobj)
+
+    def register_bar_freq(self):
+        for idx, under in enumerate(self.underliers):
+            inst = under[0]
+            self.agent.inst2strat[inst][self.name].append(1)
+            #self.logger.debug("stat = %s register bar event for inst=%s freq = 1" % (self.name, inst, ))
 
     def initialize(self):
         self.load_state()
@@ -48,7 +54,6 @@ class DTSplitDChanFilter(Strategy):
             self.chan_high[idx] = ddf.ix[-1, key]
             key = self.channel_keys[1] + str(self.channels[idx])
             self.chan_low[idx]  = ddf.ix[-1, key]
-            self.open_idx[idx] = 0
             if last_date < mdf.index[-1].date():
                 last_min = mdf['min_id'][-1]
                 pid = 0
@@ -99,12 +104,6 @@ class DTSplitDChanFilter(Strategy):
             if idx >= 0:
                 self.cur_rng[idx] = float(row[2])
         return
-
-    def register_bar_freq(self):
-        for idx, under in enumerate(self.underliers):
-            inst = under[0]
-            self.agent.inst2strat[inst][self.name].append(1)
-            #self.logger.debug("stat = %s register bar event for inst=%s freq = 1" % (self.name, inst, ))
 
     def on_bar(self, idx, freq):
         inst = self.underliers[idx][0]

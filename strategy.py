@@ -186,7 +186,6 @@ class Strategy(object):
             self.logger = self.agent.logger
         self.register_func_freq()
         self.register_bar_freq()
-        return
 
     def register_func_freq(self):
         pass

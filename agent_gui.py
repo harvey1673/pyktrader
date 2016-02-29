@@ -227,7 +227,7 @@ class DTStratGui(StratGui):
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
                             'Lookbacks':'int', 
-                            'Ratios': 'floatlist', 
+                            'Ratios': 'floatlist',
                             'CloseTday': 'bool',
                             'TdayOpen': 'float',
                             'CurrPrices': 'float',
@@ -238,16 +238,16 @@ class DTStratGui(StratGui):
                             'OrderType': 'str',
                             'MinRng': 'float'}
 
-class DTChanStratGui(StratGui):
+class DTSplitDChanStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
-        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'Channel', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'Channels', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
         self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'ChanHigh', 'ChanLow']
-        self.shared_fields = ['NumTick', 'OrderType', 'Channel']
+        self.shared_fields = ['NumTick', 'OrderType']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
                             'Lookbacks':'int',
-                            'Ratios': 'floatlist',
+                            'Ratios': 'float',
                             'CloseTday': 'bool',
                             'TdayOpen': 'float',
                             'CurrPrices': 'float',
@@ -255,7 +255,7 @@ class DTChanStratGui(StratGui):
                             'ChanHigh': 'float',
                             'ChanLow': 'float',
                             'NumTick': 'int',
-                            'Channel': 'int',
+                            'Channels': 'int',
                             'OrderType': 'str',
                             'MinRng': 'float'}
 
@@ -593,8 +593,8 @@ class Gui(tk.Tk):
             if strat.__class__.__name__ in ['DTTrader', 'DTSplitTrader', \
                                             'DTBarTrader']:
                 self.strat_gui[strat_name] = DTStratGui(strat, app, self)
-            if strat.__class__.__name__ in ['DTChanSplitTrader','DTChanMinTrader']:
-                self.strat_gui[strat_name] = DTChanStratGui(strat, app, self)
+            if strat.__class__.__name__ in ['DTSplitDChanFilter']:
+                self.strat_gui[strat_name] = DTSplitDChanStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
                 self.strat_gui[strat_name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
@@ -650,16 +650,20 @@ class Gui(tk.Tk):
         self.pos_canvas.create_window((4,4), window=self.pos_frame, anchor="nw", tags="self.pos_frame")
         self.pos_frame.bind("<Configure>", self.OnPosFrameConfigure)
         
-        fields = ['inst', 'currlong', 'currshort', 'locklong', 'lockshort', 'ydaylong', 'ydayshort']
+        fields = ['gateway', 'inst', 'currlong', 'currshort', 'locklong', 'lockshort', 'ydaylong', 'ydayshort']
         for idx, field in enumerate(fields):
-            tk.Label(self.pos_frame, text = field).grid(row=0, column=idx)
-            for idy, inst in enumerate(positions.keys()): 
-                if field == 'inst':
-                    txt = inst
-                else:
-                    txt = positions[inst][field]
-                tk.Label(self.pos_frame, text = txt).grid(row=idy+1, column=idx)
-        return      
+            row_idx = 0
+            tk.Label(self.pos_frame, text = field).grid(row=row_idx, column=idx)
+            for gway in positions.keys():
+                for inst in positions[gway]:
+                    row_idx += 1
+                    if field == 'inst':
+                        txt = inst
+                    elif field == 'gateway':
+                        txt = str(gway)
+                    else:
+                        txt = positions[gway][inst][field]
+                    tk.Label(self.pos_frame, text = txt).grid(row=row_idx, column=idx)
 
     def OnPosFrameConfigure(self, event):
         '''Reset the scroll region to encompass the inner frame'''
@@ -677,16 +681,16 @@ class Gui(tk.Tk):
             v.set(params['Insts'][inst][field])
 
     def get_agent_account(self):        
-		gway_keys = [ 'Account.' + gway for gway in self.gateways]
+        gway_keys = [ 'Account.' + gway for gway in self.gateways]
         params = self.app.get_agent_params(gway_keys)
-		for gway in self.gateways:
-			for field in self.account_fields:
-				v = self.stringvars['Account'][gway + '.' + field]
-				v.set(params['Account'][gway][field])			
-			
+        for gway in self.gateways:
+            for field in self.account_fields:
+                v = self.stringvars['Account'][gway + '.' + field]
+                v.set(params['Account'][gway][field])
+
     def recalc_margin(self, gway):
         params = ()
-		self.app.run_gateway_func(gway, 'calc_margin', params)
+        self.app.run_gateway_func(gway, 'calc_margin', params)
 
     def run_eod(self):
         params = ()
@@ -720,34 +724,35 @@ class Gui(tk.Tk):
         for col_idx, field in enumerate(['gateway'] + self.account_fields):
             lab = ttk.Label(lbl_frame, text=field, anchor='w')
             lab.grid(column=col_idx, row=row_idx, sticky="ew")
-		col_idx = 0
-		for gway in self.gateways:
-			row_idx += 1
-            lab = ttk.Label(lbl_frame, text=gway, anchor='w')
-            lab.grid(column=col_idx, row=row_idx, sticky="ew")
-			for field in self.account_fields:
-				col_idx += 1
-				v = tk.DoubleVar()
-				key = gway+'.'+field
-				self.stringvars['Account'][key] = v
-				lab = ttk.Label(lbl_frame, textvariable = v, anchor='w')
-				lab.grid(column=col_idx, row=row_idx, sticky="ew")
+        col_idx = 0
+        row_idx += 1
+        for gway in self.gateways:
+            lab = ttk.Label(lbl_frame, text=str(gway), anchor='w')
+            lab.grid(column = col_idx, row = row_idx, sticky="ew")
+            for field in self.account_fields:
+                col_idx += 1
+                v = tk.DoubleVar()
+                key = str(gway) + '.'+ field
+                self.stringvars['Account'][key] = v
+                lab = ttk.Label(lbl_frame, textvariable = v, anchor='w')
+                lab.grid(column=col_idx, row=row_idx, sticky="ew")
+            row_idx += 1
         agent_fields = entry_fields + label_fields
         setup_setbtn = ttk.Button(lbl_frame, text='SetParam', command= lambda: self.set_agent_params(entry_fields))
-		setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
+        setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
         setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(agent_fields))
         setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
         setup_loadbtn = ttk.Button(lbl_frame, text='LoadAccount', command= self.get_agent_account)
         setup_loadbtn.grid(column=2, row=row_idx, sticky="ew")
-		setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
+        setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
         setup_loadbtn.grid(column=3, row=row_idx, sticky="ew")
-		setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
+        setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
         setup_qrybtn.grid(column=4, row=row_idx, sticky="ew")		
-		col_idx = 5
-		for gway in self.gateways:
-			setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc_'+gway, command= lambda: self.recalc_margin(gway))
-			setup_loadbtn.grid(column=col_idx, row=row_idx, sticky="ew")
-			col_idx += 1
+        col_idx = 5
+        for gway in self.gateways:
+            setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc_'+gway, command= lambda: self.recalc_margin(gway))
+            setup_loadbtn.grid(column=col_idx, row=row_idx, sticky="ew")
+            col_idx += 1
         row_idx +=1
         field = 'QryInst'
         lab = ttk.Label(lbl_frame, text= field, anchor='w')
@@ -765,7 +770,7 @@ class Gui(tk.Tk):
             lab2.grid(column=idx+1, row=row_idx+1, sticky="ew")            
         lbl_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)        
         self.get_agent_params(agent_fields)
-		self.get_agent_account()
+        self.get_agent_account()
     
     def set_agent_params(self, fields):
         params = {}
@@ -834,22 +839,24 @@ class MainApp(object):
                 res[field] = {}
             if field == 'Positions':
                 positions = {}
-                gateway = self.agent.gateways[field_list[1]]
+                for gway in self.agent.gateways:
+                    gateway = self.agent.gateways[gway]
+                    positions[gway] = {}
                 for inst in gateway.positions:
                     pos = gateway.positions[inst]
-                    positions[inst] = {'currlong' : pos.curr_pos.long, 
-                                       'currshort': pos.curr_pos.short, 
-                                       'locklong' : pos.locked_pos.long, 
-                                       'lockshort': pos.locked_pos.short, 
-                                       'ydaylong':  pos.pos_yday.long, 
+                    positions[gway][inst] = {'currlong' : pos.curr_pos.long,
+                                       'currshort': pos.curr_pos.short,
+                                       'locklong' : pos.locked_pos.long,
+                                       'lockshort': pos.locked_pos.short,
+                                       'ydaylong':  pos.pos_yday.long,
                                        'ydayshort': pos.pos_yday.short}
-                res[field][gateway.gatewayName] = positions
+                res[field] = positions
             elif field == 'Account':
                 gateway = self.agent.gateways[field_list[1]]
-                res[field][gateway.gatewayName] = copy.deepcopy(gateway.account_info)
+                res[field][gateway.gatewayName] = dict([(variable2field(var), gateway.account_info[var]) for var in gateway.account_info])
             elif field ==' Orderstats':
                 gateway = self.agent.gateways[field_list[1]]
-                res[field][gateway.gatewayName] = copy.deepcopy(gateway.order_stats)
+                res[field][gateway.gatewayName] = dict([(variable2field(var), gateway.order_stats[var]) for var in gateway.order_stats])
             elif field == 'Orders':
                 order_list = []
                 gateway = self.agent.gateways[field_list[1]]
