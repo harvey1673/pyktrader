@@ -561,16 +561,13 @@ class Gui(tk.Tk):
         self.pos_frame = None
         self.pos_canvas = None
         self.entries = {}
-        self.stringvars = {'Insts':{}}
+        self.stringvars = {'Insts':{}, 'Account':{}}
         self.status_ents = {}
         self.strat_frame = {}
         self.strat_gui = {}
         self.volgrid_gui = {}
         self.volgrid_frame = {}
-        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod']
-        self.status_fields = ['Positions', 'Orders', 'Trades', 'Insts', 'ScurDay', 'TickId', 'EodFlag', \
-                              'Initialized', 'TotalSubmitted', 'TotalCancelled', \
-                              'CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
+        self.account_fields = ['CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
         self.field_types = {'ScurDay' : 'date',
                             'TickId'  : 'int',
                             'EodFlag' : 'bool',
@@ -608,7 +605,7 @@ class Gui(tk.Tk):
         if ('Option' in app.agent.__class__.__name__) and (len(app.agent.volgrids)>0):
             for prod in app.agent.volgrids:
                 self.volgrid_gui[prod] = OptVolgridGui(app.agent.volgrids[prod], app, self)
-                
+        self.gateways = self.app.agent.gateways.keys()
         menu = tk.Menu(self)
         toolmenu = tk.Menu(menu, tearoff=0)
         toolmenu.add_command(label = 'MarketViewer', command=self.market_view)
@@ -678,21 +675,26 @@ class Gui(tk.Tk):
         for field in inst_fields:
             v = self.stringvars['Insts.'+field]
             v.set(params['Insts'][inst][field])
-        pass
-    
-    def recalc_margin(self):
+
+    def get_agent_account(self):        
+		gway_keys = [ 'Account.' + gway for gway in self.gateways]
+        params = self.app.get_agent_params(gway_keys)
+		for gway in self.gateways:
+			for field in self.account_fields:
+				v = self.stringvars['Account'][gway + '.' + field]
+				v.set(params['Account'][gway][field])			
+			
+    def recalc_margin(self, gway):
         params = ()
-        self.app.run_agent_func('calc_margin', params)
-        return
+		self.app.run_gateway_func(gway, 'calc_margin', params)
 
     def run_eod(self):
         params = ()
         self.app.run_agent_func('run_eod', params)
-        return
             
     def config_settings(self):
         entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod']
-        label_fields = ['ScurDay', 'TickId', 'EodFlag'] #, 'Initialized', 'TotalSubmitted', 'TotalCancelled' ]
+        label_fields = ['ScurDay', 'TickId', 'EodFlag'] 
         lbl_frame = ttk.Labelframe(self.settings_win)
         row_idx = 0
         for col_idx, field in enumerate(label_fields + entry_fields):
@@ -714,36 +716,38 @@ class Gui(tk.Tk):
             col_idx += 1
             self.stringvars[field] = v
         row_idx += 1
-        account_fields = ['CurrCapital', 'PrevCapital', 'PnlTotal', 'LockedMargin', 'UsedMargin', 'Available']
-        gway_names = self.app.agent.gateways.keys()
-        gway_keys = [ 'Account.' + gway for gway in gway_names]
-        for col_idx, field in enumerate(['gateway'] + account_fields):
-            #row = tk.Frame(root)
-            lab1 = ttk.Label(lbl_frame, text=field, anchor='w')
-            lab1.grid(column=col_idx, row=row_idx, sticky="ew")
-            v1 = tk.DoubleVar()
-            lab2 = ttk.Label(lbl_frame, textvariable = v1, anchor='w')
-            self.stringvars[field] = v1
-            lab2.grid(column=1, row=row_idx, sticky="ew")
-
-            lab3 = ttk.Label(lbl_frame, text=field+": ", anchor='w')
-            lab3.grid(column=2, row=row_idx, sticky="ew")
-            v2 = tk.DoubleVar()
-            lab4 = ttk.Label(lbl_frame, textvariable = v2, anchor='w')
-            self.stringvars[field] = v2
-            lab4.grid(column=3, row=row_idx, sticky="ew")
-            row_idx += 1      
-        all_fields = entry_fields+label_fields+account_fields
+        #account_fields = ['CurrCapital', 'PrevCapital', 'PnlTotal', 'LockedMargin', 'UsedMargin', 'Available']
+        for col_idx, field in enumerate(['gateway'] + self.account_fields):
+            lab = ttk.Label(lbl_frame, text=field, anchor='w')
+            lab.grid(column=col_idx, row=row_idx, sticky="ew")
+		col_idx = 0
+		for gway in self.gateways:
+			row_idx += 1
+            lab = ttk.Label(lbl_frame, text=gway, anchor='w')
+            lab.grid(column=col_idx, row=row_idx, sticky="ew")
+			for field in self.account_fields:
+				col_idx += 1
+				v = tk.DoubleVar()
+				key = gway+'.'+field
+				self.stringvars['Account'][key] = v
+				lab = ttk.Label(lbl_frame, textvariable = v, anchor='w')
+				lab.grid(column=col_idx, row=row_idx, sticky="ew")
+        agent_fields = entry_fields + label_fields
         setup_setbtn = ttk.Button(lbl_frame, text='SetParam', command= lambda: self.set_agent_params(entry_fields))
-        setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(all_fields))
+		setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(agent_fields))
         setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc', command= self.recalc_margin)
+        setup_loadbtn = ttk.Button(lbl_frame, text='LoadAccount', command= self.get_agent_account)
         setup_loadbtn.grid(column=2, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
+		setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
         setup_loadbtn.grid(column=3, row=row_idx, sticky="ew")
-        setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
-        setup_qrybtn.grid(column=4, row=row_idx, sticky="ew")
+		setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
+        setup_qrybtn.grid(column=4, row=row_idx, sticky="ew")		
+		col_idx = 5
+		for gway in self.gateways:
+			setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc_'+gway, command= lambda: self.recalc_margin(gway))
+			setup_loadbtn.grid(column=col_idx, row=row_idx, sticky="ew")
+			col_idx += 1
         row_idx +=1
         field = 'QryInst'
         lab = ttk.Label(lbl_frame, text= field, anchor='w')
@@ -759,9 +763,9 @@ class Gui(tk.Tk):
             lab2 = ttk.Label(lbl_frame, textvariable = v, anchor='w')
             self.stringvars['Insts.' + field] = v
             lab2.grid(column=idx+1, row=row_idx+1, sticky="ew")            
-        lbl_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)
-        
-        self.get_agent_params(all_fields)
+        lbl_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)        
+        self.get_agent_params(agent_fields)
+		self.get_agent_account()
     
     def set_agent_params(self, fields):
         params = {}
