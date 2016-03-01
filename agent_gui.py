@@ -823,8 +823,11 @@ class MainApp(object):
         self.scur_day = tday
         self.name = name
         cls_str = agent_class.split('.')
+		config = {}
+		with open(config_file, 'r') as infile:
+            config = json.load(infile)
         agent_cls = getattr(__import__(str(cls_str[0])), str(cls_str[1]))
-        self.agent = agent_cls(name = name, tday = tday, config_file = config_file)
+        self.agent = agent_cls(name = name, tday = tday, config = config)
         self.master = master
         self.restart()
                         
