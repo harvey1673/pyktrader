@@ -29,7 +29,10 @@ def save_ctp(tday, config_file, filter = False):
                    console_level = logging.INFO)
     app_name = 'SaveAgent'
     scur_day = datetime.datetime.strptime(tday, '%Y%m%d').date()
-    save_agent = agent.SaveAgent(name = app_name, tday = scur_day, config_file = config_file)
+	config = {}
+	with open(config_file, 'r') as infile:
+        config = json.load(infile)
+    save_agent = agent.SaveAgent(name = app_name, tday = scur_day, config = config)
     curr_insts = filter_main_cont(tday, False)
     for inst in curr_insts:
         save_agent.add_instrument(inst)
