@@ -288,12 +288,15 @@ class TLStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'TradeUnit']
-        self.status_fields = ['CurrPrices', 'TrailLoss', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'TradeUnit', 'Channels', 'MaxPos', '"TrailLoss']
+        self.status_fields = ['TradingFreq', 'CurrPrices', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
         self.shared_fields = ['NumTick', 'OrderType']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
+							'TradingFreq': 'str',
                             'TrailLoss': 'float',
+							'MaxPos': 'int',
+							'Channels': 'intlist',
                             'CurrPrices': 'float',
                             'CurrAtr':  'float',
                             'EntryHigh':'float',
