@@ -45,6 +45,8 @@ def insert_tick_data(inst, tick, dbtable = 'fut_tick'):
     cnx.close()
     
 def bulkinsert_tick_data(inst, ticks, dbtable = 'fut_tick'):
+    if len(ticks) == 0:
+        return
     tick_columns = fut_tick_columns
     if inst.isdigit():
         tick_columns = ss_tick_columns
@@ -59,7 +61,6 @@ def bulkinsert_tick_data(inst, ticks, dbtable = 'fut_tick'):
     cursor.executemany(stmt, args)
     cnx.commit()
     cnx.close()
-    pass
 
 def insert_min_data(inst, min_data, dbtable = 'fut_min'):
     cnx = mysql.connector.connect(**dbconfig)
