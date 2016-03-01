@@ -111,23 +111,18 @@ class CtpGateway(Gateway):
             return            
         
         # 创建行情和交易接口对象
-        if len(tdAddress) > 0:
-            self.mdApi.connect(userID, password, brokerID, mdAddress)
-            self.mdConnected = False
-        else:
-            self.mdApi = None
+        self.mdApi.connect(userID, password, brokerID, mdAddress)
+        self.mdConnected = False
 
-        if len(tdAddress) > 0:
-            self.tdApi.connect(userID, password, brokerID, tdAddress)
-            self.tdConnected = False
-        else:
-            self.tdApi = None
-            self.qryEnabled = False
+        self.tdApi.connect(userID, password, brokerID, tdAddress)
+        self.tdConnected = False
     
     #----------------------------------------------------------------------
     def subscribe(self, subscribeReq):
         """订阅行情"""
-        self.mdApi.subscribe(subscribeReq.symbol)
+        instID = subscribeReq.symbol
+        self.add_instrument(instID)
+        self.mdApi.subscribe(instID)
         
     #----------------------------------------------------------------------
     def sendOrder(self, iorder):
@@ -156,10 +151,10 @@ class CtpGateway(Gateway):
         iorder.status = order.OrderStatus.Sent		
         self.tdApi.sendOrder(iorder)
         
-        self.order_stats[inst]['submit'] += 1
+        self.order_stats[inst.name]['submit'] += 1
         self.order_stats['total_submit'] += 1
 
-        if self.order_stats[inst.name]['submitted'] >= self.order_constraints['submit_limit']:
+        if self.order_stats[inst.name]['submit'] >= self.order_constraints['submit_limit']:
             self.order_stats[inst.name]['status'] = False
         if self.order_stats['total_submit'] >= self.order_constraints['total_submit']:
             for instID in self.order_stats:
@@ -213,8 +208,7 @@ class CtpGateway(Gateway):
     def setAutoDbUpdated(self, db_update):
         self.auto_db_update = db_update
 
-
-    def register_event_handler(self):	
+    def register_event_handler(self):
         self.eventEngine.register(EVENT_MARKETDATA+self.gatewayName, self.rsp_market_data)
         self.eventEngine.register(EVENT_QRYACCOUNT+self.gatewayName, self.rsp_qry_account)
         self.eventEngine.register(EVENT_QRYPOSITION+self.gatewayName, self.rsp_qry_position)

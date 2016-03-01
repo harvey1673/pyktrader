@@ -397,8 +397,9 @@ class Agent(MktDataMixin):
         gateway_name = iorder.gateway
         if gateway_name not in self.gateways:
             self.logger.warning(u'接口不存在：%s' % gateway_name)
-            gateway_name = self.inst2gateway[iorder.instID]
-        gateway = self.gateways[gateway_name]
+            gateway = self.inst2gateway[iorder.instID]
+        else:
+            gateway = self.gateways[gateway_name]
         gateway.sendOrder(iorder)
     
     #----------------------------------------------------------------------
@@ -595,6 +596,7 @@ class Agent(MktDataMixin):
     def update_instrument(self, tick):      
         inst = tick.instID    
         curr_tick = tick.tick_id
+        self.tick_id = max(curr_tick, self.tick_id)
         self.instruments[inst].up_limit   = tick.upLimit
         self.instruments[inst].down_limit = tick.downLimit        
         tick.askPrice1 = min(tick.askPrice1, tick.upLimit)
@@ -648,8 +650,7 @@ class Agent(MktDataMixin):
             required_margin = 0
             for idx, (inst, v, otype) in enumerate(zip(exec_trade.instIDs, exec_trade.volumes, exec_trade.order_types)):
                 orders = []
-                gway_name = self.inst2gateway[inst]
-                gateway = self.gateways[gway_name]
+                gateway = self.inst2gateway[inst]
                 pos = gateway.positions[inst]
                 pos.re_calc()
                 gateway.calc_margin()
@@ -677,7 +678,7 @@ class Agent(MktDataMixin):
                     order_type = OF_CLOSE
                     if (self.instruments[inst].exchange == "SHFE"):
                         order_type = OF_CLOSE_TDAY                        
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond, trade_ref, gateway = gway_name )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, order_type, direction, otype, cond, trade_ref, gateway = gateway.gatewayName )
                     orders.append(iorder)
                   
                 if (self.instruments[inst].exchange == "SHFE") and (abs(remained)>0) and (pos.can_yclose.short+pos.can_yclose.long>0):
@@ -694,7 +695,7 @@ class Agent(MktDataMixin):
                         cond = {}
                         if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                             cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond, trade_ref, gateway = gway_name )
+                        iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_CLOSE_YDAY, direction, otype, cond, trade_ref, gateway = gateway.gatewayName )
                         orders.append(iorder)
                 
                 vol = abs(remained)
@@ -710,13 +711,13 @@ class Agent(MktDataMixin):
                     cond = {}
                     if (idx>0) and (exec_trade.order_types[idx-1] == OPT_LIMIT_ORDER):
                         cond = { o:order.OrderStatus.Done for o in all_orders[exec_trade.instIDs[idx-1]]}
-                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond, trade_ref, gateway = gway_name )
+                    iorder = order.Order(pos, order_prices[idx], vol, self.tick_id, OF_OPEN, direction, otype, cond, trade_ref, gateway = gateway.gatewayName )
                     orders.append(iorder)
                 all_orders[inst] = orders
             exec_trade.order_dict = all_orders
             for inst in exec_trade.instIDs:
-                pos = self.positions[inst]
                 for iorder in all_orders[inst]:
+                    pos = self.gateways[iorder.gateway].positions[inst]
                     pos.add_order(iorder)
                     self.ref2order[iorder.order_ref] = iorder
                     if iorder.status == order.OrderStatus.Ready:
@@ -769,7 +770,7 @@ class Agent(MktDataMixin):
                         if len(orders)>0:
                             new_orders[inst] = orders
                     for inst in new_orders:
-                        gateway = self.gateways[self.inst2gateway[inst]]
+                        gateway = self.inst2gateway[inst]
                         pos = gateway.positions[inst]
                         for iorder in new_orders[inst]:
                             exec_trade.order_dict[inst].append(iorder)

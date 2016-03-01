@@ -165,6 +165,9 @@ class ETrade(object):
         pending_orders = []
         if self.status in [ETradeStatus.Done, ETradeStatus.Cancelled, ETradeStatus.StratConfirm]:
             return pending_orders
+        elif len(self.order_dict) == 0:
+            self.status = ETradeStatus.Pending
+            return pending_orders
         Done_status = True
         PFill_status = False
         Zero_Volume = True

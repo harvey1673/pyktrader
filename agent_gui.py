@@ -6,7 +6,7 @@ import re
 import pyktlib
 import instrument
 import math
-import copy
+import json
 import tradeagent as agent
 
 vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
@@ -288,15 +288,15 @@ class TLStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'TradeUnit', 'Channels', 'MaxPos', '"TrailLoss']
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'TradeUnit', 'Channels', 'MaxPos', 'TrailLoss']
         self.status_fields = ['TradingFreq', 'CurrPrices', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
         self.shared_fields = ['NumTick', 'OrderType']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
-							'TradingFreq': 'str',
+                            'TradingFreq': 'str',
                             'TrailLoss': 'float',
-							'MaxPos': 'int',
-							'Channels': 'intlist',
+                            'MaxPos': 'int',
+                            'Channels': 'intlist',
                             'CurrPrices': 'float',
                             'CurrAtr':  'float',
                             'EntryHigh':'float',
@@ -741,16 +741,16 @@ class Gui(tk.Tk):
                 lab.grid(column=col_idx, row=row_idx, sticky="ew")
             row_idx += 1
         agent_fields = entry_fields + label_fields
-        setup_setbtn = ttk.Button(lbl_frame, text='SetParam', command= lambda: self.set_agent_params(entry_fields))
-        setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(agent_fields))
-        setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='LoadAccount', command= self.get_agent_account)
-        setup_loadbtn.grid(column=2, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
-        setup_loadbtn.grid(column=3, row=row_idx, sticky="ew")
         setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
-        setup_qrybtn.grid(column=4, row=row_idx, sticky="ew")		
+        setup_qrybtn.grid(column=0, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
+        setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
+        setup_setbtn = ttk.Button(lbl_frame, text='SetParam', command= lambda: self.set_agent_params(entry_fields))
+        setup_setbtn.grid(column=2, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(agent_fields))
+        setup_loadbtn.grid(column=3, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='LoadAccount', command= self.get_agent_account)
+        setup_loadbtn.grid(column=4, row=row_idx, sticky="ew")
         col_idx = 5
         for gway in self.gateways:
             setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc_'+gway, command= lambda: self.recalc_margin(gway))
@@ -823,8 +823,8 @@ class MainApp(object):
         self.scur_day = tday
         self.name = name
         cls_str = agent_class.split('.')
-		config = {}
-		with open(config_file, 'r') as infile:
+        config = {}
+        with open(config_file, 'r') as infile:
             config = json.load(infile)
         agent_cls = getattr(__import__(str(cls_str[0])), str(cls_str[1]))
         self.agent = agent_cls(name = name, tday = tday, config = config)

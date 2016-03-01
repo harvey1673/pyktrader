@@ -64,6 +64,8 @@ class Gateway(object):
     def add_instrument(self, instID):
         if instID not in self.positions:
             self.positions[instID] = order.Position(self.agent.instruments[instID], self)
+        if instID not in self.order_stats:
+            self.order_stats[instID] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
         if instID not in self.qry_pos:
             self.qry_pos[instID]   = {'tday': [0, 0], 'yday': [0, 0]}
 

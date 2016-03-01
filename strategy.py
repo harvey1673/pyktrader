@@ -355,7 +355,7 @@ class Strategy(object):
         conv_f = [ self.agent.instruments[inst].multiple for inst in insts ]
         etrade = order.ETrade( insts, trade_vol, order_type, price * direction, [self.num_tick] * nAsset,  \
                                 valid_time, self.name, self.agent.name, conv_f[-1]*self.trade_unit[idx], conv_f)
-        tradepos = self.pos_class(insts, self.volumes[idx], direction * self.trade_unit[idx], \
+        tradepos = eval(self.pos_class)(insts, self.volumes[idx], direction * self.trade_unit[idx], \
                                 price, price, conv_f[-1]*self.trade_unit[idx], **self.pos_args)
         tradepos.entry_tradeid = etrade.id
         self.submitted_trades[idx].append(etrade)
@@ -423,7 +423,7 @@ class Strategy(object):
                     entry_target = float(row[7])
                     exit_target = float(row[11])
                     price_unit = float(row[15])
-                    tradepos = self.pos_class(insts, vols, pos, entry_target, exit_target, price_unit, **self.pos_args)
+                    tradepos = eval(self.pos_class)(insts, vols, pos, entry_target, exit_target, price_unit, **self.pos_args)
                     if row[6] in ['', '19700101 00:00:00 000000']:
                         entry_time = NO_ENTRY_TIME
                         entry_price = 0

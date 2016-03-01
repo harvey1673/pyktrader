@@ -21,6 +21,8 @@ class DTSplitDChanFilter(Strategy):
         self.num_tick = 1
 
     def register_func_freq(self):
+        if self.use_chan == False:
+            return
         for under, chan in zip(self.underliers, self.channels):
             for infunc in self.data_func:
                 name  = infunc[0]
@@ -50,10 +52,11 @@ class DTSplitDChanFilter(Strategy):
             ddf = self.agent.day_data[inst]
             mdf = self.agent.min_data[inst][1]
             last_date = ddf.index[-1]
-            key = self.channel_keys[0] + str(self.channels[idx])
-            self.chan_high[idx] = ddf.ix[-1, key]
-            key = self.channel_keys[1] + str(self.channels[idx])
-            self.chan_low[idx]  = ddf.ix[-1, key]
+            if self.use_chan:
+                key = self.channel_keys[0] + str(self.channels[idx])
+                self.chan_high[idx] = ddf.ix[-1, key]
+                key = self.channel_keys[1] + str(self.channels[idx])
+                self.chan_low[idx]  = ddf.ix[-1, key]
             if last_date < mdf.index[-1].date():
                 last_min = mdf['min_id'][-1]
                 pid = 0
