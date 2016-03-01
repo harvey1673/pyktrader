@@ -5,16 +5,16 @@ import os
 import csv
 import numpy as np
 import datetime
-import agent
+from tradeagent import *
 from misc import *
 
 def discount(irate, dtoday, dexp):
     return np.exp(-irate * max(dexp - dtoday,0)/365.0)
                 
 class OptAgentMixin(object):
-    def __init__(self, irate = 0.04):
+    def __init__(self, name, tday=datetime.date.today(), config = {}):
         self.volgrids = {}
-        self.irate = irate
+        self.irate = config.get('irate, 0.03)
     
     def load_volgrids(self):
         self.logger.info('loading volgrids')
@@ -161,21 +161,18 @@ class OptAgentMixin(object):
         self.volgrids = volgrids
         return
       
-class OptionAgent(agent.Agent, OptAgentMixin):
-    def __init__(self, name, trader, cuser,instruments, strategies = [], tday=datetime.date.today(), config = {}):
-        agent.Agent.__init__(self, name, trader, cuser,instruments, strategies, tday, config)
+class OptionAgent(Agent, OptAgentMixin):
+    def __init__(self, name, tday=datetime.date.today(), config = {}):
+        Agent.__init__(self, name, tday, config)
         irate = 0.04
         if 'irate' in config:
             irate = config['irate']
-        OptAgentMixin.__init__(self, irate)
+        OptAgentMixin.__init__(self, name, tday, config)
         self.create_volgrids()
         self.load_volgrids()
         self.set_opt_pricers()
     
-    def resume(self):
-        #self.load_volgrids()
+    def restart(self):
         for prod in self.volgrids:
             self.reval_volgrids(prod, True)
-        agent.Agent.resume(self)
-        return
-        
+        Agent.restart()
