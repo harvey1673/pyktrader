@@ -232,7 +232,7 @@ class MktDataMixin(object):
 
 class Agent(MktDataMixin):
  
-    def __init__(self, name, tday=datetime.date.today(), config_file = None):
+    def __init__(self, name, tday=datetime.date.today(), config = {}):
         '''
             trader为交易对象
             tday为当前日,为0则为当日
@@ -240,10 +240,7 @@ class Agent(MktDataMixin):
         self.tick_id = 0
         self.timer_count = 0
         self.name = name
-        config = {}
         self.sched_commands = []
-        with open(config_file, 'r') as infile:
-            config = json.load(infile)
         self.folder = str(config.get('folder', self.name + os.path.sep))
         self.live_trading = config.get('live_trading', False)
         self.logger = logging.getLogger('.'.join([name, 'agent']))
@@ -883,4 +880,3 @@ class SaveAgent(Agent):
 
 if __name__=="__main__":
     pass
-
