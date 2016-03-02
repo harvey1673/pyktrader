@@ -403,9 +403,10 @@ class Agent(MktDataMixin):
         gateway.sendOrder(iorder)
     
     #----------------------------------------------------------------------
-    def cancel_order(self, iorder, gateway_name):
+    def cancel_order(self, iorder):
         """对特定接口撤单"""
-        if gateway_name in self.gateways:
+        gateway_name = iorder.gateway
+		if gateway_name in self.gateways:
             gateway = self.gateways[gateway_name]
             gateway.cancelOrder(iorder)
         else:
@@ -533,6 +534,14 @@ class Agent(MktDataMixin):
         '''
             保存环境
         '''
+		for trade_id in self.ref2trade:
+			etrade = self.ref2trade[trade_id]
+			if (etrade.status == order.StratConfirm) and (sum([abs(v) for v in etrade.filled_vol]) == 0):
+				for inst in etrade.order_dict:
+					for iorder in etrade.order_dict[inst]:
+						self.ref2order.pop(iorder.order_ref, None)
+						self.gateways[iorder.gateway].id2order.pop(iorder.order_ref, None)
+				self.ref2trade.pop(etrade.id, None)
         if not self.eod_flag:
             self.logger.debug(u'保存执行状态.....................')
             for gway in self.gateways:
