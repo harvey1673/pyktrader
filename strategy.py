@@ -10,15 +10,11 @@ import datetime
 import csv
 import os
 
-NO_ENTRY_TIME = datetime.datetime(1970,1,1,0,0,0)
-sign = lambda x: math.copysign(1, x)
 tradepos_header = ['insts', 'vols', 'pos', 'direction', 'entry_price', 'entry_time', 'entry_target', 'entry_tradeid',
                    'exit_price', 'exit_time', 'exit_target', 'exit_tradeid', 'profit', 'is_closed', 'price_unit']
 
-
 class TrailLossType:
     Ratio, Level = range(2)
-
 
 class TradePos(object):
     def __init__(self, insts, vols, pos, entry_target, exit_target, price_unit = 1):
@@ -279,7 +275,6 @@ class Strategy(object):
     def check_submitted_trades(self, idx):
         for etrade in self.submitted_trades[idx]:
             self.agent.check_trade(etrade)
-        return
 
     def add_live_trades(self, etrade):
         trade_key = '_'.join(sorted(etrade.instIDs))

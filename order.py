@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import logging
 from base import *
-from misc import * 
+from misc import *
 import itertools
 import datetime
 import csv
@@ -12,7 +12,6 @@ class ETradeStatus:
 
 class OrderStatus:
     Waiting, Ready, Sent, Done, Cancelled = range(5)
-
 
 def save_trade_list(curr_date, trade_list, file_prefix):
     filename = file_prefix + 'trade_' + curr_date.strftime('%y%m%d')+'.csv'

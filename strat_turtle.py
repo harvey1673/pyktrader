@@ -67,7 +67,7 @@ class TurtleTrader(Strategy):
         return
             
     def on_bar(self, idx, freq):
-        if (freq != self.freq):
+        if (freq != self.trading_freq[idx]):
             return
         inst = self.underliers[idx][0]
         if self.curr_prices[idx] < 0.01 or self.curr_prices[idx] > 100000:

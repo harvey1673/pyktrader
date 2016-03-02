@@ -1,16 +1,12 @@
 #-*- coding:utf-8 -*-
 import workdays
-import time
 import json
-import copy
 import datetime
 import logging
 import bisect
 import mysqlaccess
 import order as order
-import math
 import os
-import csv
 import instrument
 import ctp
 from gateway import *
@@ -19,15 +15,11 @@ from base import *
 from misc import *
 import data_handler
 import backtest
-import pyktlib
-import numpy as np
 from eventType import *
 from eventEngine import *
 
-MAX_REALTIME_DIFF = 100
 min_data_list = ['datetime', 'min_id', 'open', 'high','low', 'close', 'volume', 'openInterest'] 
 day_data_list = ['date', 'open', 'high','low', 'close', 'volume', 'openInterest']
-
 
 def get_tick_num(dt):
     return ((dt.hour+6)%24)*36000+dt.minute*600+dt.second*10+dt.microsecond/100000
@@ -243,6 +235,7 @@ class Agent(MktDataMixin):
         self.sched_commands = []
         self.folder = str(config.get('folder', self.name + os.path.sep))
         self.live_trading = config.get('live_trading', False)
+        self.realtime_tick_diff = config.get('realtime_tick_diff', 100)
         self.logger = logging.getLogger('.'.join([name, 'agent']))
         self.eod_flag = False
         self.save_flag = False
@@ -312,8 +305,8 @@ class Agent(MktDataMixin):
         curr_time = datetime.datetime.now()
         i = 0
         while(i<l and curr_time >= self.sched_commands[i][0]):
-            logging.info(u'exec command:,i=%s,time=%s,command[i][0]=%s' % (i, curr_time, self.sched_commands[i][0]))
-            arg = self.sched_commands[i][1]
+            logging.info(u'exec command:,i=%s,time=%s,command[i][1]=%s' % (i, curr_time, self.sched_commands[i][1].__name__))
+            arg = self.sched_commands[i][2]
             self.sched_commands[i][1](**arg)
             i += 1
         if i>0:
@@ -406,7 +399,7 @@ class Agent(MktDataMixin):
     def cancel_order(self, iorder):
         """对特定接口撤单"""
         gateway_name = iorder.gateway
-		if gateway_name in self.gateways:
+        if gateway_name in self.gateways:
             gateway = self.gateways[gateway_name]
             gateway.cancelOrder(iorder)
         else:
@@ -534,14 +527,17 @@ class Agent(MktDataMixin):
         '''
             保存环境
         '''
-		for trade_id in self.ref2trade:
-			etrade = self.ref2trade[trade_id]
-			if (etrade.status == order.StratConfirm) and (sum([abs(v) for v in etrade.filled_vol]) == 0):
-				for inst in etrade.order_dict:
-					for iorder in etrade.order_dict[inst]:
-						self.ref2order.pop(iorder.order_ref, None)
-						self.gateways[iorder.gateway].id2order.pop(iorder.order_ref, None)
-				self.ref2trade.pop(etrade.id, None)
+        trade_refs = []
+        for trade_id in self.ref2trade:
+            etrade = self.ref2trade[trade_id]
+            if (etrade.status == order.ETradeStatus.StratConfirm) and (sum([abs(v) for v in etrade.filled_vol]) == 0):
+                for inst in etrade.order_dict:
+                    for iorder in etrade.order_dict[inst]:
+                        self.ref2order.pop(iorder.order_ref, None)
+                        self.gateways[iorder.gateway].id2order.pop(iorder.order_ref, None)
+                trade_refs.append(etrade.id)
+        for trade_id in trade_refs:
+            self.ref2trade.pop(trade_id, None)
         if not self.eod_flag:
             self.logger.debug(u'保存执行状态.....................')
             for gway in self.gateways:
@@ -628,7 +624,7 @@ class Agent(MktDataMixin):
         if self.live_trading:
             now_ticknum = get_tick_num(datetime.datetime.now())
             cur_ticknum = get_tick_num(tick.timestamp)
-            if abs(cur_ticknum - now_ticknum)> MAX_REALTIME_DIFF:
+            if abs(cur_ticknum - now_ticknum)> self.realtime_tick_diff:
                 self.logger.warning('the tick timestamp has more than 10sec diff from the system time, inst=%s, ticknum= %s, now_ticknum=%s' % (tick.instID, cur_ticknum, now_ticknum))
         self.update_instrument(tick)
         if self.update_min_bar(tick):

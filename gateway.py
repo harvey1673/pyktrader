@@ -11,7 +11,6 @@ from misc import *
 from eventEngine import *
 from vtConstant import *
 
-
 ########################################################################
 class Gateway(object):
     """交易接口"""
@@ -54,7 +53,7 @@ class Gateway(object):
         self.positions = {}
         self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
         for inst in eod_pos:
-            if sum(eod_pos)>0:
+            if sum(eod_pos[inst])>0:
                 self.positions[inst] = order.Position(self.agent.instruments[inst], self)
                 self.positions[inst].pos_yday.long = eod_pos[inst][0]
                 self.positions[inst].pos_yday.short = eod_pos[inst][1]
