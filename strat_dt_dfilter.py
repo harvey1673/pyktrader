@@ -57,16 +57,16 @@ class DTSplitDChanFilter(Strategy):
                 self.chan_high[idx] = ddf.ix[-1, key]
                 key = self.channel_keys[1] + str(self.channels[idx])
                 self.chan_low[idx]  = ddf.ix[-1, key]
-            if last_date < mdf.index[-1].date():
+            if last_date < mdf['date'][-1]:
                 last_min = mdf['min_id'][-1]
                 pid = 0
                 for i in range(1, len(self.open_period)):
-                    if self.open_period[i] >= last_min:
+                    if self.open_period[i] > last_min:
                         break
                     else:
                         pid = i
-                df = mdf[(mdf.index.date <= last_date)|(mdf['min_id'] < self.open_period[pid])]
-                post_df = mdf[(mdf.index.date > last_date) & (mdf['min_id'] >= self.open_period[pid])]
+                df = mdf[(mdf.date <= last_date)|(mdf['min_id'] < self.open_period[pid])]
+                post_df = mdf[(mdf.date > last_date) & (mdf['min_id'] >= self.open_period[pid])]
                 self.open_idx[idx] = pid
                 self.tday_open[idx] = post_df['open'][0]
             else:
@@ -82,8 +82,7 @@ class DTSplitDChanFilter(Strategy):
         mdf.loc[:,'min_idx'] = pd.Series(0, index = mdf.index)
         for i in range(1, len(self.open_period)-1):
             mdf.loc[(mdf['min_id']>= self.open_period[i]) & (mdf['min_id']<self.open_period[i+1]), 'min_idx'] = i
-        mdf.loc[:, 'date_idx'] = mdf.index.date
-        ddf = mdf.groupby([mdf['date_idx'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
+        ddf = mdf.groupby([mdf['date'], mdf['min_idx']]).apply(dh.ohlcsum).reset_index().set_index('datetime')
         win = self.lookbacks[idx]
         if win > 0:
             self.cur_rng[idx] = max(max(ddf.ix[-win:,'high'])- min(ddf.ix[-win:,'close']), max(ddf.ix[-win:,'close']) - min(ddf.ix[-win:,'low']))
@@ -118,6 +117,8 @@ class DTSplitDChanFilter(Strategy):
                 self.recalc_rng(idx, self.agent.min_data[inst][1])
                 self.tday_open[idx] = self.agent.instruments[inst].price
                 self.logger.info("Note: the new split open is set to %s for inst=%s for stat = %s" % (self.tday_open[idx], inst, self.name, ))
+                return True
+        return False
 
     def on_tick(self, idx, ctick):
         if len(self.submitted_trades[idx]) > 0:

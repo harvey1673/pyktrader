@@ -242,7 +242,7 @@ class DTSplitDChanStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'Channels', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
-        self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'ChanHigh', 'ChanLow']
+        self.status_fields = ['TdayOpen', 'OpenIdx', 'CurrPrices', 'CurRng', 'ChanHigh', 'ChanLow']
         self.shared_fields = ['NumTick', 'OrderType']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
@@ -250,6 +250,7 @@ class DTSplitDChanStratGui(StratGui):
                             'Ratios': 'float',
                             'CloseTday': 'bool',
                             'TdayOpen': 'float',
+                            'OpenIdx': 'int',
                             'CurrPrices': 'float',
                             'CurRng':'float',
                             'ChanHigh': 'float',

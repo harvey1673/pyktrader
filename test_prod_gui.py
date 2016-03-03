@@ -501,6 +501,66 @@ def prod_test_strats():
     create_strat_file(config, ins_setup)
 
     ins_setup = {
+                 'p1605':  (1, 0.9, 2, False, 0.003, 5),
+                 'rb1605': (0, 0.7, 2, False, 0.003, 5),
+                 'pp1605': (2, 0.25,1, False, 0.003, 5),
+                 'MA605' : (2, 0.25,3, False, 0.003, 5),
+                 'SR605' : (1, 0.9, 2, False, 0.003, 5),
+                 'cs1605': (1, 1.1, 3, False, 0.003, 10),
+                 'l1605':  (0, 0.7, 3, False, 0.003, 10),
+                 'i1605':  (0, 0.7, 2, False, 0.003, 10),
+                 'j1605':  (2, 0.35,2, False, 0.003, 10),
+                 'cu1606': (1, 0.6, 1, False, 0.003, 10),
+                 'm1605':  (1, 0.7, 3, False, 0.003, 20),
+                 'RM605':  (2,0.25, 3, False, 0.003, 20),
+                 'y1605':  (1, 0.8, 2, False, 0.003, 20),
+                 'TA605' : (0, 0.7, 2, False, 0.003, 20),
+                }
+    config = {'name': 'DT_DChanSp1',
+              'trade_valid_time': 600,
+              'num_tick': 1,
+              'daily_close_buffer':5,
+              'use_chan': True,
+              'open_period': [300, 1500, 2115],
+              'filename': 'StratDT_DChanSp1.json',
+              'input_keys': ['lookbacks', 'ratios', 'trade_unit', 'close_tday', 'min_rng', 'channels'],
+              "data_func": [["DONCH_H", "dh.DONCH_H", "dh.donch_h"], ["DONCH_L", "dh.DONCH_L", "dh.donch_l"]],
+              'common_keys': ['name', 'trade_valid_time', 'num_tick', 'daily_close_buffer', 'use_chan', 'open_period', 'data_func' ],
+              'class': "strat_dt_dfilter.DTSplitDChanFilter",
+              }
+    create_strat_file(config, ins_setup)
+
+    ins_setup = {
+                 'p1605':  (1, 1.0, 2, False, 0.003, 5),
+                 'rb1605': (0, 0.6, 2, False, 0.003, 5),
+                 'pp1605': (2, 0.3, 1, False, 0.003, 5),
+                 'MA605' : (2, 0.3, 3, False, 0.003, 5),
+                 'SR605' : (1, 1.0, 2, False, 0.003, 5),
+                 'cs1605': (1, 1.0, 3, False, 0.003, 10),
+                 'l1605':  (2, 0.4, 3, False, 0.003, 10),
+                 'i1605':  (0, 0.9, 2, False, 0.003, 10),
+                 'j1605':  (2, 0.4, 2, False, 0.003, 10),
+                 'cu1606': (2,0.35, 1, False, 0.003, 10),
+                 'm1605':  (1, 0.8, 3, False, 0.003, 20),
+                 'RM605':  (2, 0.3, 3, False, 0.003, 20),
+                 'y1605':  (1, 1.0, 2, False, 0.003, 20),
+                 'TA605' : (1, 0.8, 2, False, 0.003, 20),
+                }
+    config = {'name': 'DT_DChanSp2',
+              'trade_valid_time': 600,
+              'num_tick': 1,
+              'daily_close_buffer':5,
+              'use_chan': True,
+              'open_period': [300, 1500, 2115],
+              'filename': 'StratDT_DChanSp2.json',
+              'input_keys': ['lookbacks', 'ratios', 'trade_unit', 'close_tday', 'min_rng', 'channels'],
+              "data_func": [["DONCH_H", "dh.DONCH_H", "dh.donch_h"], ["DONCH_L", "dh.DONCH_L", "dh.donch_l"]],
+              'common_keys': ['name', 'trade_valid_time', 'num_tick', 'daily_close_buffer', 'use_chan', 'open_period', 'data_func' ],
+              'class': "strat_dt_dfilter.DTSplitDChanFilter",
+              }
+    create_strat_file(config, ins_setup)
+
+    ins_setup = {
                  'bu1606':[2, 1, 1, [5, 15]],
                  'i1605': [1, 1, 2, [5, 15]],
                  'TA605': [2, 2, 2, [5, 15]],

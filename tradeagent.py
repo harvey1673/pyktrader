@@ -151,11 +151,12 @@ class MktDataMixin(object):
             if bar_id % m == 0:
                 for fobj in self.min_data_func[inst][m]:
                     fobj.rfunc(df_m)
-        event = Event(type=EVENT_MIN_BAR, priority = 10)
-        event.dict['min_id'] = min_id
-        event.dict['bar_id'] = bar_id
-        event.dict['instID'] = inst
-        self.eventEngine.put(event)
+        #event = Event(type=EVENT_MIN_BAR, priority = 10)
+        #event.dict['min_id'] = min_id
+        #event.dict['bar_id'] = bar_id
+        #event.dict['instID'] = inst
+        #self.eventEngine.put(event)
+        self.run_min(inst, bar_id)
         if self.save_flag:
             event1 = Event(type=EVENT_DB_WRITE, priority = 500)
             event1.dict['data'] = self.tick_data[inst]
@@ -290,13 +291,13 @@ class Agent(MktDataMixin):
         self.eventEngine.register(EVENT_DB_WRITE, self.write_mkt_data)
         self.eventEngine.register(EVENT_LOG, self.log_handler)
         self.eventEngine.register(EVENT_TICK, self.run_tick)
-        self.eventEngine.register(EVENT_MIN_BAR, self.run_min)
+        #self.eventEngine.register(EVENT_MIN_BAR, self.run_min)
         self.eventEngine.register(EVENT_ETRADEUPDATE, self.trade_update)
         self.eventEngine.register(EVENT_DAYSWITCH, self.day_switch)
         self.eventEngine.register(EVENT_TIMER, self.check_commands)
 
     def put_command(self, timestamp, command, arg = {} ): #按顺序插入
-        stamps = [tstamp for tstamp,cmd in self.sched_commands]
+        stamps = [tstamp for (tstamp,cmd, fargs) in self.sched_commands]
         ii = bisect.bisect(stamps, timestamp)
         self.sched_commands.insert(ii,(timestamp, command, arg))
 
@@ -631,10 +632,7 @@ class Agent(MktDataMixin):
             for strat_name in self.inst2strat[tick.instID]:
                 self.strategies[strat_name].run_tick(tick)
 
-    def run_min(self, event):
-        min_id = event.dict['min_id']
-        bar_id = event.dict['bar_id']
-        inst = event.dict['instID']
+    def run_min(self, inst, bar_id):
         for strat_name in self.inst2strat[inst]:
             for m in self.inst2strat[inst][strat_name]:
                 if bar_id % m == 0:
