@@ -23,6 +23,7 @@ class SimCtpTdApi(object):
 
     def sendOrder(self, iorder):
         """发单"""
+        iorder.local_id = iorder.order_ref
         self.reqID += 1
         self.orderRef = max(self.orderRef, iorder.local_id)
         req = {}
@@ -30,9 +31,9 @@ class SimCtpTdApi(object):
         req['LimitPrice'] = iorder.limit_price
         req['VolumeTotalOriginal'] = iorder.volume
         try:
-            req['OrderPriceType'] = priceTypeMap[iorder.price_type]
-            req['Direction'] = directionMap[iorder.direction]
-            req['CombOffsetFlag'] = offsetMap[iorder.action_type]
+            req['OrderPriceType'] = iorder.price_type
+            req['Direction'] = iorder.direction
+            req['CombOffsetFlag'] = iorder.action_type
         except KeyError:
             return ''
         req['OrderRef'] = str(iorder.local_id)
@@ -62,36 +63,32 @@ class SimCtpTdApi(object):
                 'TradeTime': time.strftime('%H%M%S')}
         event1 = Event(type=EVENT_RTNTRADE+self.gatewayName)
         event1.dict['data'] = trade
-        self.eventEngine.put(event1)
+        self.gateway.eventEngine.put(event1)
 
     def cancelOrder(self, iorder):
         """撤单"""
         inst = iorder.instrument
         self.reqID += 1
         req = {}
-        req['InstrumentID'] = iorder.instID
+        req['InstrumentID'] = inst.name
         req['ExchangeID'] = inst.exchange
         req['ActionFlag'] = defineDict['THOST_FTDC_AF_Delete']
         req['BrokerID'] = self.brokerID
         req['InvestorID'] = self.userID
-        if len(iorder.sys_id) >0:
-            req['OrderSysID'] = iorder.sys_id
-        else:
-            req['OrderRef'] = str(iorder.local_id)
-            req['FrontID'] = self.frontID
-            req['SessionID'] = self.sessionID
+        req['OrderSysID'] = str(iorder.order_ref)
+        req['OrderRef'] = str(iorder.order_ref)
+        req['FrontID'] = self.frontID
+        req['SessionID'] = self.sessionID
         self.reqOrderAction(req, self.reqID)
 
     def reqOrderAction(self, corder, request_id):
-        oid = corder['OrderRef']
-        rorder = {'InstrumentID': corder['InstrumentID'],
-                'OrderRef': corder['OrderRef'],
-                'OrderStatus': '5'}
-        event = Event(type=EVENT_ERRORDERCANCEL + self.gatewayName)
-        event.dict['data'] = rorder
-        event.dict['error'] = 25
-        event.dict['gateway'] = self.gatewayName
-        self.gateway.eventEngine.put(event)
+        local_id = int(corder['OrderRef'])
+        if (local_id in self.gateway.id2order):
+            myorder = self.gateway.id2order[local_id]
+            myorder.on_cancel()
+            event = Event(type=EVENT_ETRADEUPDATE)
+            event.dict['trade_ref'] = myorder.trade_ref
+            self.gateway.eventEngine.put(event)
 
     def reqQryTradingAccount(self,req,req_id=0):
         pass
@@ -130,6 +127,7 @@ class CtpSimGateway(CtpGateway):
         super(CtpSimGateway, self).__init__(agent, gatewayName)
         self.tdApi = SimCtpTdApi(self)     # 交易API
         self.qryEnabled = False         # 是否要启动循环查询
+        self.md_data_buffer = 0
 
     def connect(self):
         fileName = self.file_prefix + 'connect.json'

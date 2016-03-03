@@ -84,6 +84,7 @@ class CtpGateway(Gateway):
         self.qry_trigger = 2         # 查询触发点
         self.qry_commands = []
         self.qry_instruments = {}
+        self.md_data_buffer = 0
         
     #----------------------------------------------------------------------
     def connect(self):
@@ -148,7 +149,7 @@ class CtpGateway(Gateway):
                 self.onLog('sending limiting local_id=%s inst=%s for SHFE and CFFEX, change to limit order' % (iorder.local_id, inst.name), level = logging.DEBUG)
             else:
                 iorder.limit_price = 0.0
-        iorder.status = order.OrderStatus.Sent		
+        iorder.status = order.OrderStatus.Sent
         self.tdApi.sendOrder(iorder)
         
         self.order_stats[inst.name]['submit'] += 1
@@ -160,7 +161,7 @@ class CtpGateway(Gateway):
             for instID in self.order_stats:
                 self.order_stats[instID]['status'] = False
         return
-        
+
     #----------------------------------------------------------------------
     def cancelOrder(self, iorder):
         """撤单"""
@@ -366,11 +367,10 @@ class CtpGateway(Gateway):
         tick.exchange = exchangeMapReverse.get(data['ExchangeID'], u'未知')
         product = inst2product(tick.instID)
         hrs = trading_hours(product, tick.exchange)
-        buffer = 5
         tick_status = True
         bad_tick = True
         for ptime in hrs:
-            if (tick_id>=ptime[0]*1000-buffer) and (tick_id< ptime[1]*1000+buffer):
+            if (tick_id>=ptime[0]*1000-self.md_data_buffer) and (tick_id< ptime[1]*1000+self.md_data_buffer):
                 bad_tick = False
                 break
         if bad_tick:
@@ -1509,9 +1509,9 @@ class CtpTdApi(TdApi):
         
         # 下面如果由于传入的类型本接口不支持，则会返回空字符串
         try:
-            req['OrderPriceType'] = priceTypeMap[iorder.price_type]
-            req['Direction'] = directionMap[iorder.direction]
-            req['CombOffsetFlag'] = offsetMap[iorder.action_type]
+            req['OrderPriceType'] = iorder.price_type
+            req['Direction'] = iorder.direction
+            req['CombOffsetFlag'] = iorder.action_type
         except KeyError:
             return ''
             
