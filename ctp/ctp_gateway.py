@@ -569,14 +569,9 @@ class CtpMdApi(MdApi):
         
         self.gateway = gateway                  # gateway对象
         self.gatewayName = gateway.gatewayName  # gateway对象名称
-        
         self.reqID = EMPTY_INT              # 操作请求编号
-        
         self.connectionStatus = False       # 连接状态
         self.loginStatus = False            # 登录状态
-        
-        self.instruments = []      # 已订阅合约代码        
-        
         self.userID = EMPTY_STRING          # 账号
         self.password = EMPTY_STRING        # 密码
         self.brokerID = EMPTY_STRING        # 经纪商代码
@@ -625,7 +620,7 @@ class CtpMdApi(MdApi):
             logContent = u'行情服务器登录完成'
             self.gateway.onLog(logContent, level = logging.INFO)
             # 重新订阅之前订阅的合约
-            for instID in self.instruments:
+            for instID in self.gateway.instruments:
                 self.subscribe(instID)
             trade_day_str = self.getTradingDay()
             if len(trade_day_str) > 0:
@@ -741,8 +736,8 @@ class CtpMdApi(MdApi):
         # 则先保存订阅请求，登录完成后会自动订阅
         if self.loginStatus:
             self.subscribeMarketData(str(symbol))
-        if symbol not in self.instruments:
-            self.instruments.append(symbol)
+        if symbol not in self.gateway.instruments:
+            self.gateway.instruments.append(symbol)
         
     #----------------------------------------------------------------------
     def login(self):

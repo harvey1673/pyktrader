@@ -755,7 +755,9 @@ class Agent(MktDataMixin):
                                 if ( iorder.status == order.OrderStatus.Waiting) \
                                         or (iorder.status == order.OrderStatus.Ready):
                                     iorder.on_cancel()
-                                    self.trade_update(iorder)
+                                    event = Event(type=EVENT_ETRADEUPDATE)
+                                    event.dict['trade_ref'] = iorder.trade_ref
+                                    self.trade_update(event)
                                 else:
                                     self.cancel_order(iorder)
                                 if exec_trade.status == order.ETradeStatus.PFilled:                                        

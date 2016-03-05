@@ -26,6 +26,7 @@ class Gateway(object):
         self.qry_pos = {}
         self.id2order = {}
         self.positions = {}
+        self.instruments = []      # 已订阅合约代码
         self.eod_flag = False
         self.account_info = {'available': 0,
                             'locked_margin': 0,
@@ -52,7 +53,8 @@ class Gateway(object):
         self.id2order  = {}
         self.positions = {}
         self.order_stats = {'total_submit': 0, 'total_failure': 0, 'total_cancel':0 }
-        for inst in eod_pos:
+        for inst in self.instruments:
+            self.order_stats[inst] = {'submit': 0, 'cancel':0, 'failure': 0, 'status': True }
             if sum(eod_pos[inst])>0:
                 self.positions[inst] = order.Position(self.agent.instruments[inst], self)
                 self.positions[inst].pos_yday.long = eod_pos[inst][0]
@@ -185,9 +187,9 @@ class Gateway(object):
                     self.account_info['prev_capital'] = float(row[1])
                 elif row[0] == 'pos':
                     inst = row[1]
-                    if inst in self.agent.instruments:
+                    if inst in self.instruments:
                         if inst not in self.positions:
-                            self.positions[inst] = order.Position(self.instruments[inst], self)
+                            self.positions[inst] = order.Position(self.agent.instruments[inst], self)
                         self.positions[inst].pos_yday.long = int(row[2])
                         self.positions[inst].pos_yday.short = int(row[3])
         return True

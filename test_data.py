@@ -1,4 +1,3 @@
-import data_saver
 import tushare as ts
 import datetime
 import pandas as pd
@@ -69,8 +68,8 @@ from glob import glob
 #     store_HDF5(sector_ohlc, 'snp500.h5')
 
 def save_tick_data(tday, folder = '', tick_id = 300000):
-    all_insts = data_saver.filter_main_cont(tday)
-    cnx = mysqlconn.connect(**misc.mysqlaccess.dbconfig)
+    all_insts, prods = db.load_alive_cont(tday)
+    cnx = mysqlconn.connect(**db.dbconfig)
     for inst in all_insts:
         stmt = "select * from fut_tick where instID='{prod}' and date='{cdate}' and tick_id>='{tick}'".format(prod=inst, cdate=tday.strftime('%Y-%m-%d'), tick = tick_id)
         df = pd.io.sql.read_sql(stmt, cnx)
@@ -78,8 +77,8 @@ def save_tick_data(tday, folder = '', tick_id = 300000):
     return
 
 def load_tick_data(tday, folder = ''):
-    all_insts = data_saver.filter_main_cont(tday)
-    cnx = mysqlconn.connect(**misc.mysqlaccess.dbconfig)
+    all_insts, prods = db.load_alive_cont(tday)
+    cnx = mysqlconn.connect(**db.dbconfig)
     cursor = cnx.cursor()
     for inst in all_insts:
         data_file = folder + inst + '.csv'
@@ -204,6 +203,14 @@ def conv_tick2min(df):
     mdf = df.groupby([df['date'], df['hour'], df['min']]).apply(tick2ohlc).reset_index().set_index('datetime')
     return mdf
 
+def min2daily(df):
+    return pd.Series([df['open'][0], df['high'].max(), df['low'].min(), df['close'][-1], df['volume'].sum(), df['openInterest'][-1]],
+                  index = ['open','high','low','close','volume', 'openInterest'])
+
+def conv_min2daily(df):
+    ddf = df.groupby([df['instID'], df['exch'], df['date']]).apply(min2daily).reset_index().set_index(['instID', 'exch', 'date'])
+    return ddf
+
 def conv_ohlc_freq(df, freq):
     highcol = pd.DataFrame(df['price']).resample(freq, how ='max').dropna()
     lowcol  = pd.DataFrame(df['price']).resample(freq, how ='min').dropna()
@@ -228,10 +235,10 @@ def load_hist_tick(db_table, instID, sdate, edate):
 
 def load_hist_min(db_table, instID):
     dbconfig = {'user': 'harvey', 'password':'9619252y', 'host':'localhost', 'database': 'hist_data'}
-    stmt = "select instID, exch, dtime, date, min_id, open, high, low, close, volume, openInterest from {dbtable} where instID='{inst}' ".format(dbtable=db_table, inst=instID)
-    stmt += "order by dtime;"
+    stmt = "select instID, exch, datetime, date, min_id, open, high, low, close, volume, openInterest from {dbtable} where instID='{inst}' ".format(dbtable=db_table, inst=instID)
+    stmt += "order by date, min_id;"
     cnx = mysqlconn.connect(**dbconfig)
-    df = pd.io.sql.read_sql(stmt, cnx, index_col = 'dtime')
+    df = pd.io.sql.read_sql(stmt, cnx, index_col = 'datetime')
     return df
 
 def conv_db_htick2min(db_table, inst_file, out_table = 'hist_fut_min', database = 'hist_data', dstep = 10):
@@ -298,7 +305,13 @@ def conv_db_htmin2daily(db_table, inst_file, out_table = 'hist_fut_daily', datab
     dbconfig = {'user': 'harvey', 'password':'9619252y', 'host':'localhost', 'database': database}
     cnx = mysqlconn.connect(**dbconfig)
     for inst in instIDs:
-        df = load_hist_min(db_table, inst)
+        mdf = load_hist_min(db_table, inst)
+        if len(mdf) == 0:
+            continue
+        ddf = conv_min2daily(mdf)
+        ddf.to_sql(name = out_table, flavor = 'mysql', con = cnx, if_exists='append')
+        cnx.commit()
+        print inst, len(ddf)
     cnx.close()
     return
 
@@ -323,6 +336,20 @@ def get_col_dist_values(db_table, col_name, field_dict):
         keys.append(str(line[0]))
     cnx.close()
     return keys
+
+def copy_prod2hist(prod_db, hist_db, sdate, edate):
+    dbconfig = {'user': 'harvey', 'password':'9619252y', 'host':'localhost'}
+    stmt = 'insert into {hist_db}.fut_min (instID, exch, datetime, date, min_id, open, close, high, low, volume, openInterest) '.format(hist_db = hist_db)
+    stmt += 'select * from {prod_db}.fut_min where date>={sdate} and date<={edate} order by date, min_id;'.format(prod_db = prod_db, sdate = sdate.strftime('%Y%m%d'), edate = edate.strftime('%Y%m%d'));
+    cnx = mysqlconn.connect(**dbconfig)
+    cursor = cnx.cursor()
+    cursor.execute(stmt)
+    cnx.commit()
+    stmt = 'insert into {hist_db}.fut_daily (instID, exch, date, open, close, high, low, volume, openInterest) '.format(hist_db = hist_db)
+    stmt += 'select * from {prod_db}.fut_daily where date>={sdate} and date<={edate} order by date;'.format(prod_db = prod_db, sdate = sdate.strftime('%Y%m%d'), edate = edate.strftime('%Y%m%d'))
+    cursor.execute(stmt)
+    cnx.commit()
+    cnx.close()
 
 if __name__ == '__main__':
     print
