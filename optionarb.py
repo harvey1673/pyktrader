@@ -1,8 +1,7 @@
 #-*- coding:utf-8 -*-
 import instrument
 from misc import *
-import agent
-import strategy
+from strategy import *
 
 def get_option_map(underliers, cont_mths, strikes):
     opt_map = {}
@@ -18,18 +17,18 @@ def get_option_map(underliers, cont_mths, strikes):
                 opt_map[key] = instID
     return opt_map
     
-class OptionArbStrat(strategy.Strategy):
-    def __init__(self, name, future_conts, cont_mths, strikes, agent = None, email_notify = []):
-        self.option_map = get_option_map(future_conts, cont_mths, strikes)
+class OptionArbStrat(Strategy):
+    common_params =  dict({'future_conts': [], 'strikes': [], 'cont_mths': [], 'exit_ratio': 0.1, 'profit_ratio': 0.01}, **Strategy.common_params)
+    asset_params = dict({'bid_prices': 0, 'ask_prices': 0, 'channels': 20, 'min_rng': 0.003, 'daily_close': False, }, **Strategy.asset_params)
+    def __init__(self, config, agent = None):
+        Strategy.__init__(self, config, agent)
+        self.option_map = get_option_map(self.future_conts, self.cont_mths, self.strikes)
         underliers = []
         volumes = []
         trade_units = []
-        self.future_conts = future_conts 
-        self.cont_mths = cont_mths
-        self.strikes = strikes
         self.value_range = []
         idx = 0
-        for fut, strike_list in zip(future_conts, strikes):
+        for fut, strike_list in zip(self.future_conts, self.strikes):
             slen = len(strike_list)
             for i, strike in enumerate(strike_list):
                 call_key = (fut, 'C', strike)
@@ -72,10 +71,6 @@ class OptionArbStrat(strategy.Strategy):
                         idx += 1
         strategy.Strategy.__init__(self, name, underliers, volumes, trade_units, agent, email_notify)
         self.order_type = OPT_LIMIT_ORDER
-        self.profit_ratio = 0.1
-        self.exit_ratio = 0.01
-        self.bid_prices = [0.0] * len(underliers)
-        self.ask_prices = [0.0] * len(underliers)
         self.is_initialized = False
         self.trade_margin = [[0.0, 0.0]] * len(underliers)
         self.inst_margin = dict([(inst, [0.0,0.0]) for inst in self.instIDs])
