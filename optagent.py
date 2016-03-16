@@ -14,7 +14,7 @@ def discount(irate, dtoday, dexp):
 class OptAgentMixin(object):
     def __init__(self, name, tday=datetime.date.today(), config = {}):
         self.volgrids = {}
-        self.irate = config.get('irate', 0.03)
+        self.irate = config.get('irate', {'CNY': 0.03,})
     
     def load_volgrids(self):
         self.logger.info('loading volgrids')
@@ -34,9 +34,13 @@ class OptAgentMixin(object):
                         v75 = float(row[5])
                         v25 = float(row[6])
                         v10 = float(row[7])
+                        if len(row) > 8:
+                            ccy = str(row[8])
+                        else:
+                            ccy = 'CNY'
                         dexp   = date2xl(expiry) + 15.0/24.0
                         self.volgrids[prod].underlier[expiry] = inst
-                        self.volgrids[prod].df[expiry] = discount(self.irate, dtoday, dexp)
+                        self.volgrids[prod].df[expiry] = discount(self.irate[ccy], dtoday, dexp)
                         self.volgrids[prod].fwd[expiry] = fwd
                         self.volgrids[prod].dexp[expiry] = dexp
                         self.volgrids[prod].volparam[expiry] = [atm, v90, v75, v25, v10]
@@ -46,11 +50,12 @@ class OptAgentMixin(object):
                     dexp = date2xl(expiry) + 15.0/24.0
                     under_instID = self.volgrids[prod].underlier[expiry]
                     fwd = self.instruments[under_instID].price
+                    ccy = self.instruments[under_instID].ccy
                     if self.volgrids[prod].spot_model:
                         fwd = fwd / self.volgrids[prod].df[expiry]
                     self.volgrids[prod].fwd[expiry] = fwd
                     self.volgrids[prod].dexp[expiry] = dexp
-                    self.volgrids[prod].df[expiry] = discount(self.irate, dtoday, dexp)
+                    self.volgrids[prod].df[expiry] = discount(self.irate[ccy], dtoday, dexp)
                     atm = self.volgrids[prod].volparam[expiry][0]
                     v90 = self.volgrids[prod].volparam[expiry][1]
                     v75 = self.volgrids[prod].volparam[expiry][2]
@@ -70,7 +75,9 @@ class OptAgentMixin(object):
                         volparam = self.volgrids[prod].volparam[expiry]
                         row = [ self.volgrids[prod].underlier[expiry], 
                                 expiry.strftime('%Y%m%d'), 
-                                self.volgrids[prod].fwd[expiry] ] + volparam 
+                                self.volgrids[prod].fwd[expiry] ] + volparam
+                        if self.volgrids[prod].ccy != 'CNY':
+                            row.append(self.volgrids[prod].ccy)
                         file_writer.writerow(row)
         return
     
@@ -134,10 +141,6 @@ class OptAgentMixin(object):
         return
     
     def create_volgrids(self):
-        '''根据名称序列和策略序列创建instrument
-           其中策略序列的结构为:
-           [总最大持仓量,策略1,策略2...] 
-        '''
         volgrids = {}
         opt_insts = [inst for inst in self.instruments.values() if inst.ptype == instrument.ProductType.Option]
         for inst in opt_insts:
@@ -152,7 +155,7 @@ class OptAgentMixin(object):
                 if inst.exchange == 'CFFEX':
                     accr = 'CFFEX'
             if prod not in volgrids:
-                volgrids[prod] = instrument.VolGrid(prod, accrual= accr, is_spot = is_spot)
+                volgrids[prod] = instrument.VolGrid(prod, accrual= accr, is_spot = is_spot, ccy = 'CNY')
             if expiry not in volgrids[prod].option_insts:
                 volgrids[prod].option_insts[expiry] = []
                 volgrids[prod].underlier[expiry] = inst.underlying
@@ -164,9 +167,6 @@ class OptAgentMixin(object):
 class OptionAgent(Agent, OptAgentMixin):
     def __init__(self, name, tday=datetime.date.today(), config = {}):
         Agent.__init__(self, name, tday, config)
-        irate = 0.04
-        if 'irate' in config:
-            irate = config['irate']
         OptAgentMixin.__init__(self, name, tday, config)
         self.create_volgrids()
         self.load_volgrids()

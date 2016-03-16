@@ -9,9 +9,10 @@ class ProductType:
     Future, Stock, Option = range(3)
 
 class VolGrid(object):
-    def __init__(self, name, accrual = 'COM', tday = datetime.date.today(), is_spot = False):
+    def __init__(self, name, accrual = 'COM', tday = datetime.date.today(), is_spot = False, ccy = 'CNY'):
         self.name = name
         self.accrual = accrual
+        self.ccy = ccy
         self.dtoday = date2xl(tday)
         self.df = {}
         self.fwd = {}
@@ -50,6 +51,7 @@ class Instrument(object):
         self.exchange = 'CFFEX'
         self.ptype = ProductType.Future
         self.product = 'IF'
+        self.ccy = 'CNY'
         self.broker_fee = 0.0
         self.marginrate = (0,0) 
         self.multiple = 0
