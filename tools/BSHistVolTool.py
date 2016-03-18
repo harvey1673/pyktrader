@@ -1,8 +1,6 @@
 import bsopt
 import copy
 import curve
-import tenor
-import tsfns
 
 SOLVER_ERROR_EPSILON = 1e-5
 ITERATION_NUM = 100
@@ -12,18 +10,14 @@ YEARLY_DAYS = 365.0
 # Inside the period, Vol is constant and hedging frequency is once per ndays
 # bussinessDays is number of business days from the startD to expiryT
 
-def CF_DeltaHedge(IsCall, ts, strike, vol, expiryT, rd =0.0, rf = 0.0, rehedgingTenor = "1d", exceptionDateList =[]):
-
-    Dates = ts.Dates()
-    Prices = ts.Values()
-
+def delta_cashflow(is_call, ts, strike, vol, expiry, rd = 0.0, rf = 0.0, rehedge_period = 10, column = 'close'):
     # annualized days
     startD = Dates[0]
     endD = Dates[-1]
     lastPrice = ts[startD]
     lastTau = (expiryT - startD).days/YEARLY_DAYS
 
-    date =tenor.RDateAdd(rehedgingTenor,startD, exceptionDateList)
+    date =tenor.RDateAdd(rehedge_period,startD, exceptionDateList)
     CF = 0.0
     while date < endD:
         if date in ts.Dates():
@@ -31,17 +25,17 @@ def CF_DeltaHedge(IsCall, ts, strike, vol, expiryT, rd =0.0, rf = 0.0, rehedging
             lastPrice = ts[date]
             lastTau = (expiryT - date).days/YEARLY_DAYS
 
-        date = tenor.RDateAdd(rehedgingTenor,date, exceptionDateList)
+        date = tenor.RDateAdd(rehedge_period,date, exceptionDateList)
 
     CF = CF + bsopt.BSDelta(IsCall, lastPrice, strike, vol, lastTau, rd, rf) * (ts[endD] - lastPrice)
     return CF
 
 
-def BSrealizedVol(IsCall, ts, strike, expiryT, rd =0.0, rf = 0.0, optPayoff=0.0, rehedgingTenor = "1d", exceptionDateList = [], refVol = 0.5):
+def BSrealizedVol(IsCall, ts, strike, expiryT, rd =0.0, rf = 0.0, optPayoff=0.0, rehedge_period = "1d", exceptionDateList = [], refVol = 0.5):
     startD = ts.Dates()[0]
     endD = ts.Dates()[-1]
 
-    if tenor.RDateAdd(rehedgingTenor, startD, exceptionDateList) > endD :
+    if tenor.RDateAdd(rehedge_period, startD, exceptionDateList) > endD :
         raise ValueError, 'the difference between the start and the end is smaller than the hedging step'
 
     if expiryT < endD :
@@ -55,7 +49,7 @@ def BSrealizedVol(IsCall, ts, strike, expiryT, rd =0.0, rf = 0.0, optPayoff=0.0,
     vol = refVol
 
     def func(x):
-        return bsopt.BSOpt(IsCall, F0, strike, x, tau, rd, rf) + CF_DeltaHedge(IsCall, ts, strike, x, expiryT, rd, rf, rehedgingTenor, exceptionDateList) - optPayoff
+        return bsopt.BSOpt(IsCall, F0, strike, x, tau, rd, rf) + delta_cashflow(IsCall, ts, strike, x, expiryT, rd, rf, rehedge_period, exceptionDateList) - optPayoff
 
     while diff >= SOLVER_ERROR_EPSILON and numTries <= ITERATION_NUM:
         current = func(vol)
@@ -77,7 +71,7 @@ def BSrealizedVol(IsCall, ts, strike, expiryT, rd =0.0, rf = 0.0, optPayoff=0.0,
     else :
         return vol
 
-def BS_ATMVol_TermStr(IsCall, tsFwd, expiryT, rd = 0.0, rf = 0.0, endVol = 0.0, termTenor="1m", rehedgingTenor ="1d", exceptionDateList=[]):
+def BS_ATMVol_TermStr(IsCall, tsFwd, expiryT, rd = 0.0, rf = 0.0, endVol = 0.0, termTenor="1m", rehedge_period ="1d", exceptionDateList=[]):
 
     ts = curve.Curve()
     for d in tsFwd.Dates():
@@ -122,7 +116,7 @@ def BS_ATMVol_TermStr(IsCall, tsFwd, expiryT, rd = 0.0, rf = 0.0, endVol = 0.0, 
         elif endVol == None:
             raise ValueError, 'no vol is found to match PnL'
 
-        vol = BSrealizedVol(IsCall, subTS, strike, expiryT, rd, rf, finalValue, rehedgingTenor, exceptionDateList, refVol = refVol)
+        vol = BSrealizedVol(IsCall, subTS, strike, expiryT, rd, rf, finalValue, rehedge_period, exceptionDateList, refVol = refVol)
         volTS[startDate] = vol
         endVol =vol
 
@@ -132,7 +126,7 @@ def BS_ATMVol_TermStr(IsCall, tsFwd, expiryT, rd = 0.0, rf = 0.0, endVol = 0.0, 
 
     return volTS
 
-def BS_VolSurf_TermStr(tsFwd, moneyness, expiryT, rd = 0.0, rf = 0.0, endVol = 0.0, termTenor="1m", rehedgingTenor ="1d", exceptionDateList=[]):
+def BS_VolSurf_TermStr(tsFwd, moneyness, expiryT, rd = 0.0, rf = 0.0, endVol = 0.0, termTenor="1m", rehedge_period ="1d", exceptionDateList=[]):
     ts =curve.Curve()
     rptTenor = '-' + termTenor
 
@@ -140,7 +134,7 @@ def BS_VolSurf_TermStr(tsFwd, moneyness, expiryT, rd = 0.0, rf = 0.0, endVol = 0
 def BS_ConstDelta_VolSurf(tsFwd, moneynessList, expiryT, rd = 0.0, rf = 0.0, exceptionDateList=[]):
     ts = curve.Curve()
     rptTenor = '-1m'
-    rehedgingTenor = '1d'
+    rehedge_period = '1d'
     IsCall = 1
 
     for d in tsFwd.Dates():
@@ -175,7 +169,7 @@ def BS_ConstDelta_VolSurf(tsFwd, moneynessList, expiryT, rd = 0.0, rf = 0.0, exc
             else:
                 finalValue = max((strike - subTS.Values()[-1]), 0)
 
-        vol += [BSrealizedVol(IsCall, subTS, strike, expiryT, rd, rf, finalValue, rehedgingTenor, exceptionDateList)]
+        vol += [BSrealizedVol(IsCall, subTS, strike, expiryT, rd, rf, finalValue, rehedge_period, exceptionDateList)]
         if None in vol:
             print 'no vol is found to match PnL- strike:'+ str(m) + ' expiry:' + expiryT
 
@@ -204,9 +198,9 @@ def Spread_ATMVolCorr_TermStr(ts1, ts2, op, expiryT, r1 = 0, r2 = 0, termTenor="
                 r = r1 + r2
 
     IsCall = 1
-    HRVol= BS_ATMVol_TermStr(IsCall, HR, expiryT, rd = r, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedgingTenor ="1d", exceptionDateList=exceptionDateList)
-    VolF1= BS_ATMVol_TermStr(IsCall, F1, expiryT, rd = r1, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedgingTenor ="1d", exceptionDateList=exceptionDateList)
-    VolF2= BS_ATMVol_TermStr(IsCall, F2, expiryT, rd = r2, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedgingTenor ="1d", exceptionDateList=exceptionDateList)
+    HRVol= BS_ATMVol_TermStr(IsCall, HR, expiryT, rd = r, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedge_period ="1d", exceptionDateList=exceptionDateList)
+    VolF1= BS_ATMVol_TermStr(IsCall, F1, expiryT, rd = r1, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedge_period ="1d", exceptionDateList=exceptionDateList)
+    VolF2= BS_ATMVol_TermStr(IsCall, F2, expiryT, rd = r2, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedge_period ="1d", exceptionDateList=exceptionDateList)
 
     corr = curve.Curve()
     for d in HRVol.Dates():
@@ -238,7 +232,7 @@ def Crack_ATMVol_TermStr(tsList, weights, expiryT, termTenor="1m", exceptionDate
         undFwd[d] = tsList[0][d]
 
     IsCall = 1
-    CrkVol = BS_ATMVol_TermStr(IsCall, Crk, expiryT, rd = 0, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedgingTenor ="1d", exceptionDateList=exceptionDateList)
-    undVol = BS_ATMVol_TermStr(IsCall, undFwd, expiryT, rd = 0, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedgingTenor ="1d", exceptionDateList=exceptionDateList)
+    CrkVol = BS_ATMVol_TermStr(IsCall, Crk, expiryT, rd = 0, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedge_period ="1d", exceptionDateList=exceptionDateList)
+    undVol = BS_ATMVol_TermStr(IsCall, undFwd, expiryT, rd = 0, rf = 0.0, endVol = 0.0, termTenor=termTenor, rehedge_period ="1d", exceptionDateList=exceptionDateList)
 
     return CrkVol, undVol
