@@ -98,6 +98,9 @@ class DTTrader(Strategy):
         elif self.cur_ma[idx] < t_open:
             sell_trig -= self.ratios[idx][1] * c_rng
 
+        buy_trig = min(self.agent.instruments[inst].up_limit - 5*tick_base, buy_trig)
+        sell_trig = max(self.agent.instruments[inst].down_limit + 5*tick_base, sell_trig)
+
         if (min_id >= self.last_min_id[idx]):
             if (buysell!=0) and (self.close_tday[idx]):
                 msg = 'DT to close position before EOD for inst = %s, direction=%s, volume=%s, current tick_id = %s' \

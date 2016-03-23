@@ -1,4 +1,5 @@
 #-*- coding:utf-8 -*-
+import ctp_api
 import Tkinter as tk
 import ttk
 import datetime
@@ -6,8 +7,6 @@ import re
 import pyktlib
 import instrument
 import math
-import json
-import tradeagent as agent
 
 vtype_func_map = {'int':int, 'float':float, 'str': str, 'bool':bool }
 
@@ -227,7 +226,7 @@ class DTStratGui(StratGui):
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
                             'Lookbacks':'int', 
-                            'Ratios': 'floatlist',
+                            'Ratios': 'floatlist', 
                             'CloseTday': 'bool',
                             'TdayOpen': 'float',
                             'CurrPrices': 'float',
@@ -238,25 +237,24 @@ class DTStratGui(StratGui):
                             'OrderType': 'str',
                             'MinRng': 'float'}
 
-class DTSplitDChanStratGui(StratGui):
+class DTChanStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
-        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'Channels', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
-        self.status_fields = ['TdayOpen', 'OpenIdx', 'CurrPrices', 'CurRng', 'ChanHigh', 'ChanLow']
-        self.shared_fields = ['NumTick', 'OrderType']
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'MinRng', 'Channel', 'TradeUnit', 'Lookbacks', 'Ratios', 'CloseTday']
+        self.status_fields = ['TdayOpen', 'CurrPrices', 'CurRng', 'ChanHigh', 'ChanLow']
+        self.shared_fields = ['NumTick', 'OrderType', 'Channel']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
                             'Lookbacks':'int',
-                            'Ratios': 'float',
+                            'Ratios': 'floatlist',
                             'CloseTday': 'bool',
                             'TdayOpen': 'float',
-                            'OpenIdx': 'int',
                             'CurrPrices': 'float',
                             'CurRng':'float',
                             'ChanHigh': 'float',
                             'ChanLow': 'float',
                             'NumTick': 'int',
-                            'Channels': 'int',
+                            'Channel': 'int',
                             'OrderType': 'str',
                             'MinRng': 'float'}
 
@@ -289,15 +287,12 @@ class TLStratGui(StratGui):
     def __init__(self, strat, app, master):
         StratGui.__init__(self, strat, app, master)
         self.root = master
-        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'TradeUnit', 'Channels', 'MaxPos', 'TrailLoss']
-        self.status_fields = ['TradingFreq', 'CurrPrices', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
+        self.entry_fields = ['RunFlag', 'NumTick', 'OrderType', 'TradeUnit']
+        self.status_fields = ['CurrPrices', 'TrailLoss', 'CurrAtr', 'EntryHigh', 'EntryLow', 'ExitHigh', 'ExitLow'] 
         self.shared_fields = ['NumTick', 'OrderType']
         self.field_types = {'RunFlag':'int',
                             'TradeUnit':'int',
-                            'TradingFreq': 'str',
                             'TrailLoss': 'float',
-                            'MaxPos': 'int',
-                            'Channels': 'intlist',
                             'CurrPrices': 'float',
                             'CurrAtr':  'float',
                             'EntryHigh':'float',
@@ -565,18 +560,24 @@ class Gui(tk.Tk):
         self.pos_frame = None
         self.pos_canvas = None
         self.entries = {}
-        self.stringvars = {'Insts':{}, 'Account':{}}
+        self.stringvars = {'Insts':{}}
         self.status_ents = {}
         self.strat_frame = {}
         self.strat_gui = {}
         self.volgrid_gui = {}
         self.volgrid_frame = {}
-        self.account_fields = ['CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
-        self.field_types = {'ScurDay' : 'date',
+        self.setup_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap', \
+                             'TotalSubmittedLimit', 'SubmittedLimitPerInst', 'FailedOrderLimit']
+        self.status_fields = ['Positions', 'Orders', 'Trades', 'Insts', 'ScurDay', 'TickId', 'EodFlag', \
+                              'Initialized', 'ProcLock', 'TotalSubmitted', 'TotalCancelled', \
+                              'CurrCapital', 'PrevCapital', 'LockedMargin', 'UsedMargin', 'Available', 'PnlTotal']
+        self.field_types = {'ProcLock': 'bool',
+                            'ScurDay' : 'date',
                             'TickId'  : 'int',
                             'EodFlag' : 'bool',
                             'MarketOrderTickMultiple': 'int', 
-                            'CancelProtectPeriod': 'int',
+                            'CancelProtectPeriod': 'int', 
+                            'MarginCap': 'float',
                             'CurrCapital':'float', 
                             'PrevCapital':'float', 
                             'LockedMargin':'float', 
@@ -597,8 +598,8 @@ class Gui(tk.Tk):
             if strat.__class__.__name__ in ['DTTrader', 'DTSplitTrader', \
                                             'DTBarTrader']:
                 self.strat_gui[strat_name] = DTStratGui(strat, app, self)
-            if strat.__class__.__name__ in ['DTSplitDChanFilter']:
-                self.strat_gui[strat_name] = DTSplitDChanStratGui(strat, app, self)
+            if strat.__class__.__name__ in ['DTChanSplitTrader','DTChanMinTrader']:
+                self.strat_gui[strat_name] = DTChanStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'RBreakerTrader':
                 self.strat_gui[strat_name] = RBStratGui(strat, app, self)
             elif strat.__class__.__name__ == 'TurtleTrader':
@@ -609,7 +610,7 @@ class Gui(tk.Tk):
         if ('Option' in app.agent.__class__.__name__) and (len(app.agent.volgrids)>0):
             for prod in app.agent.volgrids:
                 self.volgrid_gui[prod] = OptVolgridGui(app.agent.volgrids[prod], app, self)
-        self.gateways = self.app.agent.gateways.keys()
+                
         menu = tk.Menu(self)
         toolmenu = tk.Menu(menu, tearoff=0)
         toolmenu.add_command(label = 'MarketViewer', command=self.market_view)
@@ -654,20 +655,16 @@ class Gui(tk.Tk):
         self.pos_canvas.create_window((4,4), window=self.pos_frame, anchor="nw", tags="self.pos_frame")
         self.pos_frame.bind("<Configure>", self.OnPosFrameConfigure)
         
-        fields = ['gateway', 'inst', 'currlong', 'currshort', 'locklong', 'lockshort', 'ydaylong', 'ydayshort']
+        fields = ['inst', 'currlong', 'currshort', 'locklong', 'lockshort', 'ydaylong', 'ydayshort']
         for idx, field in enumerate(fields):
-            row_idx = 0
-            tk.Label(self.pos_frame, text = field).grid(row=row_idx, column=idx)
-            for gway in positions.keys():
-                for inst in positions[gway]:
-                    row_idx += 1
-                    if field == 'inst':
-                        txt = inst
-                    elif field == 'gateway':
-                        txt = str(gway)
-                    else:
-                        txt = positions[gway][inst][field]
-                    tk.Label(self.pos_frame, text = txt).grid(row=row_idx, column=idx)
+            tk.Label(self.pos_frame, text = field).grid(row=0, column=idx)
+            for idy, inst in enumerate(positions.keys()): 
+                if field == 'inst':
+                    txt = inst
+                else:
+                    txt = positions[inst][field]
+                tk.Label(self.pos_frame, text = txt).grid(row=idy+1, column=idx)
+        return      
 
     def OnPosFrameConfigure(self, event):
         '''Reset the scroll region to encompass the inner frame'''
@@ -683,80 +680,68 @@ class Gui(tk.Tk):
         for field in inst_fields:
             v = self.stringvars['Insts.'+field]
             v.set(params['Insts'][inst][field])
-
-    def get_agent_account(self):        
-        gway_keys = [ 'Account.' + gway for gway in self.gateways]
-        params = self.app.get_agent_params(gway_keys)
-        for gway in self.gateways:
-            for field in self.account_fields:
-                v = self.stringvars['Account'][gway + '.' + field]
-                v.set(params['Account'][gway][field])
-
-    def recalc_margin(self, gway):
+        pass
+    
+    def recalc_margin(self):
         params = ()
-        self.app.run_gateway_func(gway, 'calc_margin', params)
+        self.app.run_agent_func('calc_margin', params)
+        return
 
     def run_eod(self):
         params = ()
         self.app.run_agent_func('run_eod', params)
+        return
             
     def config_settings(self):
-        entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod']
-        label_fields = ['ScurDay', 'TickId', 'EodFlag'] 
+        entry_fields = ['MarketOrderTickMultiple', 'CancelProtectPeriod', 'MarginCap', \
+                        'TotalSubmittedLimit', 'SubmittedLimitPerInst', 'FailedOrderLimit']
+        label_fields = ['ScurDay', 'TickId', 'EodFlag', 'Initialized', 'TotalSubmitted', 'TotalCancelled' ]
         lbl_frame = ttk.Labelframe(self.settings_win)
         row_idx = 0
-        for col_idx, field in enumerate(label_fields + entry_fields):
-            lab = ttk.Label(lbl_frame, text=field+": ", anchor='w')
-            lab.grid(column=col_idx, row=row_idx, sticky="ew")
-        col_idx = 0
-        row_idx += 1
-        for field in label_fields:
-            v = tk.IntVar()
-            self.stringvars[field] = v
-            lab = ttk.Label(lbl_frame, textvariable = v, anchor='w')
-            lab.grid(column=col_idx, row=row_idx, sticky="ew")
-            col_idx += 1
-        for field in entry_fields:
+        for field1, field2 in zip(entry_fields, label_fields):
+            #row = tk.Frame(root)
+            lab = ttk.Label(lbl_frame, text=field1+": ", anchor='w')
+            lab.grid(column=0, row=row_idx, sticky="ew")
             ent = ttk.Entry(lbl_frame, width=4)
-            self.entries[field] = ent
+            self.entries[field1] = ent
             ent.insert(0,"0")
-            ent.grid(column=col_idx, row=row_idx, sticky="ew")
-            col_idx += 1
-            self.stringvars[field] = v
-        row_idx += 1
-        #account_fields = ['CurrCapital', 'PrevCapital', 'PnlTotal', 'LockedMargin', 'UsedMargin', 'Available']
-        for col_idx, field in enumerate(['gateway'] + self.account_fields):
-            lab = ttk.Label(lbl_frame, text=field, anchor='w')
-            lab.grid(column=col_idx, row=row_idx, sticky="ew")
-        col_idx = 0
-        row_idx += 1
-        for gway in self.gateways:
-            lab = ttk.Label(lbl_frame, text=str(gway), anchor='w')
-            lab.grid(column = col_idx, row = row_idx, sticky="ew")
-            for field in self.account_fields:
-                col_idx += 1
-                v = tk.DoubleVar()
-                key = str(gway) + '.'+ field
-                self.stringvars['Account'][key] = v
-                lab = ttk.Label(lbl_frame, textvariable = v, anchor='w')
-                lab.grid(column=col_idx, row=row_idx, sticky="ew")
+            ent.grid(column=1, row=row_idx, sticky="ew")
+            v = tk.IntVar()
+            lab1 = ttk.Label(lbl_frame, text=field2+": ", anchor='w')
+            self.stringvars[field2] = v
+            lab1.grid(column=2, row=row_idx, sticky="ew")
+            lab2 = ttk.Label(lbl_frame, textvariable = v, anchor='w')
+            lab2.grid(column=3, row=row_idx, sticky="ew")
             row_idx += 1
-        agent_fields = entry_fields + label_fields
-        setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
-        setup_qrybtn.grid(column=0, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
-        setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
+        pnl_fields = ['CurrCapital', 'PrevCapital', 'PnlTotal']
+        margin_fields = ['LockedMargin', 'UsedMargin', 'Available']
+        for field1, field2 in zip(pnl_fields, margin_fields):
+            #row = tk.Frame(root)
+            lab1 = ttk.Label(lbl_frame, text=field1+": ", anchor='w')
+            lab1.grid(column=0, row=row_idx, sticky="ew")
+            v1 = tk.DoubleVar()
+            lab2 = ttk.Label(lbl_frame, textvariable = v1, anchor='w')
+            self.stringvars[field1] = v1
+            lab2.grid(column=1, row=row_idx, sticky="ew")
+
+            lab3 = ttk.Label(lbl_frame, text=field2+": ", anchor='w')
+            lab3.grid(column=2, row=row_idx, sticky="ew")
+            v2 = tk.DoubleVar()
+            lab4 = ttk.Label(lbl_frame, textvariable = v2, anchor='w')
+            self.stringvars[field2] = v2
+            lab4.grid(column=3, row=row_idx, sticky="ew")
+            row_idx += 1      
+        all_fields = entry_fields+label_fields+pnl_fields+margin_fields
         setup_setbtn = ttk.Button(lbl_frame, text='SetParam', command= lambda: self.set_agent_params(entry_fields))
-        setup_setbtn.grid(column=2, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(agent_fields))
+        setup_setbtn.grid(column=0, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='LoadParam', command= lambda: self.get_agent_params(all_fields))
+        setup_loadbtn.grid(column=1, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc', command= self.recalc_margin)
+        setup_loadbtn.grid(column=2, row=row_idx, sticky="ew")
+        setup_loadbtn = ttk.Button(lbl_frame, text='RunEOD', command= self.run_eod)
         setup_loadbtn.grid(column=3, row=row_idx, sticky="ew")
-        setup_loadbtn = ttk.Button(lbl_frame, text='LoadAccount', command= self.get_agent_account)
-        setup_loadbtn.grid(column=4, row=row_idx, sticky="ew")
-        col_idx = 5
-        for gway in self.gateways:
-            setup_loadbtn = ttk.Button(lbl_frame, text='ReCalc_'+gway, command= lambda: self.recalc_margin(gway))
-            setup_loadbtn.grid(column=col_idx, row=row_idx, sticky="ew")
-            col_idx += 1
+        setup_qrybtn = ttk.Button(lbl_frame, text='QueryInst', command= self.qry_agent_inst)
+        setup_qrybtn.grid(column=4, row=row_idx, sticky="ew")
         row_idx +=1
         field = 'QryInst'
         lab = ttk.Label(lbl_frame, text= field, anchor='w')
@@ -772,9 +757,9 @@ class Gui(tk.Tk):
             lab2 = ttk.Label(lbl_frame, textvariable = v, anchor='w')
             self.stringvars['Insts.' + field] = v
             lab2.grid(column=idx+1, row=row_idx+1, sticky="ew")            
-        lbl_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)        
-        self.get_agent_params(agent_fields)
-        self.get_agent_account()
+        lbl_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)
+        
+        self.get_agent_params(all_fields)
     
     def set_agent_params(self, fields):
         params = {}
@@ -811,7 +796,7 @@ class Gui(tk.Tk):
         self.status_ents = self.make_status_form(self.status_win)        
         
     def onReset(self):
-        self.app.restart()
+        self.app.reset_agent(self.app.save_test)
 
     def onExit(self):
         self.app.exit_agent()
@@ -820,57 +805,56 @@ class Gui(tk.Tk):
         return
         
 class MainApp(object):
-    def __init__(self, name, tday, config_file, agent_class = 'agent.Agent', master = None):
+    def __init__(self, name, trader_cfg, user_cfg, strat_cfg, tday, master = None, save_test = True):
+        self.trader_cfg = trader_cfg
+        self.user_cfg = user_cfg
+        self.strat_cfg = strat_cfg
         self.scur_day = tday
         self.name = name
-        cls_str = agent_class.split('.')
-        config = {}
-        with open(config_file, 'r') as infile:
-            config = json.load(infile)
-        agent_cls = getattr(__import__(str(cls_str[0])), str(cls_str[1]))
-        self.agent = agent_cls(name = name, tday = tday, config = config)
+        self.agent = None
         self.master = master
-        self.restart()
+        self.save_test = save_test
+        self.reset_agent(save_test)
                         
-    def restart(self):
+    def reset_agent(self, save_test):       
         if self.agent != None:
             self.scur_day = self.agent.scur_day
-        self.agent.restart()
+        all_insts= []
+        for strat in self.strat_cfg['strategies']:
+            all_insts = list(set(all_insts).union(set(strat.instIDs)))
+        self.agent = ctp_api.create_agent(self.name, self.user_cfg, self.trader_cfg, all_insts, self.strat_cfg, self.scur_day)
+        #self.agent.logger.addHandler(self.text_handler)
+        #ctp_api.make_user(self.agent, self.user_cfg)
+        if save_test:
+            self.agent.tick_db_table = 'test_fut_tick'
+            self.agent.min_db_table  = 'test_fut_min'
+            self.agent.daily_db_table= 'test_fut_daily'
+            self.agent.save_flag = True
+        self.agent.resume()
+        return
     
     def get_agent_params(self, fields):
         res = {}
         for f in fields:
             field_list = f.split('.')
             field = field_list[0]
-            if field not in res:
-                res[field] = {}
             if field == 'Positions':
                 positions = {}
-                for gway in self.agent.gateways:
-                    gateway = self.agent.gateways[gway]
-                    positions[gway] = {}
-                for inst in gateway.positions:
-                    pos = gateway.positions[inst]
-                    positions[gway][inst] = {'currlong' : pos.curr_pos.long,
-                                       'currshort': pos.curr_pos.short,
-                                       'locklong' : pos.locked_pos.long,
-                                       'lockshort': pos.locked_pos.short,
-                                       'ydaylong':  pos.pos_yday.long,
+                for inst in self.agent.positions:
+                    pos = self.agent.positions[inst]
+                    positions[inst] = {'currlong' : pos.curr_pos.long, 
+                                       'currshort': pos.curr_pos.short, 
+                                       'locklong' : pos.locked_pos.long, 
+                                       'lockshort': pos.locked_pos.short, 
+                                       'ydaylong':  pos.pos_yday.long, 
                                        'ydayshort': pos.pos_yday.short}
                 res[field] = positions
-            elif field == 'Account':
-                gateway = self.agent.gateways[field_list[1]]
-                res[field][gateway.gatewayName] = dict([(variable2field(var), gateway.account_info[var]) for var in gateway.account_info])
-            elif field ==' Orderstats':
-                gateway = self.agent.gateways[field_list[1]]
-                res[field][gateway.gatewayName] = dict([(variable2field(var), gateway.order_stats[var]) for var in gateway.order_stats])
             elif field == 'Orders':
                 order_list = []
-                gateway = self.agent.gateways[field_list[1]]
-                for o in gateway.id2order.values():
+                for o in self.agent.ref2order.values():
                     inst = o.position.instrument.name
                     order_list.append([o.order_ref, o.sys_id, inst, o.diretion, o.volume, o.filled_volume,  o.limit_price, o.status])
-                res[field][gateway.gatewayName] = order_list
+                res[field] = order_list
             elif field == 'Trades':
                 trade_list = []
                 for etrade in self.agent.etrades:
@@ -936,15 +920,7 @@ class MainApp(object):
             value = params[field]
             setattr(self.agent, var, value)
         return
-
-    def set_gateway_params(self, gway, params):
-        gateway = self.agent.gateways[gway]
-        for field in params:
-            var = field2variable(field)
-            value = params[field]
-            setattr(gateway, var, value)
-        return
-
+    
     def get_strat_params(self, strat_name, fields):
         params = {}
         strat = self.agent.strategies[strat_name]
@@ -967,12 +943,7 @@ class MainApp(object):
     def run_agent_func(self, func_name, params):
         getattr(self.agent, func_name)(*params)
         return 
-
-    def run_gateway_func(self, gway, func_name, params):
-        gateway = self.agent.gateways[gway]
-        getattr(gateway, func_name)(*params)
-        return
-
+        
     def exit_agent(self):
         if self.agent != None:
             self.agent.exit()

@@ -1,8 +1,8 @@
-前期版本基于pyctp接口，后期改为vnpy接口，采用eventEngine，使用tkinter作为GUI的python交易平台
+基于pyctp接口，并采用vnpy的eventEngine，使用tkinter作为GUI的python交易平台
 
 主要功能：
 
-(1) 支持多账户，本地仓位管理，保证金计算，开仓平昨平今的逻辑
+(1)本地仓位管理，保证金计算，开仓平昨平今的逻辑
 
 (2) 增加trade level以支持多腿下单，屏蔽开仓平仓逻辑，可以做跨合约套利
 
@@ -30,6 +30,9 @@
 
 (4) 完善tick级回测
 
+(5) scalping framework
+
+(6) 策略，策略，策略......
 
 有兴趣合作联系
 

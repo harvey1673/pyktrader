@@ -1,7 +1,7 @@
 #-*- coding:utf-8 -*-
 import logging
 from base import *
-from misc import *
+from misc import * 
 import itertools
 import datetime
 import csv
@@ -12,6 +12,7 @@ class ETradeStatus:
 
 class OrderStatus:
     Waiting, Ready, Sent, Done, Cancelled = range(5)
+
 
 def save_trade_list(curr_date, trade_list, file_prefix):
     filename = file_prefix + 'trade_' + curr_date.strftime('%y%m%d')+'.csv'
@@ -89,14 +90,14 @@ def save_order_list(curr_date, order_dict, file_prefix):
     with open(filename,'wb') as log_file:
         file_writer = csv.writer(log_file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL);
         
-        file_writer.writerow(['order_ref', 'local_id', 'sysID', 'inst', 'volume', 'filledvolume', 'filledprice', 'action_type', 'direction',
+        file_writer.writerow(['order_ref', 'sysID', 'inst', 'volume', 'filledvolume', 'filledprice', 'action_type', 'direction',
                               'price_type','limitprice','order_time', 'status', 'conditionals', 'trade_ref'])
 
         for order in order_list:
             inst = order.position.instrument.name
             cond = [ str(o.order_ref)+':'+str(order.conditionals[o]) for o in order.conditionals]
             cond_str = ' '.join(cond)
-            file_writer.writerow([order.order_ref, order.local_id, order.sys_id, inst, order.volume, order.filled_volume, order.filled_price,
+            file_writer.writerow([order.order_ref, order.sys_id, inst, order.volume, order.filled_volume, order.filled_price,
                                   order.action_type, order.direction, order.price_type,
                                   order.limit_price, order.start_tick, order.status, cond_str, order.trade_ref])  
     pass
@@ -110,21 +111,20 @@ def load_order_list(curr_date, file_prefix, positions):
         reader = csv.reader(f)
         for idx, row in enumerate(reader):
             if idx > 0:
-                inst = row[3]
+                inst = row[2]
                 pos = positions[inst]
-                if ':' in row[13]:
-                    cond = dict([ tuple([int(k) for k in n.split(':')]) for n in row[13].split(' ')])
+                if ':' in row[12]:
+                    cond = dict([ tuple([int(k) for k in n.split(':')]) for n in row[12].split(' ')])
                 else:
                     cond = {}
-                iorder = Order(pos, float(row[10]), int(row[4]), int(row[11]),
-                               row[7], row[8], row[9], cond)
+                iorder = Order(pos, float(row[9]), int(row[3]), int(row[10]),
+                               row[6], row[7], row[8], cond)
                 iorder.sys_id = row[1]
-                iorder.local_id = row[2]
-                iorder.filled_volume = int(row[5])
-                iorder.filled_price = float(row[6])
+                iorder.filled_volume = int(row[4])
+                iorder.filled_price = float(row[5])
                 iorder.order_ref = int(row[0])
-                iorder.trade_ref = int(row[14])
-                iorder.status = int(row[12])
+                iorder.trade_ref = int(row[13])
+                iorder.status = int(row[11])
                 ref2order[iorder.order_ref] = iorder
                 pos.add_order(iorder)                
     return ref2order
@@ -163,9 +163,6 @@ class ETrade(object):
     def update(self):
         pending_orders = []
         if self.status in [ETradeStatus.Done, ETradeStatus.Cancelled, ETradeStatus.StratConfirm]:
-            return pending_orders
-        elif len(self.order_dict) == 0:
-            self.status = ETradeStatus.Pending
             return pending_orders
         Done_status = True
         PFill_status = False
@@ -219,12 +216,11 @@ class ETrade(object):
 ####下单
 class Order(object):
     id_generator = itertools.count(int(datetime.datetime.strftime(datetime.datetime.now(),'%d%H%M%S')))
-    def __init__(self,position,limit_price,vol,order_time,action_type,direction, price_type, conditionals={}, trade_ref = 0, gateway = 'CTP'):
+    def __init__(self,position,limit_price,vol,order_time,action_type,direction, price_type, conditionals={}, trade_ref = 0):
         self.position = position
         self.limit_price = limit_price        #开仓基准价
         self.start_tick  = order_time
         self.order_ref = next(self.id_generator)
-        self.local_id  = self.order_ref
         ##衍生
         self.instrument = position.instrument
         self.sys_id = ''
@@ -240,7 +236,6 @@ class Order(object):
         self.cancelled_volume = 0
         self.filled_orders = []
         self.conditionals = conditionals
-        self.gateway = gateway
         if len(self.conditionals) == 0:
             self.status = OrderStatus.Ready
         else:
@@ -308,9 +303,8 @@ class Order(object):
 
         ####头寸
 class Position(object):
-    def __init__(self, instrument, gateway = 'CTP'):
+    def __init__(self,instrument):
         self.instrument = instrument
-        self.gateway = gateway
         self.orders = []    #元素为Order
         self.tday_pos = BaseObject(long=0, short=0) 
         self.tday_avp = BaseObject(long=0.0, short=0.0)
@@ -402,13 +396,11 @@ class Position(object):
     def get_yclose_volume(self):
         return (self.can_yclose.long, self.can_yclose.short)
 
-    def add_orders(self, orders):
-        for iorder in orders:
-            self.add_order(iorder)
+    def add_orders(self,orders):
+        self.orders.extend(orders)
     
     def add_order(self, order):
         self.orders.append(order)
-        self.gateway.id2order[order.local_id] = order
 
     def __str__(self):
         return unicode(self).encode('utf-8')

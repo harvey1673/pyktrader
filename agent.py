@@ -747,9 +747,9 @@ class Agent(object):
 
     def time_scheduler(self, event):
         if self.timer_count % 1800:
-            if self.tick_id >= 2059590:
+            if self.tick_id >= 2100000-10:
                 min_id = get_min_id(datetime.datetime.now())
-                if (min_id >= 2101) and (self.eod_flag == False):
+                if (min_id >= 2116) and (self.eod_flag == False):
                     self.qry_commands.append(self.run_eod)
 
     def add_instruments(self, names, tday):
@@ -1031,20 +1031,11 @@ class Agent(object):
         inst = tick.instID
         if self.instruments[inst].day_finalized:
             return False
-        if (self.instruments[inst].exchange == 'CZCE'):
-            if (tick.tick_id <= 600000) and (tick.tick_id >= 300000-4) and \
-                    (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
-                tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
-                tick.date = self.scur_day.strftime('%Y%m%d')
-            if (self.instruments[inst].last_update == tick.tick_id) and \
-                    ((self.instruments[inst].volume < tick.volume) or \
-                    (self.instruments[inst].ask_vol1 != tick.askVol1) or \
-                    (self.instruments[inst].bid_vol1 != tick.bidVol1)):
-                if tick.tick_id % 10 < 5:
-                    tick.tick_id += 5
-                    tick.msec += 500
-                    tick.timestamp = tick.timestamp + datetime.timedelta(milliseconds=500)
-                    #self.logger.info('tick is adjusted for inst = %s, old tick_id = %s,  tick_id = %s' % (inst, self.instruments[inst].last_update, tick.tick_id))
+        if (self.instruments[inst].exchange == 'CZCE') and \
+                (tick.tick_id <= 530000+4) and (tick.tick_id >= 300000-4) and \
+                (tick.timestamp.date() == workdays.workday(self.scur_day, -1, CHN_Holidays)):
+            tick.timestamp = datetime.datetime.combine(self.scur_day, tick.timestamp.timetz())
+            tick.date = self.scur_day.strftime('%Y%m%d')
         tick_date = tick.timestamp.date()
         if (self.scur_day > tick_date) or (tick_date in CHN_Holidays) or (tick_date.weekday()>=5):
             return False
@@ -1074,8 +1065,6 @@ class Agent(object):
     def update_instrument(self, tick):      
         inst = tick.instID    
         curr_tick = tick.tick_id
-        if self.instruments[inst].last_update >= curr_tick:
-            return False
         self.instruments[inst].up_limit   = tick.upLimit
         self.instruments[inst].down_limit = tick.downLimit        
         tick.askPrice1 = min(tick.askPrice1, tick.upLimit)
@@ -1092,7 +1081,7 @@ class Agent(object):
         if tick.volume > last_volume:
             self.instruments[inst].price  = tick.price
             self.instruments[inst].volume = tick.volume
-            self.instruments[inst].last_traded = curr_tick
+            self.instruments[inst].last_traded = curr_tick    
         return True
     
     def get_bar_id(self, tick_id):
@@ -1201,51 +1190,49 @@ class Agent(object):
     
     def run_eod(self):
         self.day_finalize(self.instruments.keys())
-        if self.trader != None:
-            self.save_state()
-            print 'run EOD process'
-            self.eod_flag = True
-            pfilled_dict = {}
-            for trade_id in self.ref2trade:
-                etrade = self.ref2trade[trade_id]
-                etrade.update()
-                if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
-                    etrade.status = order.ETradeStatus.Cancelled
-                    strat = self.strategies[etrade.strategy]
-                    strat.on_trade(etrade)
-                elif etrade.status == order.ETradeStatus.PFilled:
-                    etrade.status = order.ETradeStatus.Cancelled
-                    self.logger.warning('Still partially filled after close. trade id= %s' % trade_id)
-                    pfilled_dict[trade_id] = etrade
-            if len(pfilled_dict)>0:
-                file_prefix = self.folder + 'PFILLED_'
-                order.save_trade_list(self.scur_day, pfilled_dict, file_prefix)
-            for strat_name in self.strat_list:
-                strat = self.strategies[strat_name]
-                strat.day_finalize()
-                strat.initialize()
-            self.calc_margin()
-            self.save_eod_positions()
-            eod_pos = {}
-            for inst in self.positions:
-                pos = self.positions[inst]
-                eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
-            self.ref2trade = {}
-            self.ref2order = {}
-            self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
-            self.order_stats = dict([(inst,{'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }) for inst in self.instruments])
-            self.total_submitted = 0
-            self.total_cancelled = 0
-            self.prev_capital = self.curr_capital
-            for inst in self.positions:
-                self.positions[inst].pos_yday.long = eod_pos[inst][0]
-                self.positions[inst].pos_yday.short = eod_pos[inst][1]
-                self.positions[inst].re_calc()
-        for inst in self.instruments:
+        if self.trader == None:
+            return
+        self.save_state()
+        print 'run EOD process'
+        self.eod_flag = True
+        pfilled_dict = {}
+        for trade_id in self.ref2trade:
+            etrade = self.ref2trade[trade_id]
+            etrade.update()
+            if etrade.status == order.ETradeStatus.Pending or etrade.status == order.ETradeStatus.Processed:
+                etrade.status = order.ETradeStatus.Cancelled
+                strat = self.strategies[etrade.strategy]
+                strat.on_trade(etrade)
+            elif etrade.status == order.ETradeStatus.PFilled:
+                etrade.status = order.ETradeStatus.Cancelled
+                self.logger.warning('Still partially filled after close. trade id= %s' % trade_id)
+                pfilled_dict[trade_id] = etrade
+        if len(pfilled_dict)>0:
+            file_prefix = self.folder + 'PFILLED_'
+            order.save_trade_list(self.scur_day, pfilled_dict, file_prefix)    
+        for strat_name in self.strat_list:
+            strat = self.strategies[strat_name]
+            strat.day_finalize()
+            strat.initialize()
+        self.calc_margin()
+        self.save_eod_positions()
+        eod_pos = {}
+        for inst in self.positions:
+            pos = self.positions[inst]
+            eod_pos[inst] = [pos.curr_pos.long, pos.curr_pos.short]
+        self.ref2trade = {}
+        self.ref2order = {}
+        self.positions= dict([(inst, order.Position(self.instruments[inst])) for inst in self.instruments])
+        self.order_stats = dict([(inst,{'submitted': 0, 'cancelled':0, 'failed': 0, 'status': True }) for inst in self.instruments])
+        self.total_submitted = 0
+        self.total_cancelled = 0
+        self.prev_capital = self.curr_capital
+        for inst in self.positions:
+            self.positions[inst].pos_yday.long = eod_pos[inst][0] 
+            self.positions[inst].pos_yday.short = eod_pos[inst][1]
+            self.positions[inst].re_calc()
             self.instruments[inst].prev_close = self.cur_day[inst]['close']
-            self.instruments[inst].volume = 0
-            self.instruments[inst].last_update = 0
-            self.instruments[inst].last_traded = 0
+            self.instruments[inst].volume = 0            
         self.initialized = False
 
     def day_switch(self, event):
