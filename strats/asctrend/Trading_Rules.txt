@@ -1,0 +1,38 @@
+Trading Rules
+01.	Stop-loss = 30 pips.
+02.	Enter long if:
+	     a.  5-EMA crosses above the 10-EMA.
+	     b.  RSI is above 50.
+	     c.  ASCTREND up-arrow signal and candle lighted up by ASCTREND.
+	     d.  Stochastics lines going up.
+	     e.  CCI line is pointing up and above 50%.
+03.	Enter short if:
+	     a.  5-EMA crosses below the 10-EMA.
+	     b.  RSI is below 50.
+	     c.  ASCTREND down-arrow signal and candle lighted up by ASCTREND.
+	     d.  Stochastics lines going down.
+             e.  CCI line is pointing down and below 50%.
+04.	Exit when 5-EMA crosses 10-EMA in the opposite direction of your trade, or when price bounces from the Bollinger Band, or when Stochastics lines converge.
+05.	Never enter a new trade without a signal, unless the candle is lit up with ASCTREND
+06.	If you wait for a signal, it’s okay to use 20% risk.
+07.	If you trade without a signal, make sure the candle is lit up with ASCTREND, and use only 5% risk.
+08.	Never trade without a stop-loss.
+09.	Trade only one-hour charts or higher.
+10.	No limit orders.
+11.	No trade calls from anyone, unless the trade call matches all the signals of ASCTREND.
+12.	Make sure your EMAs are applied to the CLOSE.
+13.	Never leave a trade unattended. Close the trade before you leave, unless your broker’s software has trailing stops, then set trailing stop 20 pips.
+14.	Set stochastic oscillator to 5, 3, 3, give it 3 levels – 80, 50, 20.
+15.	Set RSI to 14, give it 3 levels – 70, 50, 30.
+16.	Give CCI 3 levels - 100, 0, -100
+17.	Check Oanda News Orders Board on a regular basis.
+18.	Never set TAKE-PROFIT. Always close the trade when it's ready to close.
+19.	Incorporate both types of analyses - Fundamental and Technical.
+20.	Close the trade immediately if you see a signal for the opposite direction then trade in that direction.
+21.	Eliminate all EMOTION, GREED, HOPE and ASSUMPTION. The market will not make a special move for you.
+22.	Never trade against the trend. The trend is always your friend.
+23.	Never allow anyone access to your Forex account and change your password at least once a month. Do your own trades.
+24.	When you see an imminent signal coming and you want to take the call, have your order ready and keep your eyes on the chart so you can enter your order the second the signal appears.
+25.	No Expert Advisors. Do all your own trades manually. Expert Advisors sometimes trade on fake signals.
+26.	Never chase the price. Always allow the price to come back to you.
+27.	Never move a stop loss while the trade is still negative. You may move the stop loss to BE when your profit is at least +30 pips.
