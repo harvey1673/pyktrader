@@ -1,0 +1,3 @@
+开发此版本v1.0.14.xx的API时，需要注意以下事项：
+1. 在接口请求之前，需要清空结构体内容，如memset(&ord, 0, sizeof(DFITCInsertOrderField))，否则接口请求不成功
+2. OnRtnOrder被触发时，orderStatus状态可能为：未成交在队列、未成交不在队列（止损止盈单，FAK/FOK单）、废单状态
