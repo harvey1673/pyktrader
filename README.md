@@ -1,4 +1,4 @@
-基于pyctp接口，并采用vnpy的eventEngine，使用tkinter作为GUI的python交易平台
+基于pyctp接口，使用tkinter作为GUI的python交易平台
 
 主要功能：
 
@@ -20,22 +20,6 @@
 
 (9) 支持仿真交易(历史数据paper trading)和实时模拟交易(实时数据paper trading)
 
-下一步计划
-
-(1) 期权套利和做市策略，volatility surface calibration/remarking
-
-(2) 自动期权delta hedging
-
-(3) 增加使用Mongodb
-
-(4) 完善tick级回测
-
-(5) scalping framework
-
-(6) 策略，策略，策略......
-
 有兴趣合作联系
 
 QQ: 1940877918
-
-知乎：无所谓，自制pyktrader挖矿
