@@ -1,5 +1,5 @@
 #-*- coding=utf-8 -*-
-from ctp.futures import ApiStruct, TraderApi
+from pyctp.futures import ApiStruct, TraderApi
 import time
 import traceback
 import threading
@@ -170,21 +170,33 @@ class MyTraderApi(TraderApi):
         '''
         #print pInst.InstrumentID, pInst.ProductClass, pInst.ExchangeID
         if bIsLast and self.isRspSuccess(pRspInfo):
-            if (pInst.ExchangeID in self.instruments) and (pInst.ProductClass=='1'):
+            if (pInst.ExchangeID in self.instruments) and (pInst.ProductClass in ['1', '2']):
                 cont = {}
                 cont['instID'] = pInst.InstrumentID
-                cont['margin_l'] = pInst.LongMarginRatio
-                cont['margin_s'] = pInst.ShortMarginRatio
+                margin_l = pInst.LongMarginRatio
+                if margin_l >= 1.0:
+                    margin_l = 0.0
+                cont['margin_l'] = margin_l
+                margin_s = pInst.ShortMarginRatio
+                if margin_s >= 1.0:
+                    margin_s = 0.0
+                cont['margin_s'] = margin_s
                 cont['start_date'] = datetime.datetime.strptime(pInst.OpenDate,'%Y%M%d').date()
                 cont['expiry'] = datetime.datetime.strptime(pInst.ExpireDate,'%Y%M%d').date()
                 cont['product_code'] = pInst.ProductID
                 self.instruments[pInst.ExchangeID].append(cont)
         else:
-            if (str(pInst.ExchangeID) in self.instruments) and (pInst.ProductClass=='1'):
+            if (str(pInst.ExchangeID) in self.instruments) and (pInst.ProductClass in ['1', '2']):
                 cont = {}
                 cont['instID'] = pInst.InstrumentID
-                cont['margin_l'] = pInst.LongMarginRatio
-                cont['margin_s'] = pInst.ShortMarginRatio
+                margin_l = pInst.LongMarginRatio
+                if margin_l >= 1.0:
+                    margin_l = 0.0
+                cont['margin_l'] = margin_l
+                margin_s = pInst.ShortMarginRatio
+                if margin_s >= 1.0:
+                    margin_s = 0.0
+                cont['margin_s'] = margin_s
                 cont['start_date'] = datetime.datetime.strptime(pInst.OpenDate,'%Y%m%d').date()
                 cont['expiry'] = datetime.datetime.strptime(pInst.ExpireDate,'%Y%m%d').date()
                 cont['product_code'] = pInst.ProductID
