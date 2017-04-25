@@ -1,0 +1,71 @@
+Params
+        Numeric PercentOfRange(0.8);//突破参数N
+        Numeric ExitOnCloseMins(14.55);//平仓时间
+        Numeric MinRange(0.002);//最小Range － 0.2％
+        Numeric LastTradeMins(14.00);//最后交易时间
+        Numeric BeginTradeMins(9.00);
+        Numeric Lots(1);
+        Numeric Stoplossset(0.01);//止损－1％
+Vars
+        NumericSeries DayOpen;
+         NumericSeries preDayRange;
+        Numeric UpperBand;
+        Numeric LowerBand;
+        Numeric MyPrice;
+        Numeric StopLine;
+Begin
+        DayOpen = OpenD(0);
+        preDayRange = HighD(1) - LowD(1);
+        UpperBand = DayOpen + preDayRange * PercentOfRange;
+        LowerBand = Dayopen - preDayRange * PercentOfRange;          
+
+        If(Date != Date[1])        {
+                DayOpen = Open;
+                preDayRange = HighD(1) - LowD(1);
+                //如果昨日振幅过小，则取设置的最小振幅
+                preDayRange = max(preDayRange, Open * MinRange);
+        }Else{
+                DayOpen = DayOpen[1];
+                preDayRange = preDayRange[1];
+        }        
+        
+        //未开仓时，判断是否需要开仓
+        if(MarketPosition == 0){
+                //多头开仓
+                If(High >= UpperBand && Time < LastTradeMins / 100){
+                        Buy(Lots, max(upperband, open));
+                        Return;
+                }
+                
+                //空头开仓
+                If(Low <= LowerBand && Time < LastTradeMins/100){
+                        Sellshort(Lots, min(lowerBand,open));
+                        Return;
+                }
+        }
+
+        //多头止损
+        If(MarketPosition == 1){
+                StopLine = UpperBand - DayOpen * StopLossSet;
+                If(Low <= StopLine){
+                        //对吗？？？
+                        BuyToCover(Lots, Min(StopLine, Open));
+                }
+        }
+
+        //空头止损
+        If(MarketPosition == -1){
+                StopLine = LowerBand + DayOpen * StopLossSet;
+                If(High >= StopLine){
+                        //对吗？？？
+                        Sell(Lots, Max(StopLine, Open));
+                }
+        }
+        
+        //收盘平仓
+        If(Time >= ExitOnCloseMins / 100){
+                Sell(Lots, Open);
+                BuyToCover(Lots, Open);
+        }
+
+End

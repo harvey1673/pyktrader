@@ -1,0 +1,25 @@
+//策略:唐奇安通道
+//类型:皆可
+//版本:1.0
+//修订时间:2012.11.3
+//Designed By Rogarz
+ 
+//中间变量
+INPUT:X(20,1,100,1),nmin(10,1,100,1),ss(1,1,100,1);
+X周期高点:=ref(hhv(h,X),1);//X是参数，自行调整
+X周期低点:=ref(LLV(L,X),1);
+手数:=ss;
+开仓时间:=time>opentime(1) and time<closetime(0)-nmin*100;
+平仓时间:=time>=closetime(0)-nmin*100;
+{nmin为参数，closetime(0)-nmin*100表示 收盘时间-提前N分钟 N由nmin控制}
+ 
+//交易条件:
+开多平空条件:=C>X周期高点 and 开仓时间 and holding<=0;
+开空平多条件:=C<X周期低点 and 开仓时间 and holding>=0;
+//交易系统
+收盘平多:sell(平仓时间 and holding>0, 0, thisclose);
+收盘平空:sellshort(平仓时间 and holding<0,0,thisclose);
+平空:sellshort(开多平空条件 and holding<0, 手数,limitr,X周期高点);
+平多:sell(开空平多条件 and holding>0,手数,limitr,X周期低点);
+开空:buyshort(开空平多条件 and holding=0,手数,limitr,X周期低点);
+开多:buy(开多平空条件 and holding=0, 手数,limitr,X周期高点);

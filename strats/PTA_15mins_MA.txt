@@ -1,0 +1,36 @@
+
+Params
+	Numeric Length1(10);
+	Numeric Length4(75);
+	Numeric Length5(220);
+        
+
+Vars   
+Numericseries MA1;
+Numericseries MA4;
+Numericseries MA5;
+Boolseries Condition1;
+Boolseries Condition2;
+Boolseries Condition11;
+Boolseries Condition22;
+	
+Begin
+ MA1=AverageFC(Close,Length1);
+ MA4=AverageFC(Close,Length4);
+ MA5=AverageFC(Close,Length5);
+ 
+	Condition1 = CrossOver(ma1,ma4)&&Close>ma5||CrossOver(ma1,ma5);
+	Condition2 = CrossUnder(ma1,ma4);
+	Condition11 = CrossUnder(ma1,ma4)&&Close<ma5||CrossUnder(ma1,ma5);
+	Condition22 = CrossOver(ma1,ma4);
+	If(Date!=Date[1] && High == Low ) Return;
+	if (Condition1[1])	{Buy(1,Open+2);}
+    if (Condition2[1])	{Sell(1,Open-2);}
+
+
+    if (Condition11[1]){SellShort(1,Open-2);}
+    if (Condition22[1]){BuyToCover(1,Open+2);}
+    
+End
+
+

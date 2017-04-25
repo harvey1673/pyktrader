@@ -1,0 +1,134 @@
+
+
+Params
+      Numeric Length(40);
+      Numeric NumATRs(1);
+	  Numeric Offset(1);
+	  Numeric ATRLength(10);
+	  Numeric TrailingStart(1);
+	  Numeric StopLossSet(4);
+	  Numeric TrailingStop(3);
+Vars
+      NumericSeries TPrice;
+      Numeric AvgValue;
+      NumericSeries ShiftValue;
+      Numeric UpperBand;
+      Numeric LowerBand;
+      Numeric MyPrice;
+	  Numeric UpLine;		//上轨
+	  Numeric DownLine;		//下轨 
+	  NumericSeries MidLine;	//中间线
+	  Numeric Band;
+	  NumericSeries HigherAfterEntry;
+	  NumericSeries LowerAfterEntry;
+	  Numeric DayOpen;
+	  Numeric StopLine;
+	  BoolSeries bLongTrailingStoped;
+      BoolSeries bShortTrailingStoped;
+	  Numeric MinPoint;
+Begin
+     MinPoint = MinMove*PriceScale;
+     DayOpen=AvgEntryPrice;
+	 TPrice=(High[1]+Low[1]+Close[1])/3;
+     AvgValue=AverageFC(TPrice,Length);
+     ShiftValue=NumATRs*AvgTrueRange(ATRLength);
+     UpperBand=AvgValue+ShiftValue[1];
+     LowerBand=AvgValue-ShiftValue[1];
+	 MidLine = AverageFC(Close,Length);
+	 Band = StandardDev(Close,Length,2); 
+	 UpLine = MidLine + Offset * Band;
+	 DownLine = MidLine - Offset * Band; 
+	 
+If(BarStatus > 0)
+{
+	bLongTrailingStoped = bLongTrailingStoped[1];
+	bShortTrailingStoped = bShortTrailingStoped[1];
+}
+Commentary("bLongTrailingStoped="+IIFString(bLongTrailingStoped,"True","False"));
+Commentary("bShortTrailingStoped="+IIFString(bShortTrailingStoped,"True","False"));
+
+	 If(BarsSinceEntry==1)
+{
+    HigherAfterEntry=AvgEntryPrice;
+    LowerAfterEntry=HigherAfterEntry;
+}Else// If(BarsSinceEntry>1)
+{
+       HigherAfterEntry=max(HigherafterEntry[1],High[1]);
+       LowerAfterEntry=min(LowerAfterEntry[1],Low[1]);
+}
+If(bLongTrailingStoped==False && MarketPosition!=1&&High>=UpperBand)
+   {
+      MyPrice=UpperBand;
+      If(Open>MyPrice)MyPrice=Open;
+      Buy(1,MyPrice);
+	  bLongTrailingStoped=True;
+	  bShortTrailingStoped=False;
+      Return;
+   }
+If(bShortTrailingStoped==False && MarketPosition!=-1&&Low<=LowerBand)
+{
+     MyPrice=LowerBand;
+     If(Open<MyPrice)MyPrice=Open;
+     SellShort(1,MyPrice); 
+	 bShortTrailingStoped=True;
+	 bLongTrailingStoped=False;
+     Return;
+}
+If(HigherAfterEntry>=AvgEntryPrice+DayOpen*TrailingStart*0.01&&MarketPosition==1)
+{
+       StopLine=HigherAfterEntry-DayOpen*TrailingStop*0.01;
+}Else//止损
+{
+       StopLine=UpperBand-DayOpen*StopLossSet*0.01;
+}
+If(Low<=StopLine)
+{
+       MyPrice=StopLine;
+       If(Open<MyPrice)MyPrice=Open;
+       Sell(1,MyPrice);
+	   bLongTrailingStoped=True;
+	   bShortTrailingStoped=False;
+       Return;
+}
+If(LowerAfterEntry<=AvgEntryPrice-DayOpen*TrailingStart*0.01&&MarketPosition==-1)
+{
+       StopLine=LowerAfterEntry+DayOpen*TrailingStop*0.01;
+}Else//止损
+{
+       StopLine=LowerBand+DayOpen*StopLossSet*0.01;
+}
+
+If(High>=StopLine)
+{
+       MyPrice=StopLine;
+       If(Open>MyPrice)MyPrice=Open;
+       Buytocover(1,MyPrice);
+	 bShortTrailingStoped=True;
+	 bLongTrailingStoped=False;
+       Return;
+}
+
+
+//再次入场的代码
+If(bLongTrailingStoped && MarketPosition==0 && High > HigherAfterEntry)
+{
+	MyPrice = HigherAfterEntry + MinPoint;
+	If(Open > MyPrice) MyPrice = Open;
+	Buy(1,MyPrice);
+	bLongTrailingStoped = False;
+	bShortTrailingStoped= True;
+	Return;
+}
+If(bShortTrailingStoped && MarketPosition==0 && Low < LowerAfterEntry)
+{
+	MyPrice = LowerAfterEntry - MinPoint;
+	If(Open < MyPrice) MyPrice = Open;
+	SellShort(1,MyPrice);
+	bLongTrailingStoped = True;
+	bShortTrailingStoped= False;
+	Return;
+}
+End
+
+
+

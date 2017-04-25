@@ -1,0 +1,165 @@
+
+
+Params 
+	Numeric ddan(0);                            
+	Numeric Lots(1);           
+	Numeric beilv(2.05);          
+	Numeric tten(15);  
+	 Numeric tt1(9.30);     
+	Numeric tt2(14.50);        
+    		     
+	Numeric bdd(1.88);     
+	Numeric uu1(26);
+	Numeric vv1(18);
+	Numeric ww1(4);
+	Numeric yy1(3);          
+	Numeric xx1(14);   
+  	         
+
+	Numeric zhiyy(16); 
+	
+Vars                              
+ 
+	NumericSeries jixian;	
+	NumericSeries toop;		
+	NumericSeries boop;		 
+	
+	   
+	Numeric daizhua; 
+	
+	NumericSeries iiii;
+	NumericSeries hhhh;
+	NumericSeries jjjj;
+	NumericSeries kkkk;
+
+	
+Begin   
+	hhhh=AverageFC(Close[1],xx1); 
+	iiii=AverageFC(Close[1],yy1);       
+	jjjj=AverageFC(Close[1],ww1);
+    kkkk=AverageFC(Close[1],vv1);
+	
+	jixian = AverageFC(Close[1],uu1);   
+	daizhua = StandardDev(Close[1],uu1,2); 
+	toop = jixian + beilv * daizhua;
+	boop = jixian - beilv * daizhua; 
+		
+		
+	If(Time==tten/100 and MarketPosition<>0)         
+	{   If (MarketPosition==-1)
+		{BuyToCover(abs(CurrentContracts),Open+ddan*MinMove()*PriceScale()); 
+		}
+		If (MarketPosition==1)
+		{Sell(abs(CurrentContracts),Open-ddan*MinMove()*PriceScale());
+		        
+	    }
+	   Return;
+	}
+	 	
+	
+	If(Time>=tt1/100)   
+	{
+		 
+		If(MarketPosition==0 and daizhua>=bdd and Time<=tt2/100) 
+		{    
+			if(High[1]>toop) 
+			{ 
+				SellShort(lots,open-ddan*MinMove()*PriceScale());         
+				
+				Return;
+			}
+				      
+			If(Low[1]<boop) 
+			{
+				Buy(lots,Open+ddan*MinMove()*PriceScale());                
+			   
+				Return;
+			}
+		} 
+		
+		
+		
+		
+		If(MarketPosition==1 and BarsSinceLastEntry>1)
+		{   
+		
+		       
+			   
+			If(CrossUnder(jjjj,kkkk) or Close[1]<AvgEntryPrice-zhiyy)
+			{
+				Sell(abs(CurrentContracts),Open-ddan*MinMove()*PriceScale());
+                
+				
+				
+				
+				If(Time<=tt2/100)   
+				{
+				SellShort(lots,Open-ddan*MinMove()*PriceScale()); 
+				
+					
+
+				}
+				return;
+			}
+				
+				
+		   
+			If(CrossUnder(iiii,hhhh))
+			{
+				If(close[1]>AvgEntryPrice)
+				{
+			    Sell(abs(CurrentContracts),Open-ddan*MinMove()*PriceScale());
+			
+				}
+				Return;  
+			}
+		} 
+			If(MarketPosition==-1 and BarsSinceLastEntry>1)
+			{     
+		     
+		        
+				
+				If(CrossOver(jjjj,kkkk) or close[1]>AvgEntryPrice+zhiyy)
+				{
+				BuyToCover(abs(CurrentContracts),Open+ddan*MinMove()*PriceScale());
+				
+				
+				
+			
+				
+					If(Time<=tt2/100 )
+					{
+				Buy(lots,Open+ddan*MinMove()*PriceScale());  
+				
+						
+					}
+
+					return;
+				}    
+			 	     
+				
+				
+				
+				If(CrossOver(iiii,hhhh))
+				{
+					If(close[1]<AvgEntryPrice)
+					{
+				BuyToCover(abs(CurrentContracts),open+ddan*MinMove()*PriceScale());
+				
+				}
+				
+	         
+			 		Return;   
+			 
+				}    
+				 
+			}  
+	}  
+ 
+	
+	
+End
+
+
+
+

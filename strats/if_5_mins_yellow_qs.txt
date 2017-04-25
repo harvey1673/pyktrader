@@ -1,0 +1,42 @@
+Params
+	Numeric M(5);
+	Numeric N(0.35);
+		 
+Vars
+	Numeric TODAYBARS;
+	Numeric SUMCLOSE;
+	Numeric TRENDRATE;
+	Numeric I;
+	
+Begin
+	
+	TODAYBARS=BarsSinceToday;
+	
+	For I=1 TO M
+		{
+		SUMCLOSE=SUMCLOSE+Abs(C[i]-C[i+1]);
+		}
+			
+	TRENDRATE=Average((C[1]-C[M])/SUMCLOSE,M);
+	
+	If(TODAYBARS>M && Time<0.1450)
+		{
+		If(TRENDRATE>2*N && MarketPosition==0) Buy(1,open);
+		If(TRENDRATE<-2*N && MarketPosition==0) SellShort(1,open);
+		}
+	
+	If(TODAYBARS>M && Time<0.1510)
+		{		
+		If(TRENDRATE<-1*N) Sell(1,open);
+		If(TRENDRATE>1*N) BuyToCover(1,open);
+		}
+
+	If(Time>=0.1510 && MarketPosition!=0)
+		{
+		Sell(1,O);
+		BuyToCover(1,O);
+		}
+	
+	PlotNumeric("1",TRENDRATE);
+	
+End

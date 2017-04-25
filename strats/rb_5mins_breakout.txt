@@ -1,0 +1,83 @@
+Params
+	Numeric length(22);//周期数
+	Numeric length1(220);
+    Numeric lots(1);//定义做单手数
+    Numeric zjd(0);//定义开平仓的追价点数
+
+Vars
+	
+	Numeric ma1;
+	NumericSeries nphigh;//n周期最高
+	Numeric nphigh1;//n周期次高
+	NumericSeries nplow;//n周期最低
+	Numeric nplow1;//n周期次低
+	BoolSeries breakup(False);//是否向上突破
+	BoolSeries breakdown(False);//是否向下突破
+	Numeric zjia;//定义追价值
+	
+Begin
+
+	zjia=zjd*MinMove*PriceScale;//开平仓追价数值
+	
+	
+	nphigh=Highest(High,length);
+	nphigh1=Highest(High[1],length-1);
+	nplow=lowest(low,length);
+	nplow1=lowest(low[1],length-1);
+	ma1=AverageFC(Close[1],length1);
+	
+	PlotNumeric("nhigh",nphigh1);
+	PlotNumeric("nlow",nplow1);
+	PlotNumeric("ma1",ma1);
+	
+	
+	if(High==nphigh )
+	{
+	    breakup=True;
+	}else
+	{
+	    breakup=False;
+	}
+	
+	if(Low==nplow )
+	{
+	    breakdown=True;
+	}else
+	{
+	    breakdown=False;
+	}
+	
+	if(MarketPosition==0)//不持有仓位时
+	{
+	   if(high>ma1&& breakup==True &&Open>Low[1] &&Open[1]>Low[2] && Open[1]<Close[1] )
+	   {Buy(lots,Max(Max(nphigh1,open),ma1)+zjia);
+	   }
+	   If(low<ma1&&breakdown==True &&Open<High[1]&&Open[1]<High[2]&& Open[1]>Close[1] )
+	   {SellShort(lots,Min(Min(nplow1,open),ma1)-zjia);
+	   
+	   }
+	}
+	else If(MarketPosition==1)//持有多头仓位时
+	{
+	  	If(close[1]<ma1&&low[1]<low[2])
+	   {Sell(lots,open-zjia);
+	   }
+
+	  If(low<ma1&&breakdown==True &&Open<High[1]&&Open[1]<High[2]&& Open[1]>Close[1] )
+	   {SellShort(lots,Min(Min(nplow1,open),ma1)-zjia);}
+	   
+	   
+	}
+	
+	else //持有空头仓位时
+	{
+	
+	  if( close[1]>ma1&&High[1]>High[2] )
+	   BuyToCover(lots,open+zjia);
+	   
+	   
+	   if(high>ma1&& breakup==True &&Open>Low[1] &&Open[1]>Low[2] && Open[1]<Close[1] )
+	   {Buy(lots,Max(Max(nphigh1,open),ma1)+zjia);
+	   }
+	}
+End

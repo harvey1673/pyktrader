@@ -1,0 +1,109 @@
+//------------------------------------------------------------------------ 
+// 名称: Binary_If_3min
+// 平台: TB
+
+// 周期：3分钟
+// 参数：BuySignalVar(2.67)
+//		 SellSignalVar(2.88)
+//		 TurnIntoLength(12); 
+// 		 AppetenceVar(0.35);	
+//		 ProfitSwith(6);
+//------------------------------------------------------------------------
+
+
+Params 
+	Numeric BuySignalVar(2.67);
+	Numeric SellSignalVar(2.88);
+	Numeric TurnIntoLength(12); 
+	Numeric AppetenceVar(0.35);	
+	Numeric ProfitSwith(6);
+	//Numeric AmountStopLoss(5000);
+   
+Vars
+	Numeric I;
+	Numeric SumClose;
+	Numeric TrendRate;
+	BoolSeries SwithDown;
+	BoolSeries BuySignal;
+	BoolSeries SellSignal;
+	NumericSeries StopPrice;
+	NumericSeries DayLowPrice;
+	NumericSeries DayHighPrice;
+	NumericSeries BuySignalLine;
+	NumericSeries SellSignalLine;
+   
+Begin
+
+	If(Date != Date[1])
+		{
+		SwithDown = False;
+		}
+	Else
+		{
+		SwithDown = SwithDown[1];
+		}
+	
+	If(BarsSinceEntry == 0)
+		{
+		DayHighPrice = High[1];
+		DayLowPrice = Low[1];
+		}
+	If(BarsSinceEntry >= 1)
+		{
+		DayHighPrice = Max(High[1],high);
+		DayLowPrice = Min(Low[1],low);
+		}
+	For I=1 TO TurnIntoLength/2
+		{
+		SumClose=SumClose+Abs(Close[i]-Close[i+1]);
+		}
+	TrendRate=Average((Close[1]-Close[TurnIntoLength/2])/SumClose,TurnIntoLength/2);
+	BuySignalLine = Average(Close,Min((Time - 0.0915)*10000/3 + 1,TurnIntoLength)) + StandardDev(Close,Min((Time-0.0915)*10000/3 + 1,TurnIntoLength),2)*BuySignalVar; 
+	SellSignalLine = Average(Close,Min((Time - 0.0915)*10000/3 + 1,TurnIntoLength)) - StandardDev(Close,Min((Time-0.0915)*10000/3 + 1,TurnIntoLength),2)*SellSignalVar; 
+	BuySignal = Close[2] < SellSignalLine[2] && Close[1] > SellSignalLine[1] && Close[1] > Open[1];
+	SellSignal = Close[2] > BuySignalLine[2] && Close[1] < BuySignalLine[1] && Close[1] < Open[1];
+	
+	If (BuySignal && MarketPosition!=1 && TrendRate>-2*AppetenceVar)Buy(1,Open);
+	If (SellSignal && MarketPosition!=-1 && TrendRate<2*AppetenceVar)SellShort(1,Open);
+	If(BarsSinceToday>TurnIntoLength/2 && TrendRate>2*AppetenceVar && MarketPosition==0 && Time < 0.1445 && SwithDown == False)Buy(1,Open);
+	If(BarsSinceToday>TurnIntoLength/2 && TrendRate<-2*AppetenceVar && MarketPosition==0 && Time < 0.1445 && SwithDown == False)SellShort(1,Open);
+	If(BarsSinceToday>TurnIntoLength/2 && TrendRate<-1*AppetenceVar && MarketPosition==1 && BarsSinceEntry > 0)Sell(1,Open);
+	If(BarsSinceToday>TurnIntoLength/2 && TrendRate>1*AppetenceVar && MarketPosition==-1 && BarsSinceEntry > 0)BuyToCover(1,Open);
+
+	If(MarketPosition == 1)
+		{
+		If(DayHighPrice - AvgEntryPrice >= ProfitSwith*TurnIntoLength)
+			{
+			StopPrice = AvgEntryPrice + (DayHighPrice - AvgEntryPrice)*0.95;
+			If(Low <= StopPrice)Sell(1,StopPrice);
+			SwithDown = True;
+			}
+		If(Low <= AvgEntryPrice - TurnIntoLength && BarsSinceEntry > 0)SellShort(1,Min(Open,AvgEntryPrice - TurnIntoLength));
+		If(Close[1] == Q_UpperLimit)Sell(1,Open);
+		If(Time>=0.1445)Sell(1,Close);
+		}
+	If(MarketPosition == -1)
+		{
+		If(AvgEntryPrice - DayLowPrice >= ProfitSwith*TurnIntoLength)
+			{
+			StopPrice = AvgEntryPrice + (AvgEntryPrice - DayLowPrice)*0.95;
+			If(High >= StopPrice)BuyToCover(1,StopPrice);
+			SwithDown = True;
+			}
+		If(High>=AvgEntryPrice + TurnIntoLength && BarsSinceEntry > 0)Buy(1,Max(Open,AvgEntryPrice + TurnIntoLength));
+		If(Close[1] == Q_LowerLimit)BuyToCover(1,Open);
+		If(Time>=0.1445)Buytocover(1,Close);
+		}
+		
+/* 	If(PositionProfit[1] < -1*AmountStopLoss)
+		{
+		Sell(1,Open);
+		Buytocover(1,Open);
+		} */
+		
+End
+
+
+
+
+

@@ -1,0 +1,10 @@
+N:=BARSLAST(DATE<>REF(DATE,1))+1;//当天开盘一共走了多少根K线
+LL:=REF(LLV(L,N),N);//求昨天最低价
+HH:=REF(HHV(H,N),N);//求昨天最高价
+CC:=VALUEWHEN(DATE<>REF(DATE,1),REF(C,1));//求昨天收盘价
+SV:MAX(CC-LL,HH-CC);//求CC-LL和HH-CC中的较大值
+TMP1:H>O+0.7*SV;//最高价大于开盘价加上0.7倍的SV
+TMP2:L<O-0.7*SV;//最低价小于开盘价减去0.7倍的SV
+COUNT(TMP1,N)=1&&TMP1,BPK;//当前开盘后首次满足TMP1，买平开，当天只交易一次
+COUNT(TMP2,N)=1&&TMP2,SPK;//当前开盘后首次满足TMP2，卖平开，当天只交易一次
+AUTOFILTER;

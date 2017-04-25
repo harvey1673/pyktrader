@@ -1,0 +1,154 @@
+Params
+	Numeric			Threshold(10.6);
+	Numeric 		Threshold1(4.8);
+	Numeric			Firsttrademins(09.27);
+	Numeric 		LastTradeMins(13.36);
+	Numeric			Exitonclosemins(15.06);
+	Numeric			VoltRatio(0.56);
+	Numeric			xingqi(4);
+	Numeric			Trailingstart(1.4);
+	Numeric			Trailingstop(1);
+	Numeric			StopLoss(1.4);
+	Numeric			Lots(1);
+	Numeric			Offset(0);
+
+Vars
+	NumericSeries 	BarScore(0);
+	NumericSeries 	AtrValue;
+	Numeric			FirstPositive;
+	Numeric 		SecondPositive;
+	Numeric			ThirdPositive;
+	Numeric 		FirstNegative;
+	Numeric			SecondNegative;
+	Numeric			ThirdNegative;
+	BoolSeries		BuyCondition;
+	BoolSeries		SellCondition;
+	BoolSeries		BuyReady;
+	BoolSeries		SellReady;
+	BoolSeries		VoltFilter(True);
+	Bool			ConditionWeek;
+	Bool			NotTooBigMove(False);
+	Numeric			DayOpen;
+	Numeric			DayHigh;
+	Numeric			DayLow;
+	NumericSeries	HighAfterEntry;
+	NumericSeries	LowAfterEntry;
+	Numeric			StopLine;
+	Numeric			MyPrice;
+	Numeric			SLUnit;
+	Numeric			Slip;
+
+Begin
+	Slip=Offset*MinMove*PriceScale;
+	If (BarStatus==2 and High==Low)		Return;
+//------------------------------------------------------------------重置计分器------------------------------------------------------------------
+	If (Time!=Time[1])	BarScore=0;
+	
+//-------------------------------------------------------阳线加1分，阴线减1分，十字星不得分-------------------------------------------------------
+	If (Close>Open)											BarScore=BarScore+1.1;
+	Else If (Close<Open) 									BarScore=BarScore-1.1;
+
+//-------------------------------------------------------------下影线加1分，上影线减1分----------------------------------------------------------
+
+	If (Min(H-O,H-C)>0.382*(H-L)) 							BarScore=BarScore-0.4;
+	If (Min(O-L,C-L)>0.382*(H-L)) 							BarScore=BarScore+0.4;
+
+//---------------------------------------------------------------创新高加分，创新低减分------------------------------------------------------------
+	If (Date==Date[1])	
+	{	If (H>H[1] And L>L[1])								BarScore=BarScore+0.8;
+		If (H<H[1] And L<L[1])								BarScore=BarScore-0.8;
+	}
+	Else If (Date!=Date[1])
+	{	If (Open/Close[1]<1.01382 And Open/Close[1]>1.001) 	BarScore=BarScore+0.8;//正常高开加1分
+		If (Open/Close[1]>1.01382)							BarScore=BarScore-0.8;//过度高开减1分
+		If (Open/Close[1]>0.9862 And Open/Close[1]<0.999)	BarScore=BarScore-0.8;//正常低开减1分
+		If (Open/Close[1]<0.9862)							BarScore=BarScore+0.8;//过度低开加1分
+	}
+
+//--------------------------------------------------------------------K线实体长度计分---------------------------------------------------------------
+	AtrValue=AvgTrueRange(21);
+	If ((C-C[1])>1.382*AtrValue)		BarScore=BarScore+1;
+	If ((C-C[1])<1.382*(0-AtrValue))	BarScore=BarScore-1;
+	
+//--------------------------------------------------------------------过滤规则---------------------------------------------------------------
+	DayHigh=HighD(0);
+	DayLow=LowD(0);
+	DayOpen=OpenD(0);
+	If (DayHigh-DayLow<=DayOpen*0.01*VoltRatio)	VoltFilter=False;//日波动范围过滤
+	Else 																					VoltFilter=True;//日波动范围过滤
+	
+	ConditionWeek=Weekday!=xingqi;//星期过滤
+	If (Abs(Close[1]-Close[4])>4.5*AtrValue)		NotTooBigMove=False;
+	Else													NotTooBigMove=True;
+
+//--------------------------------------------------------------------开仓规则---------------------------------------------------------------	
+	FirstPositive=NthCon(BarScore<=0,1);
+	SecondPositive=NthCon(BarScore<=0,2);
+	ThirdPositive=NthCon(BarScore<=0,3);
+	FirstNegative=NthCon(BarScore>=0,1);
+	SecondNegative=NthCon(BarScore>=0,2);
+	ThirdNegative=NthCon(BarScore>=0,3);	
+	
+	BuyCondition=Summation(BarScore,FirstPositive)>=Threshold || Summation(BarScore,SecondPositive)>=Threshold || Summation(BarScore,ThirdPositive)>=Threshold;
+	SellCondition=Summation(BarScore,FirstNegative)<=0-Threshold || Summation(BarScore,SecondNegative)<=0-Threshold || Summation(BarScore,ThirdNegative)<=0-Threshold;
+	BuyReady=Summation(BarScore,FirstPositive)>=Threshold1 || Summation(BarScore,SecondPositive)>=Threshold1 || Summation(BarScore,ThirdPositive)>=Threshold1;
+	SellReady=Summation(BarScore,FirstNegative)<=0-Threshold1 || Summation(BarScore,SecondNegative)<=0-Threshold1 || Summation(BarScore,ThirdNegative)<=0-Threshold1;
+	
+	If (ConditionWeek)
+	{	If (Time<=LastTradeMins/100 and Time>Firsttrademins/100 and VoltFilter[1] and NotTooBigMove)
+		{	If (MarketPosition!=1 and BuyCondition[1])						Buy(Lots,Open+Slip);
+			If (MarketPosition!=1 and BuyReady[1] and H>H[1])				Buy(Lots,Max(Open,H[1])+MinMove*PriceScale+Slip);
+			If (MarketPosition!=-1 and SellCondition[1])					SellShort(Lots,Open-Slip);
+			If (MarketPosition!=-1 and SellReady[1] and L<L[1])				SellShort(Lots,Min(Open,L[1])-MinMove*PriceScale-Slip);
+		}
+		If (Time>LastTradeMins/100 and VoltFilter[1])
+		{	If (MarketPosition!=1 and BuyCondition[1])						BuyToCover(Lots,Open+Slip);
+			If (MarketPosition!=1 and BuyReady[1] and H>H[1])				BuyToCover(Lots,Max(Open,H[1])+MinMove*PriceScale+Slip);
+			If (MarketPosition!=-1 and SellCondition[1])					Sell(Lots,Open-Slip);
+			If (MarketPosition!=-1 and SellReady[1] and L<L[1])				Sell(Lots,Min(Open,L[1])-MinMove*PriceScale-Slip);
+		}
+	}	
+
+    If(Time>=Exitonclosemins/100)
+    {
+        Sell(0,Close-Slip);
+        BuyToCover(0,Close+Slip);
+    }
+
+
+//--------------------------------------------------------------------止损规则---------------------------------------------------------------
+
+	SLUnit=DayOpen/100;
+	If (MarketPosition==1 and BarsSinceEntry==0) 						HighAfterEntry = High;
+	Else If (MarketPosition==1 and BarsSinceEntry>0) 					HighAfterEntry = Max(HighAfterEntry, High);
+	
+	If (MarketPosition==-1 and BarsSinceEntry==0) 						LowAfterEntry = Low;
+	Else If (MarketPosition==-1 and BarsSinceEntry>0) 					LowAfterEntry = Min(LowAfterEntry, Low);
+
+//追踪止损	
+
+	If (MarketPosition==1 and BarsSinceEntry>0)
+	{
+		If (Barstatus==2 && Q_UpperLimit != InvalidNumeric && Q_UpperLimit>0 && High==Q_UpperLimit)	Sell(0,Q_UpperLimit-Slip);
+		
+		If(HighAfterEntry[1] >= EntryPrice+TrailingStart*SLUnit)		StopLine = HighAfterEntry[1]-TrailingStop*SLUnit;
+		Else															StopLine = EntryPrice-StopLoss*SLUnit;
+		If (Low <= StopLine)
+		{
+			MyPrice = Min(StopLine, Open);
+			Sell(0,MyPrice-Slip);
+		}
+	} Else If (MarketPosition==-1 and BarsSinceEntry>0)
+	{
+		If (Barstatus==2 && Q_LowerLimit != InvalidNumeric && Q_LowerLimit>0 && Low==Q_LowerLimit)	BuyToCover(0,Q_LowerLimit+Slip);
+
+		If(LowAfterEntry[1] <= EntryPrice-TrailingStart*SLUnit)		StopLine = LowAfterEntry[1]+TrailingStop*SLUnit;
+		Else															StopLine = EntryPrice+StopLoss *SLUnit;
+		If (High >= StopLine)
+		{
+			MyPrice = Max(StopLine, Open);
+			BuyToCover(0,MyPrice+Slip);
+		}
+	}
+
+End

@@ -1,0 +1,62 @@
+//系统说明：加载到橡胶指数15分钟图.
+
+Params
+ Numeric n(6.5);
+ Numeric R(80);
+ Numeric lengh(28);
+ Numeric a(6);
+Vars
+Numeric entryLots;
+Numeric T;
+NumericSeries ma;
+Begin
+entryLots =  (A_FreeMargin*0.2)/(Q_AskPrice*ContractUnit*MarginRatio);
+entryLots  = IntPart(entryLots); 
+T=EntryPrice*0.0001*R;
+ma=AverageFC(close,lengh);
+ If(MarketPosition ==0)
+ {
+       If (OPEN[1]<CLOSE[1] And ma[1]>ma[2] And (ma[1]-ma[2])/ma[2]>0.0001*a)
+         {
+      Buy(entryLots,Open);
+   Return;
+   }
+    Else
+    IF(OPEN[1]>CLOSE[1] And ma[1]<ma[2] And (ma[2]-ma[1])/ma[1]>0.0001*a)
+         {
+   SellShort(entryLots,Open);
+   Return;
+       }
+    }
+ 
+    
+ If(MarketPosition ==1 )
+  {
+     If(low<=EntryPrice-T)
+      {
+  Sell(entryLots,EntryPrice-T);
+  Return;
+      }
+   Else
+   IF(High>=EntryPrice+T*n)
+   {
+         Sell(entryLots,EntryPrice+T*n);
+         Return;
+      }
+ }
+ 
+ If(MarketPosition == -1 )
+ {
+        IF(High>=EntryPrice+T)
+  {
+       BuyToCover(entryLots,EntryPrice+T);
+       Return;
+  }
+  Else
+   IF(low<=EntryPrice-T*n )
+   {
+       BuyToCover(entryLots,EntryPrice-T*n);
+         Return;
+      }
+ }
+end 

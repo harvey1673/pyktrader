@@ -1,0 +1,9 @@
+MID:MA(CLOSE,35);//收盘价的35日简单移动平均
+TMP2:=STD(CLOSE,35);// 收盘价的35日估算标准差
+TOP:MID+2*TMP2;//布林上轨
+BOTTOM:MID-2*TMP2;//布林下轨
+CROSS(C,TOP),BK; //收盘价上穿布林上轨  买开仓
+CROSSDOWN(C,BOTTOM),SK;// 收盘价下穿布林下轨  卖开仓
+CROSSDOWN(C,MID),SP; //收盘价下穿布林中轨  卖平仓
+CROSS(C,MID),BP; //收盘价上穿布林中轨  买平仓
+AUTOFILTER;

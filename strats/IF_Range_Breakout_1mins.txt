@@ -1,0 +1,272 @@
+//------------------------------------------------------------------------
+// 简称: SimplexRB
+// 名称: Simplex Range Breakout
+// 类别: 公式应用
+// 类型: 用户应用
+// 输出:
+//------------------------------------------------------------------------
+
+
+
+Params	
+        Numeric FirstTradeMins(9.30);//交易时间
+		Numeric QuitTime(14.55);//结束时间
+		Numeric DelayTime(1);//发单最小延迟时间，计算时除以10000  
+		Numeric SkiPointNo(0);
+		Numeric MaxDailyTradeNo(3);
+		Numeric BenchMarkRatio(0.41);
+		Numeric BreakOutRatio(0.16);
+		Numeric StopRatio(1.00);
+		Numeric AdjustRatio(3);
+		
+		
+
+Vars
+
+		Numeric myCloseD;
+		Numeric myHighD;
+		Numeric myLowD;
+		Numeric Stop;
+
+		Numeric SkiPoint;
+		Numeric Position; 
+
+		Numeric MyDailyTradeNo;//每天交易次数，存放全局变量7 
+		Numeric MyTradeTime;//交易时间，存放全局变量17	
+	
+		NumericSeries ssetup(0);
+		NumericSeries bsetup(0);
+		NumericSeries senter(0);
+		NumericSeries benter(0);
+		NumericSeries bbreak(0);
+		NumericSeries sbreak(0);
+		NumericSeries ltoday(0);
+		NumericSeries hitoday(9999);
+
+
+		
+		
+Begin
+	
+	//计算基本指标
+	SkiPoint = SkiPointNo*MinMove()*PriceScale();
+	myCloseD = CloseD(1);
+	myHighD = HighD(1);
+	myLowD = LowD(1);
+	Stop = StopRatio*(OpenD(0)/100);
+
+	//第一个Bar处理
+	If(BarStatus()==0)
+	{
+		Position=0;
+		SetGlobalVar(0,Position);
+
+		MyDailyTradeNo = 0;
+		SetGlobalVar(7,MyDailyTradeNo);
+		
+		MyTradeTime = 0;
+		SetGlobalVar(17,MyTradeTime);	
+	}
+	Else
+	{
+		//每天第一个Bar处理
+		If(Date != Date[1])        
+		{
+			ssetup=hitoday[1]+BenchMarkRatio*(Close[1]-ltoday[1]);
+			bbreak=ssetup+BreakOutRatio*(ssetup-bsetup);
+			senter=(hitoday[1]+Close[1])/2;
+	 
+			bsetup=ltoday[1]-BenchMarkRatio*(hitoday[1]-Close[1]);
+			sbreak=bsetup-BreakOutRatio*(ssetup-bsetup);
+			benter=(ltoday[1]+Close[1])/2;
+			
+			hitoday=High;
+			ltoday=Low;
+
+			Position=0;
+			SetGlobalVar(0,Position);
+
+			MyDailyTradeNo = 0;
+			SetGlobalVar(7,MyDailyTradeNo);
+
+			MyTradeTime = 0;
+			SetGlobalVar(17,MyTradeTime);
+		}
+		//每天其他Bar处理
+		Else
+		{
+			ssetup=ssetup[1];
+			senter=senter[1];
+			benter=benter[1];
+			bsetup=bsetup[1];
+			bbreak=bbreak[1];
+			sbreak=sbreak[1];
+
+			hitoday=hitoday[1];
+			ltoday=ltoday[1];
+			
+			if(High>hitoday)
+			{
+					hitoday=High;
+			}
+			if(Low<ltoday)
+			{
+					ltoday=Low;
+			}
+
+			Position = GetGlobalVar(0);
+			MyDailyTradeNo = GetGlobalVar(7);
+			MyTradeTime =  GetGlobalVar(17);
+		}
+	}		
+	
+
+
+
+	PlotNumeric("ssetup",ssetup);
+	PlotNumeric("senter",senter);
+	PlotNumeric("benter",benter);
+	PlotNumeric("bsetup",bsetup);
+	PlotNumeric("bbreak",bbreak);
+	PlotNumeric("sbreak",sbreak);
+	
+
+
+	//开仓
+	if(Position == 0 && MyDailyTradeNo < MaxDailyTradeNo)
+	{			
+		//空头反转
+		If(((hitoday>=ssetup && (Low<=(senter+(hitoday-ssetup)/AdjustRatio)) )) && Time < QuitTime/100 && Time > FirstTradeMins / 100 && Time>=(MyTradeTime+DelayTime/10000))
+		{
+
+			Sellshort(1, (senter+(hitoday-ssetup)/AdjustRatio)-SkiPoint);
+			
+			Position=-1;
+			SetGlobalVar(0,Position);
+				
+			MyDailyTradeNo = MyDailyTradeNo + 1;
+			SetGlobalVar(7,MyDailyTradeNo);		
+				
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);
+		}
+		
+		//多头反转
+		If(((ltoday<=bsetup && High>=(benter-(bsetup-ltoday)/AdjustRatio)  )) && Time < QuitTime / 100 && Time > FirstTradeMins / 100 && Time>=(MyTradeTime+DelayTime/10000))
+		{
+					
+			Buy(1, (benter-(bsetup-ltoday)/AdjustRatio)+SkiPoint);
+			
+			Position=1;
+			SetGlobalVar(0,Position);
+
+			MyDailyTradeNo = MyDailyTradeNo + 1;
+			SetGlobalVar(7,MyDailyTradeNo);
+				
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);
+		}
+	
+		//多头开仓
+		If(((High>=bbreak)) && Time < QuitTime / 100 && Time > FirstTradeMins / 100 && Time>=(MyTradeTime+DelayTime/10000))
+		{
+					
+			Buy(1, bbreak+SkiPoint);
+				
+			Position=1;
+			SetGlobalVar(0,Position);
+				
+			MyDailyTradeNo = MyDailyTradeNo + 1;
+			SetGlobalVar(7,MyDailyTradeNo);
+				
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);
+		}
+               
+		//空头开仓
+		If(((low<=sbreak )) && Time < QuitTime/100 && Time > FirstTradeMins / 100 && Time>=(MyTradeTime+DelayTime/10000))
+		{
+
+			Sellshort(1, sbreak-SkiPoint);
+				
+			Position=-1;
+			SetGlobalVar(0,Position);
+				
+			MyDailyTradeNo = MyDailyTradeNo + 1;
+			SetGlobalVar(7,MyDailyTradeNo);			
+				
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);
+		}
+	}
+	
+	
+	//止损
+	if(Position != 0)
+	{
+		//多头平仓
+		If(Position==1 && EntryPrice-Low>=Stop && Time>=(MyTradeTime+DelayTime/10000))
+		{
+			
+			Sell(0, entryprice-Stop-SkiPoint);
+			
+			Position=0;
+			SetGlobalVar(0,Position);
+
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);	
+		}
+		
+		//空头平仓
+		If(Position==-1 && High-EntryPrice>=Stop && Time>=(MyTradeTime+DelayTime/10000))
+		{
+		
+			BuyToCover(0, entryprice+Stop+SkiPoint);
+			
+			Position=0;
+			SetGlobalVar(0,Position);
+
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);
+		}
+		               
+	}
+	
+
+	//收盘平仓
+	If(Time*100 >= QuitTime)
+	{
+		if (Position==1 && (Time*100 >= QuitTime) && Time>=(MyTradeTime+DelayTime/10000))
+		{
+			Sell(0, Open);
+			
+			Position=0;
+			SetGlobalVar(0,Position);
+			
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);
+	
+		}
+		
+		if (Position==-1 && (Time*100 >= QuitTime) && Time>=(MyTradeTime+DelayTime/10000)) 
+		{
+			BuyToCover(0, Open);
+			
+			Position=0;
+			SetGlobalVar(0,Position);
+		
+			MyTradeTime = Time;
+			SetGlobalVar(17,MyTradeTime);
+		}
+	}
+
+	
+
+
+End
+
+
+
+
+
+

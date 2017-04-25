@@ -1,0 +1,221 @@
+Params
+
+	Numeric PercentOfRange(0.40);
+	Numeric length(100);
+	Numeric minpointmulty(0);
+	Numeric entertime(9.40);
+	Numeric EntrylastTime(14.30);
+	Numeric myExitTime(15.30);
+	Numeric MinRange(0.10);
+	Numeric MaxRange(1.30);
+	Numeric ratio(1.20);
+	Numeric lots(1);
+	
+Vars
+	
+	NumericSeries Price;
+	NumericSeries preDayHL;
+	Numeric preDayHigh;
+	Numeric preDayLow;
+	NumericSeries UpperBand;
+	NumericSeries MidLine;
+	NumericSeries flag(0);
+	Numeric MinPoint;
+	NumericSeries MyExitPrice;
+	NumericSeries HigherAfterEntry;
+    	NumericSeries LowerAfterEntry;
+	NumericSeries HigherAfterlongEntry;
+    	NumericSeries LowerAftershortEntry;
+	NumericSeries buynumber;
+	NumericSeries sellnumber;
+	
+Begin
+
+	MinPoint = MinMove*PriceScale;
+	MidLine = AverageFC(Close[1],Length);
+	PlotNumeric("MidLine",MidLine);
+	If(Date!=Date[1])
+	{
+		Price=IntPart(Open);
+		Commentary("Price="+Text(Price));
+	}
+	If(Date!=Date[1])				
+    {
+	    HigherAfterEntry = High;
+    	LowerAfterEntry = Low;
+		buynumber=0;
+		sellnumber=0;
+    }Else
+    {
+		HigherAfterEntry = max(HigherAfterEntry[1],High[1]);
+        LowerAfterEntry = min(LowerAfterEntry[1],Low[1]);
+	}
+	If(BarsSinceEntry==1)				
+    {
+	    HigherAfterlongEntry = High;
+    	LowerAftershortEntry = Low;
+    }Else If(BarsSinceEntry>1)
+    {
+		HigherAfterlongEntry = max(HigherAfterlongEntry[1],High[1]);
+        LowerAftershortEntry = min(LowerAftershortEntry[1],Low[1]);
+	}
+	Commentary("flag="+Text(flag));
+	Commentary("HigherAfterEntry="+Text(HigherAfterEntry));
+	Commentary("LowerAfterEntry="+Text(LowerAfterEntry));
+	Commentary("HigherAfterlongEntry="+Text(HigherAfterlongEntry));
+	Commentary("LowerAftershortEntry="+Text(LowerAftershortEntry));
+	Commentary("buynumber="+Text(buynumber));
+	Commentary("sellnumber="+Text(sellnumber));
+	
+	
+	preDayHigh=HighD(1);
+	preDayLow=LowD(1);
+	preDayHL=HighD(1)-LowD(1);
+	
+	If(Date!=Date[1])
+	{
+		If(MidLine<Price)
+		{
+			UpperBand=Price+IntPart(preDayHL*PercentOfRange);
+			If(IntPart(preDayHL*PercentOfRange) < Open*MinRange*0.01)
+				UpperBand=Price+Open*MinRange*0.01;
+			If(IntPart(preDayHL*PercentOfRange) > Open*MaxRange*0.01)
+				UpperBand=Price+Open*MaxRange*0.01;
+			flag=1;
+		}Else
+		{
+			UpperBand=Price-IntPart(preDayHL*PercentOfRange);
+			If(IntPart(preDayHL*PercentOfRange) < Open*MinRange*0.01)
+				UpperBand=Price-Open*MinRange*0.01;
+			If(IntPart(preDayHL*PercentOfRange) > Open*MaxRange*0.01)
+				UpperBand=Price-Open*MaxRange*0.01;
+				flag=-1;
+		}
+	}
+	
+	PlotNumeric("UpperBand",UpperBand);
+	PlotNumeric("Price",Price);
+	
+	If(MarketPosition==0 And Time<EntrylastTime/100 And Time>entertime/100)
+	{
+		If(High>Max(Max(UpperBand,Price),MidLine) And High>HigherAfterEntry And buynumber<1)
+		{
+			MyExitPrice=Max(Max(Max(UpperBand,Price),MidLine),HigherAfterEntry)+MinPoint*minpointmulty;
+			If(Open > MyExitPrice) MyExitPrice = Open+MinPoint*minpointmulty;
+			Buy(lots,MyExitPrice);
+			buynumber=buynumber+1;
+			Return;
+		}
+		
+		If(Low<min(min(UpperBand,Price),MidLine) And Low<LowerAfterEntry And sellnumber<1 )
+		{
+			MyExitPrice=min(min(min(UpperBand,Price),MidLine),LowerAfterEntry)-MinPoint*minpointmulty;
+			If(Open < MyExitPrice) MyExitPrice = Open-MinPoint*minpointmulty;
+			SellShort(lots,MyExitPrice);
+			sellnumber=sellnumber+1;
+			Return;
+		}
+	}
+	
+	
+	If(MarketPosition==1)
+	{
+		If(flag==-1)
+		{
+			If(Low<HigherAfterlongEntry*(1-ratio/100))
+			{
+				MyExitPrice=HigherAfterlongEntry*(1-ratio/100)-MinPoint*minpointmulty;
+				If(Open < MyExitPrice) MyExitPrice = Open-MinPoint*minpointmulty;
+				Sell(0,MyExitPrice);
+			}
+			If(Low<Price And Low<MidLine) 
+			{
+				MyExitPrice=Min(Price,MidLine)-MinPoint*minpointmulty;
+				Sell(0,MyExitPrice);
+				If(Low<UpperBand And Low<LowerAfterEntry And sellnumber<1)
+				{
+					MyExitPrice=min(min(UpperBand,MidLine),LowerAfterEntry)-MinPoint*minpointmulty;
+					If(Open < MyExitPrice) MyExitPrice = Open-MinPoint*minpointmulty;
+					SellShort(lots,MyExitPrice);
+					sellnumber=sellnumber+1;
+					Return;
+				}
+			}
+		}Else
+		{
+			If(Low<HigherAfterlongEntry*(1-ratio/100))
+			{
+				MyExitPrice=HigherAfterlongEntry*(1-ratio/100)-MinPoint*minpointmulty;
+				If(Open < MyExitPrice) MyExitPrice = Open-MinPoint*minpointmulty;
+				Sell(0,MyExitPrice);
+			}
+			If(Low<Min(UpperBand,Price)) 
+			{
+				MyExitPrice=Min(UpperBand,Price)-MinPoint*minpointmulty;
+				Sell(0,MyExitPrice);
+				If(Low<MidLine And Low<LowerAfterEntry And sellnumber<1)
+				{
+					MyExitPrice=min(min(min(UpperBand,Price),MidLine),LowerAfterEntry)-MinPoint*minpointmulty;
+					If(Open < MyExitPrice) MyExitPrice = Open-MinPoint*minpointmulty;
+					SellShort(lots,MyExitPrice);
+					sellnumber=sellnumber+1;
+					Return;
+				}
+			}
+		}
+	}
+				
+	
+	If(MarketPosition==-1)
+	{
+		If(flag==1)
+		{
+			If(High>LowerAftershortEntry*(1+ratio/100))
+			{
+				MyExitPrice=LowerAftershortEntry*(1+ratio/100)+MinPoint*minpointmulty;
+				If(Open > MyExitPrice) MyExitPrice = Open+MinPoint*minpointmulty;
+				BuyToCover(0,MyExitPrice);
+			}
+			If(High>Price And High>MidLine)
+			{
+				MyExitPrice=Max(Price,MidLine)+MinPoint*minpointmulty;
+				BuyToCover(0,MyExitPrice);
+				If( High>UpperBand And High>HigherAfterEntry And buynumber<1)
+				{
+					MyExitPrice=Max(Max(UpperBand,MidLine),HigherAfterEntry)+MinPoint*minpointmulty;
+					If(Open > MyExitPrice) MyExitPrice = Open+MinPoint*minpointmulty;
+					Buy(lots,MyExitPrice);
+					buynumber=buynumber+1;
+					Return;
+				} 
+			} 
+		}Else
+		{
+			If(High>LowerAftershortEntry*(1+ratio/100))
+			{
+				MyExitPrice=LowerAftershortEntry*(1+ratio/100)+MinPoint*minpointmulty;
+				If(Open > MyExitPrice) MyExitPrice = Open+MinPoint*minpointmulty;
+				BuyToCover(0,MyExitPrice);
+			}
+			If(High>Max(UpperBand,Price))
+			{
+				MyExitPrice=Max(UpperBand,Price)+MinPoint*minpointmulty;
+				BuyToCover(0,MyExitPrice);
+				If(High>MidLine And High>HigherAfterEntry And buynumber<1) 
+				{
+					MyExitPrice=Max(Max(Max(UpperBand,Price),MidLine),HigherAfterEntry)+MinPoint*minpointmulty;
+					If(Open > MyExitPrice) MyExitPrice = Open+MinPoint*minpointmulty;
+					Buy(lots,MyExitPrice);
+					buynumber=buynumber+1;
+					Return;
+				} 
+			}
+		}
+	}
+	If(Time==myExitTime/100)
+	{
+		Sell(0,Close-MinPoint*minpointmulty);
+		BuyToCover(0,Close+MinPoint*minpointmulty);
+	}
+End
+

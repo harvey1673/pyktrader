@@ -1,0 +1,56 @@
+Params
+	Numeric period(10);
+	Numeric N(0.24);
+	Numeric t1(5);
+	Numeric n10(18);
+		 
+Vars
+	Numeric Efratio;
+	Numeric diff;
+	Numeric noise;
+	Numeric mypra;
+	
+Begin
+	 If(Time <=0.15 )
+	{		
+		
+		If(MarketPosition == 1 && high-Lowest(low[1],t1)>n10&&BarsSinceEntry>t1&&high>high[1])
+		{
+		  
+	     SellShort(0,Lowest(low[1],t1)+n10);
+				  
+		}
+		
+	  else If(MarketPosition == -1 && Highest(high[1],t1)-low>n10&&BarsSinceEntry>t1&&low<low[1]) 
+		{
+			
+			Buy(0,Highest(high[1],t1)-n10);
+					
+		}
+	}
+	Diff=Abs(Close-Close[1]);
+Noise=Summation(Diff,period);
+	mypra=BarsSinceToday;
+				
+	Efratio=Average((C[1]-C[period])/Noise,period);
+	
+	If(mypra>period&& Time<0.1450)
+		{
+		If(Efratio>2*N && MarketPosition==0) Buy(1,O);
+		If(Efratio<-2*N && MarketPosition==0) SellShort(1,O);
+		}
+	
+	If(mypra>period && Time<0.1510)
+		{		
+		If(Efratio<-1*N) Sell(1,O);
+		If(Efratio>1*N) BuyToCover(1,O);
+		}
+
+	If(Time>=0.1510 && MarketPosition!=0)
+		{
+		Sell(1,O);
+		BuyToCover(1,O);
+		}
+	
+End
+

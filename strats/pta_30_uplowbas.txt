@@ -1,0 +1,48 @@
+Params
+	Numeric LongBars(120);
+	Numeric upBars(20);
+	Numeric dwBars(20);
+	Numeric lots(1);
+	Numeric nLoss(30);
+	Numeric offset(2);
+Vars
+	Numeric upPoint;
+	Numeric dwPoint;
+	Numeric lupPoint;
+	Numeric ldwPoint;
+	NumericSeries bsSign;   // 1Âò  -1 Âô  0 ¿Õ
+	Numeric nPoint;
+	Numeric myPrice;
+Begin
+	If ( CurrentBar < Max(upBars,dwBars)) Return;
+	
+	lupPoint = Highest(High[1],LongBars);
+	ldwPoint = Lowest(Low[1],LongBars);
+
+	upPoint = Highest(High[1],upBars);
+	dwPoint = Lowest(Low[1],dwBars);
+	PlotNumeric("up",upPoint);
+	PlotNumeric("dw",dwPoint);
+	PlotNumeric("lup",lupPoint);
+	PlotNumeric("ldw",ldwPoint);
+
+	If (High>lupPoint) bsSign = 1;
+	If (Low <ldwPoint) bsSign =-1;
+	If ( bsSign == 1)
+	{
+		If(bsSign[1] != 1) myPrice = Max(lupPoint,Open);
+		Else myPrice = Max(upPoint,Open);
+		
+		If ( High >= upPoint) Buy(lots,myPrice+offset);
+		If ( Low  <= dwPoint) Sell(lots,MIN(dwPoint,Open)-offset);
+	};
+	If ( bsSign ==-1)
+	{
+		If(bsSign[1] != -1) myPrice = MIN(ldwPoint,Open);
+		Else myPrice = MIN(dwPoint,Open);
+
+		If ( High >= upPoint) BuyToCover(lots,Max(upPoint,Open)+offset);
+		If ( Low  <= dwPoint) SellShort(lots,myPrice-offset);
+	};
+	
+End

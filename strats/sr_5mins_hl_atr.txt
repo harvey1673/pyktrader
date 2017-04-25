@@ -1,0 +1,44 @@
+
+
+Params
+	Numeric ATRGET(0.61);
+	
+Vars
+	Numeric DayStart;
+	Numeric PP;
+	Numeric UP;
+	Numeric DOWN;
+	Numeric MyPrice;
+	
+Begin
+	DayStart = OpenD(0);
+	PP = HighD(1) - LowD(1);
+	UP = DayStart + PP * ATRGET;
+	DOWN = DayStart - PP * ATRGET;
+	
+	If(MarketPosition <> 1 && High >= UP)
+		{
+		MyPrice = UP;
+		If(Open > MyPrice)
+			{
+			MyPrice = Open;
+			}
+		Buy(1,MyPrice);
+		Return;
+		}
+
+	If(MarketPosition <> -1 && Low <= DOWN)
+		{
+		MyPrice = DOWN;
+		If(Open < MyPrice)
+			{
+			MyPrice = Open;
+			}
+		SellShort(1,MyPrice);
+		Return;
+		}
+		
+End
+
+
+

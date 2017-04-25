@@ -1,0 +1,87 @@
+Params
+vars
+NumericSeries EntryHi;               
+NumericSeries EntryLo;               
+NumericSeries ShortStop;             
+NumericSeries LongStop;
+NumericSeries SellHi;
+NumericSeries SellLo;                
+Numeric myEntryPrice;                   
+Numeric myExitPrice;                    
+begin
+EntryHi = Highest(high[1],5);
+EntryLo  = Lowest(low[1],5);
+SellHi=Highest(high[1],3);
+SellLo= Lowest(low[1],3);
+ShortStop= Highest(high[1],2);
+LongStop=Lowest(low[1],2);
+if(MarketPosition ==0)
+{ 
+        If(CrossOver(high,EntryHi))
+        {
+             
+     
+
+            myEntryPrice = min(high,EntryHi );
+            myEntryPrice = IIF(myEntryPrice < Open, Open,myEntryPrice);  
+            Buy(1,myEntryPrice);
+             
+        }
+
+        If(CrossUnder(Low,EntryLo ))
+        {
+
+
+            myEntryPrice = max(low,EntryLo  );
+            myEntryPrice = IIF(myEntryPrice > Open, Open,myEntryPrice);  
+            SellShort(1,myEntryPrice);
+  
+        }
+}
+                
+
+        
+If(MarketPosition ==1)
+{
+           if (CrossUnder(Low,LongStop))
+           {
+
+            myExitPrice = max(low,LongStop );
+            myExitPrice = IIF(myExitPrice > Open, Open,myExitPrice);
+                
+                        Sell(0,myExitPrice);
+                }Else
+
+           if (CrossUnder(Low,SellLo))
+           {
+                myExitPrice = max(low,SellLo );
+            myExitPrice = IIF(myExitPrice > Open, Open,myExitPrice);
+                        Sell(0,myExitPrice);
+       }
+
+
+}
+                
+If(MarketPosition ==-1)
+{
+           if (CrossOver(high,ShortStop))
+           {
+                  myExitPrice = min(high,ShortStop );
+          myExitPrice = IIF(myExitPrice < Open, Open,myExitPrice);
+          
+                        BuyToCover(0,myExitPrice);
+                }Else
+
+       if (CrossOver(high,SellHi))
+           {
+                  myExitPrice = min(high,SellHi );  
+                  myExitPrice = IIF(myExitPrice < Open, Open,myExitPrice);
+          
+                        BuyToCover(0,myExitPrice);
+                }
+
+
+
+}
+        
+end
