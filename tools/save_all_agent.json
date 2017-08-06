@@ -1,0 +1,1 @@
+{"live_trading": false, "daily_data_days": 0, "min_data_days": 0, "folder": "C:\\dev\\pyktlib\\pyktrader2\\save_ctp\\", "gateway": {"CTP": {"class": "ctp.ctp_gateway.CtpGateway"}}}
